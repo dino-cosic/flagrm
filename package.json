@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Guardrails for removing feature flags with AI coding agents (Claude Code, Copilot, Codex): skills, a baseline, a verify gate and a Stop hook.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dino-cosic/flagrm.git"
@@ -23,7 +23,8 @@
     "skills",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",

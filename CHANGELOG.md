@@ -5,7 +5,15 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
-## [0.1.0] - Unreleased
+## [Unreleased]
+
+### Changed
+
+- The license is now the Apache License 2.0, with attribution in `NOTICE`.
+  Version 0.1.0 was published under the MIT License and stays available under
+  it.
+
+## [0.1.0] - 2026-10-01
 
 Initial release.
 

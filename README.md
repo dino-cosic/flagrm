@@ -1,22 +1,25 @@
 # flagrm
 
-Remove feature flags with your AI coding agent, safely. flagrm gives Claude Code,
-GitHub Copilot and Codex a flag-removal skill and the guardrails to check the
-result: a baseline taken before the edit, and a `verify` gate that fails while
-the flag is still referenced, the build breaks, a test regresses, or the
-removal left unused code behind.
+[![CI](https://github.com/dino-cosic/flagrm/actions/workflows/ci.yml/badge.svg)](https://github.com/dino-cosic/flagrm/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/flagrm)](https://www.npmjs.com/package/flagrm)
 
-The agent does the reasoning and the edits (finding the flag, its aliases and
-wrappers, removing the OFF path, refactoring methods the flag was passed
-into). flagrm decides when it's done.
+Remove feature flags with your AI coding agent, safely.
 
-Works with Angular and .NET projects out of the box, and any other stack
-through the generic adapter.
+flagrm gives Claude Code, GitHub Copilot and Codex a flag-removal skill and the
+guardrails to check the result. It records a baseline before the edit, then
+gates the removal with `flagrm verify`, which fails while the flag is still
+referenced, the build breaks, a test regresses, or the removal leaves unused
+code behind.
 
-In a [benchmark on bitwarden/server and bitwarden/clients](docs/BENCHMARK.md),
-Claude Code removed a live flag from each repository, including the dead OFF
-paths and the tests that covered only them, in under 5 minutes and for about
-$1.50 per flag, with `flagrm verify` passing on an independent rerun.
+The agent does the reasoning and the edits: finding the flag, its aliases and
+wrappers, removing the OFF path, and refactoring methods the flag was passed
+into. flagrm decides when the work is done.
+
+Angular and .NET projects work out of the box. Any other stack works through the
+generic adapter.
+
+> **Status:** flagrm is at version 0.1. Until 1.0, a minor release may contain
+> breaking changes.
 
 ## Requirements
 
@@ -25,10 +28,10 @@ $1.50 per flag, with `flagrm verify` passing on an independent rerun.
 - An AI coding agent that reads skills: Claude Code, GitHub Copilot or Codex
   (the Stop hook is Claude Code only)
 
-On Windows, the Stop hook runs in Git Bash, or in PowerShell when Git Bash
-isn't installed. In PowerShell, `npx` needs an execution policy that allows
-scripts (`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`); otherwise the
-hook fails and doesn't guard the removal. `flagrm verify` still works.
+On Windows, the Stop hook runs in Git Bash, or in PowerShell when Git Bash is
+not installed. In PowerShell, `npx` needs an execution policy that allows
+scripts (`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`). Otherwise the
+hook fails and does not guard the removal. `flagrm verify` still works.
 
 ## Quick start
 
@@ -37,14 +40,15 @@ npm install -D flagrm        # or run everything with npx flagrm
 npx flagrm init              # config, skills, Stop hook, .gitignore entry
 ```
 
-Fill in the project paths and build/test commands in `flagrm.config.yaml`, check
-the setup with `npx flagrm doctor`, then ask your agent:
+Fill in the project paths and the build and test commands in
+`flagrm.config.yaml`, check the setup with `npx flagrm doctor`, then ask your
+agent:
 
 ```
 /flagrm-remove NewCheckout
 ```
 
-When it reports back:
+When the agent reports back, review the result:
 
 ```
 /flagrm-verify NewCheckout
@@ -69,43 +73,43 @@ like this (abridged):
 **Tests that no longer run (5):** `LegacyPricingCalculatorTests.AppliesBulkDiscount`, ...
 ```
 
-A warning is not a failure: here the agent deleted the OFF path's tests on
-purpose, and says so in its notes.
+A warning is not a failure. Here the agent deleted the tests that covered only
+the OFF path, on purpose, and explains that in its notes.
 
 ## How it works
 
-1. **`flagrm init`** writes `flagrm.config.yaml` for the Angular and .NET projects
-   it finds, installs the `flagrm-remove` and `flagrm-verify` skills into
-   `.claude/skills/`, `.github/skills/` and `.agents/skills/`, adds a pointer to
-   `AGENTS.md` for Codex, adds a Claude Code Stop hook to
-   `.claude/settings.json` and `.flagrm/` to `.gitignore`.
-2. **`/flagrm-remove <flag>`**: the agent checks the tree is clean, runs
-   `flagrm baseline <flag>` (git commit, build and test results, the flag's
-   names), finds every usage with its own search, records wrappers and
-   aliases with `flagrm baseline <flag> --name`, removes the flag, and loops
-   `flagrm verify <flag>` until it passes.
+1. **`flagrm init`** writes `flagrm.config.yaml` for the Angular and .NET
+   projects it finds. It installs the `flagrm-remove` and `flagrm-verify`
+   skills into `.claude/skills/`, `.github/skills/` and `.agents/skills/`, adds
+   a pointer to `AGENTS.md` for Codex, adds a Claude Code Stop hook to
+   `.claude/settings.json`, and adds `.flagrm/` to `.gitignore`.
+2. **`/flagrm-remove <flag>`**: the agent checks that the tree is clean and runs
+   `flagrm baseline <flag>`, which records the git commit, the build and test
+   results, and the flag's names. It finds every usage with its own search,
+   records wrappers and aliases with `flagrm baseline <flag> --name`, removes
+   the flag, and repeats `flagrm verify <flag>` until it passes.
 3. **The Stop hook** (Claude Code) keeps the agent from finishing while a
-   removal is in progress (uncommitted on top of its baseline commit) and not
-   verified.
-4. **`/flagrm-verify <flag>`** runs `flagrm verify <flag> --md` and adds notes and a
-   commit message.
+   removal is in progress (uncommitted changes on top of its baseline commit)
+   and not verified.
+4. **`/flagrm-verify <flag>`** runs `flagrm verify <flag> --md` and adds notes
+   and a commit message.
 
 ## Commands
 
 | Command | What it does | Exit codes |
 |---|---|---|
 | `init` | Set up the config, skills, `AGENTS.md` block, Stop hook and `.gitignore` entry. Never overwrites | 0 |
-| `doctor` | Check config, build/test commands (`--run` runs them), git, `.gitignore`, installed skills and hook, abandoned baselines | 0 ok, 1 problems |
-| `update` | Refresh installed skills, the `AGENTS.md` block and the hook from this flagrm version | 0 |
-| `list` | Every feature flag in the project: definitions, configured state per environment, reference counts | 0 |
-| `baseline <flag>` | Before any edit: record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. `--name X --kind alias\|wrapper` adds names to an existing baseline; `--force` starts over; `--no-checks` skips build and tests | 0, 2 usage error |
-| `verify <flag>` | Gate the removal: `leftovers`, `dead-code`, `build`, `tests`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings | 0 pass, 1 fail, 2 usage error |
+| `doctor` | Check the config, build and test commands (`--run` runs them), git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
+| `update` | Refresh the installed skills, the `AGENTS.md` block and the hook from this flagrm version | 0 |
+| `list` | List every feature flag in the project: definitions, configured state per environment, reference counts | 0 |
+| `baseline <flag>` | Before any edit, record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. `--name X --kind alias\|wrapper` adds names to an existing baseline; `--force` starts over; `--no-checks` skips build and tests | 0, 2 usage error |
+| `verify <flag>` | Gate the removal with `leftovers`, `dead-code`, `build` and `tests`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings | 0 pass, 1 fail, 2 usage error |
 | `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
 
-`list`, `baseline` and `verify` take `--json`, `--config <path>`, and
-`--include`/`--exclude <glob>`.
+`list`, `baseline` and `verify` accept `--json`, `--config <path>`, and
+`--include` / `--exclude <glob>`.
 
-## What verify checks
+## What `verify` checks
 
 | Check | Fails when |
 |---|---|
@@ -114,9 +118,9 @@ purpose, and says so in its notes.
 | `build` | A project's build command fails |
 | `tests` | A test that passed at the baseline fails. Tests that no longer run, and changed test files none of whose tests ran, are warnings for the agent to account for |
 
-In typed code, deleting the flag's definition makes every missed reference a
-compile error, so the build does most of the work. `leftovers` covers what the
-compiler can't see: config files, templates, comments and wrappers.
+In typed code, deleting the flag's definition turns every missed reference into
+a compile error, so the build does most of the work. `leftovers` covers what the
+compiler cannot see: config files, templates, comments and wrappers.
 
 ## Configuration
 
@@ -144,13 +148,13 @@ exclude: ['**/Migrations/**']
 ```
 
 Paths are relative to the config file, and commands run inside each project's
-path. Without `build`/`test`, the adapter's defaults are used (`dotnet build
---no-incremental`, `npx ng build`, ...). `testResults` (JUnit XML or TRX) lets
-`verify` compare individual tests against the baseline. `timeout` (seconds)
-fails a project's build or test command that runs longer, such as a test
-runner left in watch mode.
+path. Without `build` or `test`, the adapter's defaults are used (`dotnet build
+--no-incremental`, `npx ng build`, and so on). `testResults` (JUnit XML or TRX)
+lets `verify` compare individual tests against the baseline. `timeout`
+(seconds) fails a project's build or test command that runs longer, for example
+a test runner left in watch mode.
 
-For .NET, keep `--no-incremental` in `build`: an incremental build skips
+For .NET, keep `--no-incremental` in `build`. An incremental build skips
 up-to-date projects and prints none of their warnings, so the dead-code check
 would have no baseline warnings to compare against.
 
@@ -162,12 +166,12 @@ npm run ci      # typecheck, lint, build, tests
 npm run dev -- list --config test/fixtures/realistic/before/flagrm.config.yaml
 ```
 
-`test/fixtures/realistic` holds a before/after pair of a real removal (Angular
-and .NET) that the `verify` tests run against.
+`test/fixtures/realistic` holds a before and after pair from a real removal
+(Angular and .NET). The `verify` tests run against it.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report a bug or send a pull
 request, and [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
 ## License
 
-[MIT](LICENSE)
+Licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.
