@@ -5,13 +5,14 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
-## [Unreleased]
+## [0.1.1] - 2026-10-01
 
 ### Changed
 
 - The license is now the Apache License 2.0, with attribution in `NOTICE`.
   Version 0.1.0 was published under the MIT License and stays available under
   it.
+- The README no longer cites benchmark results, and its wording is tightened.
 
 ## [0.1.0] - 2026-10-01
 
@@ -43,4 +44,5 @@ removes the flag through the `flagrm-remove` skill, and flagrm checks the result
   `doctor` warns about an incremental `dotnet build`, which hides existing
   warnings from the dead-code comparison.
 
+[0.1.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.1.0
