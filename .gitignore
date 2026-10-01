@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# .NET build artifacts (the test fixtures contain real .csproj files, so an
+# IDE or `dotnet restore` will generate these)
+bin/
+obj/
+
+# flagrm baselines and check logs
+.flagrm/
+
+# editor swap files
+*.swp
+
+# local Claude Code settings
+.claude/settings.local.json

@@ -1,0 +1,7 @@
+# flagrm configuration for the generic-go fixture. Paths are relative to this file.
+projects:
+  - name: svc
+    adapter: generic
+    path: ./svc
+    globs: ["**/*.go", "config/*.yaml"]
+    methods: [IsEnabled]

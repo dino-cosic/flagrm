@@ -1,0 +1,8 @@
+<h1>Checkout</h1>
+
+<app-checkout-steps [items]="items()" [express]="expressShipping()" />
+
+<div class="actions">
+  <button type="button" (click)="applyPromo()">Apply promo code</button>
+  <button type="submit" [disabled]="cartEmpty()" (click)="submit()">Place order</button>
+</div>

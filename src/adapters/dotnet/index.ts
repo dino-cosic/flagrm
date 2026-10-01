@@ -1,0 +1,32 @@
+import fs from "node:fs";
+import type { Adapter, ProjectContext } from "../../core/adapter.js";
+import { discoverInText } from "../../core/discover.js";
+import { BACKEND_GLOBS } from "../../core/scan.js";
+import type { FlagCandidate } from "../../core/types.js";
+import { dotnetUnusedDiagnostics } from "./unused.js";
+
+/** Discover candidate flag names (appsettings config keys, [FeatureGate] args, eval-call literals, *Flags constants/enums). */
+export function discoverDotnetFlags(ctx: ProjectContext): FlagCandidate[] {
+  const out: FlagCandidate[] = [];
+  const classify = { evalMethods: ctx.project.methods, attributes: ctx.project.attributes };
+  for (const file of ctx.files) {
+    let text: string;
+    try {
+      text = fs.readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    out.push(...discoverInText(text, file, ctx.name, classify));
+  }
+  return out;
+}
+
+export const dotnetAdapter: Adapter = {
+  id: "dotnet",
+  defaultGlobs: BACKEND_GLOBS,
+  discover: async (ctx) => discoverDotnetFlags(ctx),
+  // --no-incremental: an up-to-date project skips compiling and prints none of its
+  // warnings, so the baseline's dead-code comparison would have nothing to subtract.
+  defaultCommands: () => ({ build: "dotnet build --no-incremental", test: "dotnet test" }),
+  unusedDiagnostics: (_ctx, input) => dotnetUnusedDiagnostics(input),
+};

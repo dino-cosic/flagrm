@@ -1,0 +1,3 @@
+flags:
+  # dark-mode stays off until the redesign ships
+  dark-mode: false

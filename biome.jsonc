@@ -1,0 +1,57 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    // Fixtures are verbatim inputs for discovery/verify tests (Angular code uses
+    // single quotes, etc.) — never reformat them.
+    "includes": ["**", "!!**/dist", "!!**/examples", "!!**/skills", "!!**/test/fixtures"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        // `while ((m = pattern.exec(text)) !== null)` is the idiomatic way to
+        // iterate regex matches in this codebase and is used pervasively
+        // across the scanners — not a bug pattern here.
+        "noAssignInExpressions": "off",
+        // `(i: number) => number | void` is a real, load-bearing signature:
+        // callbacks either request a skip-ahead index or return nothing.
+        // Biome's `number | undefined` rewrite breaks callers whose callback
+        // has no explicit `return <number>` anywhere (TS infers `void`, not
+        // `undefined`, for those).
+        "noConfusingVoidType": "off"
+      },
+      "style": {
+        // Used sparingly, where an invariant TS can't express (e.g. a value
+        // just checked/assigned in an outer scope) makes the value provably
+        // non-null — clearer than restructuring control flow to satisfy the
+        // narrower analyzer.
+        "noNonNullAssertion": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}

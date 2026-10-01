@@ -1,0 +1,15 @@
+@page "/dashboard"
+@inject IFeatureManager FeatureManager
+
+<h3>Dashboard</h3>
+
+@if (FeatureManager.IsEnabled("EnableNewDashboard"))
+{
+    <app-new-dashboard></app-new-dashboard>
+}
+else
+{
+    <app-legacy-dashboard></app-legacy-dashboard>
+}
+
+<p>Always visible.</p>

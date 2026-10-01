@@ -1,0 +1,66 @@
+{
+  "name": "flagrm",
+  "version": "0.1.0",
+  "description": "Guardrails for removing feature flags with AI coding agents (Claude Code, Copilot, Codex): skills, a baseline, a verify gate and a Stop hook.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dino-cosic/flagrm.git"
+  },
+  "homepage": "https://github.com/dino-cosic/flagrm#readme",
+  "bugs": {
+    "url": "https://github.com/dino-cosic/flagrm/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "flagrm": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "ci": "npm run typecheck && npm run lint && npm run build && npm test",
+    "prepublishOnly": "npm run ci"
+  },
+  "keywords": [
+    "feature-flags",
+    "feature-toggles",
+    "flag-removal",
+    "ai-agent",
+    "claude-code",
+    "copilot",
+    "codex",
+    "agent-skills",
+    "angular",
+    "dotnet",
+    "cli"
+  ],
+  "dependencies": {
+    "commander": "^13.1.0",
+    "fast-glob": "^3.3.3",
+    "picocolors": "^1.1.1",
+    "typescript": "^5.7.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.0",
+    "vitest": "^3.0.0"
+  }
+}

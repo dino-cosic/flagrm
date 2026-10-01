@@ -1,0 +1,14 @@
+<h1>{{ title() }}</h1>
+
+@if (newCheckout()) {
+  <app-checkout-steps [items]="items()" [express]="expressShipping()" />
+} @else {
+  <app-legacy-cart [items]="items()" />
+}
+
+<p class="hint" *ngIf="!newCheckout()">Prices shown exclude shipping.</p>
+
+<div class="actions">
+  <button type="button" [disabled]="!newCheckout()" (click)="applyPromo()">Apply promo code</button>
+  <button type="submit" [disabled]="cartEmpty()" (click)="submit()">Place order</button>
+</div>

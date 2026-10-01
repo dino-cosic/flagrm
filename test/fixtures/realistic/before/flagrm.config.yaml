@@ -1,0 +1,15 @@
+# flagrm configuration for the realistic fixture. Paths are relative to this file;
+# build/test commands run inside each project's path.
+projects:
+  - name: web
+    adapter: angular
+    path: ./frontend
+    # `watch` is this app's signal-returning flag accessor (FeatureFlagService.watch).
+    methods: [isEnabled, watch]
+    build: npm run typecheck
+  - name: api
+    adapter: dotnet
+    path: ./backend
+    build: dotnet build Shop.sln
+    test: dotnet test Shop.sln --logger trx --results-directory TestResults
+    testResults: ./backend/TestResults/*.trx

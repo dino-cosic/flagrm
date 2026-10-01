@@ -1,0 +1,12 @@
+# flagrm configuration example.
+# Paths are relative to this file. build/test commands run inside each project's path.
+projects:
+  - name: frontend
+    adapter: angular
+    path: ./sample-app/frontend
+    # methods: [isEnabled, isFeatureEnabled, hasFeature, getFlag, isOn]
+  - name: backend
+    adapter: dotnet
+    path: ./sample-app/backend
+    # methods: [IsEnabledAsync, IsEnabled, IsFeatureEnabled, BoolVariation, GetFeatureFlag]
+    # attributes: [FeatureGate, Feature]

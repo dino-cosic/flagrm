@@ -1,0 +1,16 @@
+<div class="dashboard">
+  <app-new-dashboard *ngIf="featureFlags.isEnabled('EnableNewDashboard')"></app-new-dashboard>
+  <app-legacy-dashboard *ngIf="!featureFlags.isEnabled('EnableNewDashboard')"></app-legacy-dashboard>
+
+  <ng-container *ngIf="featureFlags.isEnabled('EnableNewDashboard')">
+    <app-dashboard-toolbar></app-dashboard-toolbar>
+  </ng-container>
+
+  @if (featureFlags.isEnabled('UseNewApi')) {
+    <span class="badge">v2 API</span>
+  } @else {
+    <span class="badge">v1 API</span>
+  }
+
+  <button [disabled]="!featureFlags.isEnabled('UseNewApi')">Sync</button>
+</div>

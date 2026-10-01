@@ -1,0 +1,2 @@
+# LF everywhere, including Windows checkouts: Biome checks for LF and tests compare fixture text byte for byte.
+* text=auto eol=lf
