@@ -1,8 +1,10 @@
 /**
  * What `flagrm init` and `flagrm update` write into a repository: the config
- * template, the agent skills, the AGENTS.md pointer for Codex, the Claude
- * Code Stop hook and the `.flagrm/` gitignore entry. Every step reports what
- * it did; nothing the user wrote is overwritten.
+ * template and the `.flagrm/` gitignore entry, then per AI coding tool its
+ * files: for Claude Code the skills and the Stop hook, for GitHub Copilot the
+ * skills and `/flagrm-*` prompt files, for Codex the skills and the AGENTS.md
+ * pointer. Every step reports what it did; nothing the user wrote is
+ * overwritten, and nothing is deleted.
  */
 
 import fs from "node:fs";
@@ -14,15 +16,49 @@ import {
   findConfigRoot,
   findDefaultConfigFile,
   repositoryRoot,
+  TOOL_IDS,
+  type ToolId,
 } from "./config.js";
 import { type DetectedProject, detectProjects } from "./detect.js";
 import { packageRoot, packageVersion } from "./package.js";
+import { saveTools } from "./tools.js";
 import { relativePath } from "./util.js";
 
 export const SKILLS = ["flagrm-remove", "flagrm-verify"] as const;
 
-/** Where each supported agent discovers repository skills: Claude Code, GitHub Copilot, Codex. */
-export const AGENT_SKILL_DIRS = [".claude/skills", ".github/skills", ".agents/skills"] as const;
+/** Where each supported tool discovers repository skills. */
+export const TOOL_SKILL_DIRS: Record<ToolId, string> = {
+  "claude-code": ".claude/skills",
+  copilot: ".github/skills",
+  codex: ".agents/skills",
+};
+
+/** Every tool's skills directory: Claude Code, GitHub Copilot, Codex. */
+export const AGENT_SKILL_DIRS = TOOL_IDS.map((t) => TOOL_SKILL_DIRS[t]);
+
+/** GitHub Copilot prompt files: `/flagrm-remove` and `/flagrm-verify` in Copilot Chat, each pointing at its skill. */
+export const PROMPT_FILES: Record<(typeof SKILLS)[number], string> = {
+  "flagrm-remove": [
+    "---",
+    "description: Remove a feature flag with flagrm's guardrails (keep the ON path, verify until it passes)",
+    "argument-hint: <flag>",
+    "agent: agent",
+    "---",
+    "",
+    "Follow `.github/skills/flagrm-remove/SKILL.md` to remove the feature flag named after this command.",
+    "",
+  ].join("\n"),
+  "flagrm-verify": [
+    "---",
+    "description: Check a feature flag removal with flagrm and propose its commit message",
+    "argument-hint: <flag>",
+    "agent: agent",
+    "---",
+    "",
+    "Follow `.github/skills/flagrm-verify/SKILL.md` for the feature flag named after this command.",
+    "",
+  ].join("\n"),
+};
 
 /**
  * The Stop hook command. npx runs the project's own flagrm (a dev dependency)
@@ -113,33 +149,38 @@ function projectLines(p: DetectedProject): string[] {
   return lines;
 }
 
-export function configTemplate(projects: DetectedProject[]): string {
+export function configTemplate(projects: DetectedProject[], tools?: readonly ToolId[]): string {
   const listed = projects.length ? projects : EXAMPLE_PROJECTS;
-  return [...CONFIG_HEADER, ...listed.flatMap(projectLines), ...CONFIG_FOOTER].join("\n");
+  const [comment1, comment2, projectsKey] = CONFIG_HEADER;
+  const toolLines = tools
+    ? ["# The AI coding tools `flagrm init` and `flagrm update` set up.", `tools: [${tools.join(", ")}]`]
+    : [];
+  return [comment1, comment2, ...toolLines, projectsKey, ...listed.flatMap(projectLines), ...CONFIG_FOOTER].join("\n");
 }
 
 /** Write `flagrm.config.yaml` for the projects found in `cwd` (an example when none are) unless a config file exists. */
-export function writeConfigTemplate(cwd: string): StepResult {
+export function writeConfigTemplate(cwd: string, tools?: readonly ToolId[]): StepResult {
   const existing = findDefaultConfigFile(cwd);
   if (existing) return { path: relativePath(cwd, existing), status: "skipped" };
   const file = path.join(cwd, "flagrm.config.yaml");
   const projects = detectProjects(cwd);
-  fs.writeFileSync(file, configTemplate(projects), "utf8");
+  fs.writeFileSync(file, configTemplate(projects, tools), "utf8");
   const note = projects.length
     ? `detected ${projects.map((p) => `${p.adapter} (${p.marker})`).join(", ")}`
     : "no Angular or .NET project found: edit the example projects";
   return { path: relativePath(cwd, file), status: "created", note };
 }
 
-/** Copy each skill into each agent's skills directory and stamp it with the flagrm version. */
+/** Copy each skill into each tool's skills directory and stamp it with the flagrm version. */
 export function installSkills(
   cwd: string,
   mode: InstallMode,
   version = packageVersion(),
   source = path.join(packageRoot(), "skills"),
+  tools: readonly ToolId[] = TOOL_IDS,
 ): StepResult[] {
   const results: StepResult[] = [];
-  for (const dir of AGENT_SKILL_DIRS) {
+  for (const dir of tools.map((t) => TOOL_SKILL_DIRS[t])) {
     for (const skill of SKILLS) {
       const target = path.join(cwd, dir, skill);
       const exists = fs.existsSync(target);
@@ -188,6 +229,30 @@ export function installedSkillVersion(skillDir: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** GitHub Copilot's `/flagrm-remove` and `/flagrm-verify` prompt files in `.github/prompts/`. */
+export function installPrompts(cwd: string, mode: InstallMode): StepResult[] {
+  const results: StepResult[] = [];
+  for (const skill of SKILLS) {
+    const file = path.join(cwd, ".github", "prompts", `${skill}.prompt.md`);
+    const step = relativePath(cwd, file);
+    const exists = fs.existsSync(file);
+    if (mode === "init" && exists) {
+      results.push({ path: step, status: "skipped" });
+      continue;
+    }
+    if (mode === "update" && !exists) continue;
+    const before = exists ? fs.readFileSync(file, "utf8") : undefined;
+    if (before === PROMPT_FILES[skill]) {
+      results.push({ path: step, status: "unchanged" });
+      continue;
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, PROMPT_FILES[skill], "utf8");
+    results.push({ path: step, status: exists ? "updated" : "created" });
+  }
+  return results;
 }
 
 /** The marked flagrm block in AGENTS.md, which Codex reads. */
@@ -290,18 +355,68 @@ export function installRoot(cwd: string): string {
   return findConfigRoot(cwd) ?? repositoryRoot(cwd) ?? cwd;
 }
 
-/** `flagrm init`: everything the agent needs in `root` (see {@link installRoot}), added where missing. */
-export function initProject(root: string): StepResult[] {
+/** The files `init` installs for one tool. */
+function toolSteps(root: string, tool: ToolId, mode: InstallMode): StepResult[] {
+  const skills = installSkills(root, mode, undefined, undefined, [tool]);
+  if (tool === "claude-code") return [...skills, installStopHook(root, mode)];
+  if (tool === "copilot") return [...skills, ...installPrompts(root, mode)];
+  return [...skills, installAgentsBlock(root, mode)];
+}
+
+/**
+ * flagrm's files for tools `tools` leaves out, when they are installed: never
+ * deleted, no longer updated, and named so the user can delete them.
+ */
+function deselectedSteps(root: string, tools: readonly ToolId[]): StepResult[] {
+  const files: Record<ToolId, string[]> = {
+    "claude-code": [
+      ...SKILLS.map((s) => `${TOOL_SKILL_DIRS["claude-code"]}/${s}`),
+      stopHookState(root) === "missing" ? "" : ".claude/settings.json",
+    ],
+    copilot: [
+      ...SKILLS.map((s) => `${TOOL_SKILL_DIRS.copilot}/${s}`),
+      ...SKILLS.map((s) => `.github/prompts/${s}.prompt.md`),
+    ],
+    codex: [...SKILLS.map((s) => `${TOOL_SKILL_DIRS.codex}/${s}`), hasAgentsBlock(root) ? "AGENTS.md" : ""],
+  };
+  return TOOL_IDS.filter((t) => !tools.includes(t)).flatMap((tool) =>
+    files[tool]
+      .filter((rel) => rel && fs.existsSync(path.join(root, rel)))
+      .map(
+        (rel): StepResult => ({
+          path: rel,
+          status: "skipped",
+          note: `${tool} isn't in tools: no longer updated${rel.endsWith(".json") || rel === "AGENTS.md" ? " (flagrm's entry)" : ""}; delete it if you don't use it`,
+        }),
+      ),
+  );
+}
+
+function hasAgentsBlock(root: string): boolean {
+  try {
+    return fs.readFileSync(path.join(root, "AGENTS.md"), "utf8").includes(AGENTS_START);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `flagrm init`: everything the agent needs in `root` (see {@link installRoot})
+ * for `tools`, added where missing, and the choice saved as the config's `tools:`.
+ */
+export function initProject(root: string, tools: readonly ToolId[] = TOOL_IDS): StepResult[] {
+  const config = writeConfigTemplate(root, tools);
+  const saved = config.status === "skipped" ? saveTools(root, [...tools]) : undefined;
   return [
-    writeConfigTemplate(root),
-    ...installSkills(root, "init"),
-    installAgentsBlock(root, "init"),
-    installStopHook(root, "init"),
+    config,
+    ...(saved && saved.status !== "unchanged" ? [saved] : []),
+    ...tools.flatMap((t) => toolSteps(root, t, "init")),
     ensureGitignore(root),
+    ...deselectedSteps(root, tools),
   ];
 }
 
-/** `flagrm update`: refresh what `init` installed in `root` from this flagrm version; adds nothing new. */
-export function updateProject(root: string): StepResult[] {
-  return [...installSkills(root, "update"), installAgentsBlock(root, "update"), installStopHook(root, "update")];
+/** `flagrm update`: refresh what `init` installed in `root` for `tools` from this flagrm version; adds nothing new. */
+export function updateProject(root: string, tools: readonly ToolId[] = TOOL_IDS): StepResult[] {
+  return [...tools.flatMap((t) => toolSteps(root, t, "update")), ...deselectedSteps(root, tools)];
 }

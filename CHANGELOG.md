@@ -38,6 +38,15 @@ contain breaking changes.
 
 ### Added
 
+- `flagrm init` asks which AI coding tools to set up (Claude Code, GitHub
+  Copilot, Codex), pre-selecting the ones the repository already uses
+  (`.claude/`, `.github/copilot-instructions.md` or skills, `AGENTS.md`), and
+  installs only their files. `--tool claude-code,codex` chooses without
+  asking; without a terminal, the detected tools (all when none) are set up.
+  The choice is saved as `tools:` in `flagrm.config.yaml`, which a later
+  `init` and `update` follow; files of a tool dropped from it are left in
+  place and named. Copilot also gets `/flagrm-remove` and `/flagrm-verify`
+  prompt files in `.github/prompts/`. `doctor` checks only those tools.
 - `flagrm scope`: for each .NET project, checks the machine (the SDK
   `global.json` asks for, with `rollForward`; `cargo` where a project's build
   runs it; Docker where a test project uses Testcontainers) and shows which

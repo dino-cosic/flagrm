@@ -6,6 +6,25 @@ export const ADAPTER_IDS = ["angular", "dotnet", "generic"] as const;
 
 export type AdapterId = (typeof ADAPTER_IDS)[number];
 
+/** The AI coding tools `init` can set up: Claude Code, GitHub Copilot, Codex. */
+export const TOOL_IDS = ["claude-code", "copilot", "codex"] as const;
+
+export type ToolId = (typeof TOOL_IDS)[number];
+
+/** `tools:` as configured, checked; undefined when the key is absent. */
+export function parseTools(value: unknown, where = "tools"): ToolId[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : undefined;
+  if (!list) throw new Error(`${where} must be a list of ${TOOL_IDS.join(", ")}.`);
+  const tools = list.map((t) => String(t).trim()).filter(Boolean);
+  for (const t of tools) {
+    if (!(TOOL_IDS as readonly string[]).includes(t)) {
+      throw new Error(`${where}: "${t}" is not one of ${TOOL_IDS.join(", ")}.`);
+    }
+  }
+  return TOOL_IDS.filter((t) => tools.includes(t));
+}
+
 /** One configured project, fully resolved (absolute paths, defaults applied). */
 export interface ProjectConfig {
   /** Unique name, used to label every reference and result (`"frontend"`/`"backend"` for legacy configs). */
@@ -34,6 +53,8 @@ export interface ToolConfig {
   root: string;
   /** Absolute path of the config file, when there is one. */
   file?: string;
+  /** The AI coding tools `init` set up (`tools:`); undefined when the config doesn't say. */
+  tools?: ToolId[];
   projects: ProjectConfig[];
   /** Additional glob patterns to exclude from scanning, on top of the built-in ignore list. */
   exclude: string[];
@@ -81,6 +102,7 @@ interface ProjectFileShape {
 
 interface ConfigFileShape {
   projects?: unknown;
+  tools?: unknown;
   frontend?: string;
   backend?: string;
   frontendMethods?: string[];
@@ -95,6 +117,7 @@ export const CONFIG_FILENAMES = ["flagrm.config.yaml", "flagrm.config.yml", "fla
 /** Known top-level `flagrm.config.yaml` keys — anything else is likely a typo. */
 const KNOWN_CONFIG_KEYS = [
   "projects",
+  "tools",
   "frontend",
   "backend",
   "frontendMethods",
@@ -333,9 +356,11 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
     );
   }
 
+  const tools = parseTools(file.tools);
   return {
     root: fileDir,
     file: configPath && fs.existsSync(configPath) ? configPath : undefined,
+    ...(tools ? { tools } : {}),
     projects,
     exclude: [...(file.exclude ?? []), ...(cli.exclude ?? [])],
     include: [...(file.include ?? []), ...(cli.include ?? [])],

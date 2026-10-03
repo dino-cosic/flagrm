@@ -293,6 +293,36 @@ describe("CLI init (spawned dist/cli.js)", () => {
     expect(stdout).toMatch(/skipped\s+\.agents\/skills\/flagrm-remove/);
     expect(fs.existsSync(path.join(initTmp, ".agents", "skills", "flagrm-remove", "MARKER.txt"))).toBe(true);
   });
+
+  it("without a terminal, sets up only the tools the repository already uses", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-init-detect-"));
+    try {
+      fs.writeFileSync(path.join(dir, "AGENTS.md"), "# Project\n");
+      expect(runCli(["init"], dir).status).toBe(0);
+      expect(fs.existsSync(path.join(dir, ".agents", "skills", "flagrm-remove", "SKILL.md"))).toBe(true);
+      expect(fs.existsSync(path.join(dir, ".claude"))).toBe(false);
+      expect(fs.existsSync(path.join(dir, ".github"))).toBe(false);
+      expect(fs.readFileSync(path.join(dir, "flagrm.config.yaml"), "utf8")).toContain("tools: [codex]");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--tool sets up the named tools without asking, and rejects an unknown one", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-init-tool-"));
+    try {
+      expect(runCli(["init", "--tool", "claude-code,copilot"], dir).status).toBe(0);
+      expect(fs.existsSync(path.join(dir, ".claude", "settings.json"))).toBe(true);
+      expect(fs.existsSync(path.join(dir, ".github", "prompts", "flagrm-remove.prompt.md"))).toBe(true);
+      expect(fs.existsSync(path.join(dir, "AGENTS.md"))).toBe(false);
+      expect(fs.readFileSync(path.join(dir, "flagrm.config.yaml"), "utf8")).toContain("tools: [claude-code, copilot]");
+      const bad = runCli(["init", "--tool", "cursor"], dir);
+      expect(bad.status).toBe(2);
+      expect(bad.stderr).toContain('"cursor" is not one of claude-code, copilot, codex');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("CLI hook stop (spawned dist/cli.js)", () => {

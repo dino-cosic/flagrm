@@ -9,13 +9,14 @@ import path from "node:path";
 import { realProbes, type SetupProbes } from "../adapters/dotnet/setup.js";
 import type { Workspace } from "./adapter.js";
 import { errorExcerpt, incrementalBuildGap, runCheck, templateCheckGap } from "./baseline.js";
-import { findConfigFile, loadConfig } from "./config.js";
+import { findConfigFile, loadConfig, TOOL_IDS, type ToolId } from "./config.js";
 import { projectCommands } from "./config-snapshot.js";
 import { gitState, isAncestor } from "./git.js";
-import { AGENT_SKILL_DIRS, installedSkillVersion, SKILLS, stopHookState } from "./install.js";
+import { installedSkillVersion, SKILLS, stopHookState, TOOL_SKILL_DIRS } from "./install.js";
 import { packageVersion } from "./package.js";
 import { resolveProjects } from "./registry.js";
 import { setupReport } from "./scope.js";
+import { savedTools } from "./tools.js";
 import type { Baseline } from "./types.js";
 import { onPath, readJson, relativePath } from "./util.js";
 
@@ -65,8 +66,15 @@ export async function runDoctor(cwd: string, options: DoctorOptions = {}): Promi
     ignored ? ".flagrm/ is gitignored" : "add .flagrm/ to .gitignore (flagrm init does this)",
   );
 
+  // Only the tools the config lists, when it lists them.
+  let tools: readonly ToolId[] = TOOL_IDS;
+  try {
+    tools = savedTools(root) ?? TOOL_IDS;
+  } catch (err) {
+    add("fail", `config: ${err instanceof Error ? err.message : String(err)}`);
+  }
   const version = packageVersion();
-  for (const dir of AGENT_SKILL_DIRS) {
+  for (const dir of tools.map((t) => TOOL_SKILL_DIRS[t])) {
     const versions = SKILLS.map((s) => installedSkillVersion(path.join(root, dir, s)));
     if (versions.every((v) => v === undefined)) add("warn", `${dir}: skills not installed (run flagrm init)`);
     else if (versions.some((v) => v !== version)) {
@@ -75,10 +83,11 @@ export async function runDoctor(cwd: string, options: DoctorOptions = {}): Promi
     } else add("ok", `${dir}: skills ${version}`);
   }
 
-  const hook = stopHookState(root);
+  const hook = tools.includes("claude-code") ? stopHookState(root) : undefined;
   if (hook === "current") add("ok", "Claude Code Stop hook installed");
   else if (hook === "outdated") add("warn", "Claude Code Stop hook runs an outdated command (run flagrm update)");
-  else add("warn", "Claude Code Stop hook missing from .claude/settings.json (run flagrm init)");
+  else if (hook === "missing")
+    add("warn", "Claude Code Stop hook missing from .claude/settings.json (run flagrm init)");
 
   if (git.sha !== null) abandonedBaselines(root, add);
   return { status: checks.some((c) => c.status === "fail") ? "fail" : "ok", checks };

@@ -37,7 +37,7 @@ hook fails and does not guard the removal. `flagrm verify` still works.
 
 ```sh
 npm install -D flagrm        # or run everything with npx flagrm
-npx flagrm init              # config, skills, Stop hook, .gitignore entry
+npx flagrm init              # asks which AI tools; config, skills, Stop hook, .gitignore entry
 ```
 
 Fill in the project paths and the build and test commands in
@@ -82,11 +82,17 @@ of these reasons is a warning, for the agent to explain in its notes.
 
 ## How it works
 
-1. **`flagrm init`** writes `flagrm.config.yaml` for the Angular and .NET
-   projects it finds. It installs the `flagrm-remove` and `flagrm-verify`
-   skills into `.claude/skills/`, `.github/skills/` and `.agents/skills/`, adds
-   a pointer to `AGENTS.md` for Codex, adds a Claude Code Stop hook to
-   `.claude/settings.json`, and adds `.flagrm/` to `.gitignore`.
+1. **`flagrm init`** asks which AI coding tools to set up (Claude Code,
+   GitHub Copilot, Codex), with the ones the repository already uses
+   pre-selected; `--tool claude-code,codex` answers without asking, and
+   without a terminal it takes the detected tools (all three when none is).
+   It writes `flagrm.config.yaml` for the Angular and .NET projects it finds,
+   with the choice as `tools:`, and adds `.flagrm/` to `.gitignore`. Then per
+   tool: for Claude Code the `flagrm-remove` and `flagrm-verify` skills in
+   `.claude/skills/` and a Stop hook in `.claude/settings.json`; for Copilot
+   the skills in `.github/skills/` and `/flagrm-remove` and `/flagrm-verify`
+   prompt files in `.github/prompts/`; for Codex the skills in
+   `.agents/skills/` and a pointer in `AGENTS.md`.
 2. **`/flagrm-remove <flag>`**: the agent checks that the tree is clean and runs
    `flagrm baseline <flag>`, which records the git commit, the build and test
    results, and the flag's names. It finds every usage with its own search,
@@ -104,10 +110,10 @@ of these reasons is a warning, for the agent to explain in its notes.
 
 | Command | What it does | Exit codes |
 |---|---|---|
-| `init` | Set up the config, skills, `AGENTS.md` block, Stop hook and `.gitignore` entry. Never overwrites | 0 |
+| `init` | Set up the config and `.gitignore` entry, and each chosen AI tool's files (asks, or `--tool claude-code,copilot,codex`; saved as `tools:`). Never overwrites or deletes | 0, 2 usage error |
 | `doctor` | Check the config, build and test commands (`--run` runs them), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
 | `scope` | For each .NET project, show what the machine lacks and which projects a solution filter would leave out; `--write` creates `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build and test at it | 0 nothing missing, 1 something missing |
-| `update` | Refresh the installed skills, the `AGENTS.md` block and the hook from this flagrm version | 0 |
+| `update` | Refresh the installed skills, prompt files, `AGENTS.md` block and hook from this flagrm version, for the config's `tools:` | 0 |
 | `list` | List every feature flag in the project: definitions, configured state per environment, reference counts | 0 |
 | `baseline <flag>` | Before any edit, record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET code the names include the locals, fields, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` limits `--name` entries to one file. `--name X --kind alias\|wrapper` adds names to an existing baseline; `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit (changes to `flagrm.config.yaml` are fine); `--no-checks` skips build and tests | 0, 2 usage error |
 | `verify <flag>` | Gate the removal with `leftovers`, `dead-code`, `build` and `tests`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings | 0 pass, 1 fail, 2 usage error |
@@ -138,6 +144,7 @@ compiler cannot see: config files, templates, comments and wrappers.
 ## Configuration
 
 ```yaml
+tools: [claude-code, codex]              # the AI tools init and update set up
 projects:
   - name: web
     adapter: angular
@@ -165,7 +172,9 @@ path. Without `build` or `test`, the adapter's defaults are used (`dotnet build
 --no-incremental`, `npx ng build`, and so on). `testResults` (JUnit XML or TRX)
 lets `verify` compare individual tests against the baseline. Only files written during the run are read, so result files left by earlier runs don't count, and projects whose patterns overlap don't count each other's files. `timeout`
 (seconds) fails a project's build or test command that runs longer, for example
-a test runner left in watch mode.
+a test runner left in watch mode. `tools` lists the AI coding tools whose files
+`init` and `update` manage (`claude-code`, `copilot`, `codex`); dropping one
+leaves its files in place, and `init` names them so you can delete them.
 
 ### When the machine can't build everything
 

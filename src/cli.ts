@@ -17,7 +17,7 @@ import {
   validateAgentNames,
   writeBaseline,
 } from "./core/baseline.js";
-import { type CliPathOptions, loadConfig } from "./core/config.js";
+import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
 import { runDoctor } from "./core/doctor.js";
 import { gitState } from "./core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
@@ -35,6 +35,7 @@ import {
   printVerifyReport,
 } from "./core/report.js";
 import { setupReport, writeScope } from "./core/scope.js";
+import { askTools, detectTools, savedTools, TOOL_LABELS } from "./core/tools.js";
 import { CHECK_IDS, type RecordedName } from "./core/types.js";
 import { onPath, relativePath } from "./core/util.js";
 import { parseSkip, verifyFlag } from "./core/verify/index.js";
@@ -234,30 +235,67 @@ hook
 program
   .command("init")
   .description(
-    "set up flagrm in this repository: flagrm.config.yaml, the flagrm-remove and flagrm-verify skills for Claude Code, " +
-      "GitHub Copilot and Codex, the Claude Code Stop hook and the .flagrm/ gitignore entry; never overwrites",
+    "set up flagrm in this repository: flagrm.config.yaml, the .flagrm/ gitignore entry, and for each AI coding " +
+      "tool its files (Claude Code: skills and Stop hook; GitHub Copilot: skills and prompt files; Codex: skills " +
+      "and the AGENTS.md block); asks which tools on a terminal and saves the choice as `tools:`; never overwrites",
   )
-  .action(async () => {
+  .option("--tool <tools>", `comma-separated tools to set up, without asking: ${TOOL_IDS.join(", ")}`)
+  .action(async (opts: { tool?: string }) => {
     const root = installRoot(process.cwd());
     printInstallRoot(root);
-    printSteps(initProject(root));
+    let tools: ToolId[];
+    try {
+      tools = await chooseTools(root, opts.tool);
+    } catch (err) {
+      fail(err);
+    }
+    printSteps(initProject(root, tools));
     console.log(pc.bold("\nflagrm doctor"));
     printDoctor(await runDoctor(root));
     console.log(pc.dim("\nNext: fill in flagrm.config.yaml, then ask your agent: /flagrm-remove <FlagName>"));
   });
+
+/**
+ * The tools `init` sets up: `--tool`, else the config's saved `tools:`, else
+ * the user's answer with the tools the repository already uses pre-selected.
+ * Without a terminal to ask on: those detected tools, or all when there are none.
+ */
+async function chooseTools(root: string, flag: string | undefined): Promise<ToolId[]> {
+  if (flag !== undefined) {
+    const tools = parseTools(flag, "--tool") ?? [];
+    if (tools.length === 0) throw new Error(`--tool needs at least one of ${TOOL_IDS.join(", ")}.`);
+    return tools;
+  }
+  const saved = savedTools(root);
+  if (saved?.length) {
+    console.log(
+      pc.dim(`Tools: ${saved.map((t) => TOOL_LABELS[t]).join(", ")} (from tools: in the config; --tool changes it)`),
+    );
+    return saved;
+  }
+  const detected = detectTools(root);
+  if (process.stdin.isTTY && process.stdout.isTTY) return askTools(detected);
+  return detected.length ? detected : [...TOOL_IDS];
+}
 
 // --- update ------------------------------------------------------------------
 
 program
   .command("update")
   .description(
-    "refresh the installed skills, the AGENTS.md block and the Stop hook from this flagrm version " +
-      "(only where flagrm init installed them)",
+    "refresh the installed skills, prompt files, AGENTS.md block and Stop hook from this flagrm version " +
+      "(only where flagrm init installed them, and only for the config's tools: when it lists them)",
   )
   .action(() => {
     const root = installRoot(process.cwd());
     printInstallRoot(root);
-    printSteps(updateProject(root));
+    let tools: ToolId[] | undefined;
+    try {
+      tools = savedTools(root);
+    } catch (err) {
+      fail(err);
+    }
+    printSteps(updateProject(root, tools));
   });
 
 /** Say where init/update install when it isn't the working directory. */
