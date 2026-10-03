@@ -19,3 +19,13 @@ export function readJson<T>(file: string): T | undefined {
     return undefined;
   }
 }
+
+/** Whether `exe` can be run from `cwd`: a path that exists, or a program on PATH (with PATHEXT on Windows). */
+export function onPath(exe: string, cwd: string): boolean {
+  if (exe.includes("/") || exe.includes("\\")) return fs.existsSync(path.resolve(cwd, exe));
+  const exts = process.platform === "win32" ? ["", ...(process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";")] : [""];
+  return (process.env.PATH ?? "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .some((dir) => exts.some((ext) => fs.existsSync(path.join(dir, exe + ext))));
+}

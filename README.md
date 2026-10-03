@@ -105,7 +105,8 @@ of these reasons is a warning, for the agent to explain in its notes.
 | Command | What it does | Exit codes |
 |---|---|---|
 | `init` | Set up the config, skills, `AGENTS.md` block, Stop hook and `.gitignore` entry. Never overwrites | 0 |
-| `doctor` | Check the config, build and test commands (`--run` runs them), git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
+| `doctor` | Check the config, build and test commands (`--run` runs them), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
+| `scope` | For each .NET project, show what the machine lacks and which projects a solution filter would leave out; `--write` creates `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build and test at it | 0 nothing missing, 1 something missing |
 | `update` | Refresh the installed skills, the `AGENTS.md` block and the hook from this flagrm version | 0 |
 | `list` | List every feature flag in the project: definitions, configured state per environment, reference counts | 0 |
 | `baseline <flag>` | Before any edit, record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET code the names include the locals, fields, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` limits `--name` entries to one file. `--name X --kind alias\|wrapper` adds names to an existing baseline; `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit (changes to `flagrm.config.yaml` are fine); `--no-checks` skips build and tests | 0, 2 usage error |
@@ -165,6 +166,25 @@ path. Without `build` or `test`, the adapter's defaults are used (`dotnet build
 lets `verify` compare individual tests against the baseline. Only files written during the run are read, so result files left by earlier runs don't count, and projects whose patterns overlap don't count each other's files. `timeout`
 (seconds) fails a project's build or test command that runs longer, for example
 a test runner left in watch mode.
+
+### When the machine can't build everything
+
+`flagrm init` and `flagrm doctor` check that the .NET SDK `global.json` asks
+for is installed (honoring `rollForward`), that `cargo` is on PATH when a
+project's build runs it, and that Docker is running when a test project uses
+Testcontainers. A missing SDK has to be installed. For `cargo` or Docker,
+`flagrm scope` shows which projects a solution filter would leave out: those
+projects and everything that references them. `flagrm scope --write` creates
+`flagrm.slnf` next to the solution, keeps it out of git, and points the
+project's `build` and `test` at it. The baseline and verify then run on what
+the machine can build; edits to the left-out projects aren't checked by
+build or tests, so mention them in the PR.
+
+A test that fails only because of the machine's locale (a decimal comma, a
+date format) is best left out by name, for example `dotnet test --filter
+"FullyQualifiedName!=Ns.PriceTests.FormatsTotal"`, rather than by forcing
+`LC_ALL=en_US.UTF-8` for the whole run: changing the locale for every test
+can break others that pass today.
 
 For .NET, keep `--no-incremental` in `build`. An incremental build skips
 up-to-date projects and prints none of their warnings, so the dead-code check

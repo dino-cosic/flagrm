@@ -6,6 +6,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { realProbes, type SetupProbes } from "../adapters/dotnet/setup.js";
+import type { Workspace } from "./adapter.js";
 import { errorExcerpt, incrementalBuildGap, runCheck, templateCheckGap } from "./baseline.js";
 import { findConfigFile, loadConfig } from "./config.js";
 import { projectCommands } from "./config-snapshot.js";
@@ -13,8 +15,9 @@ import { gitState, isAncestor } from "./git.js";
 import { AGENT_SKILL_DIRS, installedSkillVersion, SKILLS, stopHookState } from "./install.js";
 import { packageVersion } from "./package.js";
 import { resolveProjects } from "./registry.js";
+import { setupReport } from "./scope.js";
 import type { Baseline } from "./types.js";
-import { readJson, relativePath } from "./util.js";
+import { onPath, readJson, relativePath } from "./util.js";
 
 export type DoctorStatus = "ok" | "warn" | "fail";
 
@@ -35,6 +38,8 @@ export interface DoctorOptions {
   config?: string;
   /** Also run each build and test command. */
   run?: boolean;
+  /** What the machine has (SDKs, `cargo`, Docker); the real machine by default. */
+  probes?: SetupProbes;
 }
 
 /** Check the setup in `cwd`: config and commands, git, .gitignore, skills, hook and abandoned baselines. */
@@ -100,6 +105,7 @@ async function configChecks(
     add("fail", `config: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
+  setupChecks(projects, root, options.probes ?? realProbes((exe) => onPath(exe, root)), add);
   for (const { adapter, ctx } of projects) {
     const commands = projectCommands(adapter, ctx);
     for (const check of ["build", "test"] as const) {
@@ -140,6 +146,30 @@ async function configChecks(
 }
 
 /**
+ * Whether the machine can build and test each .NET project: no SDK matching
+ * global.json fails (nothing builds), a missing `cargo` or Docker warns (a
+ * solution filter can leave out the projects that need them).
+ */
+function setupChecks(
+  projects: Workspace,
+  root: string,
+  probes: SetupProbes,
+  add: (status: DoctorStatus, message: string, details?: string[]) => void,
+): void {
+  for (const s of setupReport(projects, root, probes)) {
+    if (s.sdk) add("fail", `${s.project}: ${s.sdk}`);
+    const problems = s.setup?.problems ?? [];
+    if (problems.length) {
+      const out = s.setup?.leaveOut.length ?? 0;
+      add(
+        "warn",
+        `${s.project}: ${problems.join("; ")} — \`flagrm scope\` shows the ${out} projects a solution filter would leave out`,
+      );
+    }
+  }
+}
+
+/**
  * The program of a simple command (`dotnet build`, `CI=1 npm test`), for the
  * PATH check, or undefined when the command uses shell syntax (`&&`, `|`,
  * quotes, `$VAR`, redirections, ...). Those are left to the build and test
@@ -151,15 +181,6 @@ export function simpleCommandProgram(command: string): string | undefined {
     .trim()
     .split(/\s+/)
     .find((word) => !/^\w+=/.test(word));
-}
-
-function onPath(exe: string, cwd: string): boolean {
-  if (exe.includes("/") || exe.includes("\\")) return fs.existsSync(path.resolve(cwd, exe));
-  const exts = process.platform === "win32" ? ["", ...(process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";")] : [""];
-  return (process.env.PATH ?? "")
-    .split(path.delimiter)
-    .filter(Boolean)
-    .some((dir) => exts.some((ext) => fs.existsSync(path.join(dir, exe + ext))));
 }
 
 /** `.flagrm/<flag>/` entries whose baseline commit is not in this branch's history. */

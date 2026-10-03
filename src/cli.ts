@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
+import { realProbes } from "./adapters/dotnet/setup.js";
 import type { Workspace } from "./core/adapter.js";
 import {
   addNames,
@@ -25,9 +26,17 @@ import { buildInventory } from "./core/inventory.js";
 import { verifyMarkdown } from "./core/markdown.js";
 import { packageVersion } from "./core/package.js";
 import { resolveProjects } from "./core/registry.js";
-import { printBaseline, printDoctor, printInventory, printSteps, printVerifyReport } from "./core/report.js";
+import {
+  printBaseline,
+  printDoctor,
+  printInventory,
+  printScope,
+  printSteps,
+  printVerifyReport,
+} from "./core/report.js";
+import { setupReport, writeScope } from "./core/scope.js";
 import { CHECK_IDS, type RecordedName } from "./core/types.js";
-import { relativePath } from "./core/util.js";
+import { onPath, relativePath } from "./core/util.js";
 import { parseSkip, verifyFlag } from "./core/verify/index.js";
 
 interface CommonOptions extends CliPathOptions {
@@ -277,6 +286,35 @@ program
     if (opts.json) console.log(JSON.stringify(report, null, 2));
     else printDoctor(report);
     process.exitCode = report.status === "ok" ? 0 : 1;
+  });
+
+// --- scope -------------------------------------------------------------------
+
+addCommonOptions(
+  program
+    .command("scope")
+    .description(
+      "check that this machine can build and test each .NET project (the SDK global.json asks for, `cargo`, " +
+        "Docker for Testcontainers) and show which projects a solution filter (flagrm.slnf) would leave out; " +
+        "exit 0 nothing missing, 1 something missing",
+    ),
+)
+  .option("--write", "create flagrm.slnf, keep it out of git and point the config's build and test at it")
+  .action((opts: CommonOptions & { write?: boolean }) => {
+    const { root, projects } = loadWorkspace(opts);
+    const setups = setupReport(
+      projects,
+      root,
+      realProbes((exe) => onPath(exe, root)),
+    );
+    const steps = opts.write ? writeScope(setups, projects, root, projects[0]?.ctx.config.file) : [];
+    if (opts.json) console.log(JSON.stringify({ projects: setups, ...(opts.write ? { steps } : {}) }, null, 2));
+    else {
+      printScope(setups, root, Boolean(opts.write));
+      printSteps(steps);
+    }
+    const missing = setups.some((s) => s.sdk || s.setup?.problems.length);
+    process.exitCode = missing ? 1 : 0;
   });
 
 // exitCode, not exit(): exit() can cut off output still being flushed to a pipe.

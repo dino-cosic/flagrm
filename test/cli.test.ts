@@ -226,6 +226,34 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
   });
 });
 
+describe("CLI scope (spawned dist/cli.js)", () => {
+  it("reports a .NET project this machine can build and test, and exits 0", () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ffr-scope-")));
+    try {
+      fs.mkdirSync(path.join(dir, "src"));
+      fs.writeFileSync(path.join(dir, "src", "Api.csproj"), '<Project Sdk="Microsoft.NET.Sdk" />\n');
+      fs.writeFileSync(
+        path.join(dir, "App.sln"),
+        'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Api", "src\\Api.csproj", "{1}"\nEndProject\n',
+      );
+      fs.writeFileSync(
+        path.join(dir, "flagrm.config.yaml"),
+        "projects:\n  - name: api\n    adapter: dotnet\n    path: .\n",
+      );
+      const { status, stdout } = runCli(["scope", "--json"], dir);
+      expect(status).toBe(0);
+      expect(JSON.parse(stdout).projects).toEqual([
+        {
+          project: "api",
+          setup: expect.objectContaining({ problems: [], leaveOut: [], solution: path.join(dir, "App.sln") }),
+        },
+      ]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("CLI init (spawned dist/cli.js)", () => {
   let initTmp: string;
 

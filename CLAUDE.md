@@ -34,6 +34,7 @@ Flow: `init` installs config + skills + Stop hook → agent runs `/flagrm-remove
 - Text analysis layer: `scan.ts`, `mentions.ts`, `discover.ts`, `inventory.ts`, `source-text.ts` (lexical masking of strings/comments). Comments mentioning a "scan code path" are remnants of a removed deterministic rewrite engine.
 - `src/adapters/{angular,dotnet,generic}`: implement the `Adapter` interface in `core/adapter.ts` (`defaultGlobs`, `discover`, optional `defaultCommands` and `unusedDiagnostics`). A new adapter must be registered in `core/registry.ts` and added to `ADAPTER_IDS` in `core/config.ts`.
 - `src/core/install.ts`: what `init`/`update` write: skills copied to `.claude/skills/`, `.github/skills/`, `.agents/skills/` and stamped with `metadata.flagrm-version`, an `AGENTS.md` block, the `.claude/settings.json` Stop hook, `.gitignore` entry. `init` never overwrites.
+- `src/core/scope.ts` + `adapters/dotnet/setup.ts`: machine setup checks (SDK vs global.json, `cargo`, Docker) used by `doctor` and `flagrm scope`, which writes `flagrm.slnf` and edits the config's commands in place (yaml Document API). Probes are injectable for tests.
 - `src/core/config.ts`: `flagrm.config.yaml` parsing; adding a key means updating the `KNOWN_*_KEYS` lists and the README.
 - `skills/`: the agent-facing product (markdown, shipped in the npm package). `test/skills.test.ts` enforces that skills only reference real CLI commands/options and stay short, so update it alongside CLI changes.
 

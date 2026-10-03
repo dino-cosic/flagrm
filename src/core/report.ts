@@ -1,6 +1,7 @@
 import pc from "picocolors";
 import type { DoctorReport, DoctorStatus } from "./doctor.js";
 import type { StepResult, StepStatus } from "./install.js";
+import type { ProjectSetup } from "./scope.js";
 import type { Baseline, CheckStatus, ConfigState, FlagInventoryEntry, ListReport, VerifyReport } from "./types.js";
 import { plural, relativePath } from "./util.js";
 
@@ -184,4 +185,36 @@ export function printDoctor(report: DoctorReport): void {
     for (const line of c.details ?? []) console.log(pc.dim(`      ${line}`));
   }
   console.log(report.status === "ok" ? pc.green("\nflagrm doctor: ok") : pc.red("\nflagrm doctor: problems found"));
+}
+
+/** `flagrm scope`: each .NET project's setup problems and what flagrm.slnf leaves out. */
+export function printScope(setups: ProjectSetup[], root: string, written: boolean): void {
+  if (setups.length === 0) {
+    console.log(pc.dim("No .NET projects in the config."));
+    return;
+  }
+  for (const s of setups) {
+    const solution = s.setup ? relativePath(root, s.setup.solution) : s.note;
+    console.log(`${pc.bold(s.project)} ${pc.dim(solution ?? "")}`);
+    if (s.sdk) console.log(`  ${pc.red("✗")} ${s.sdk}`);
+    for (const p of s.setup?.problems ?? []) console.log(`  ${pc.yellow("!")} ${p}`);
+    const out = s.setup?.leaveOut ?? [];
+    if (!s.sdk && !s.setup?.problems.length) console.log(`  ${pc.green("✓")} this machine has what it needs`);
+    if (out.length) {
+      const total = s.setup?.projects.length ?? 0;
+      console.log(
+        `  ${written ? "flagrm.slnf leaves out" : "flagrm.slnf would leave out"} ${out.length} of ${total} projects:`,
+      );
+      for (const l of out.slice(0, 30)) console.log(`    ${l.entry} ${pc.dim(`— ${l.reason}`)}`);
+      if (out.length > 30) console.log(pc.dim(`    … ${out.length - 30} more`));
+      console.log(
+        pc.dim(
+          written
+            ? "  Their builds and tests won't run: verify can't check edits to them, so say so in the PR."
+            : "  Run `flagrm scope --write` to create it and point the build and test at it.",
+        ),
+      );
+    }
+    if (s.sdk) console.log(pc.dim("  A solution filter can't help here: install the SDK or change global.json."));
+  }
 }

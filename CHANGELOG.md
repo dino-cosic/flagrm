@@ -38,6 +38,16 @@ contain breaking changes.
 
 ### Added
 
+- `flagrm scope`: for each .NET project, checks the machine (the SDK
+  `global.json` asks for, with `rollForward`; `cargo` where a project's build
+  runs it; Docker where a test project uses Testcontainers) and shows which
+  projects a solution filter would leave out: those and every project that
+  references them. `--write` creates `flagrm.slnf`, adds it to
+  `.git/info/exclude` and points the project's build and test at it, editing
+  `flagrm.config.yaml` in place. `doctor` (and so `init`) reports the same
+  problems: a missing SDK fails, a missing `cargo` or Docker warns.
+- README: leave a locale-dependent test out with `--filter` rather than
+  forcing `LC_ALL` for the whole run.
 - `verify` warns in `leftovers` about tests of the OFF path that never name
   the flag: a test that still checks a string literal the removal deleted
   from the code (and that no other code still has). When a test checked the

@@ -20,6 +20,7 @@ Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx f
 
 - `git status --porcelain` must print nothing. Otherwise ask the user to commit or stash.
 - No `flagrm.config.yaml`: run `flagrm init` and fill in project paths and build/test commands with the user.
+  Its doctor reports a missing SDK, `cargo` or Docker: show it. For `cargo`/Docker, offer `flagrm scope`; `--write` only on a yes.
 - `flagrm list --json`: find the flag in `flags[]`. Not there: show the closest names and ask.
 - `state` is `off`, `mixed` or `conditional`: name the environments in `config[]` that change and get a yes, or stop.
   `unconfigured` (set in a flag service): ask if it is ON everywhere. The removal request is not that answer.
@@ -28,7 +29,7 @@ Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx f
 ## 2. Baseline
 
 `flagrm baseline <flag> --json` records the git commit, build and test results and the flag's `names[]`.
-A `checks[]` entry with a non-zero `exitCode` and a `failure`: a setup problem. Show the user `failure.message`; once fixed, rerun with `--force`.
+A `checks[]` entry with a non-zero `exitCode` and a `failure`: a setup problem. Show the user `failure.message` (and `flagrm scope`); once fixed, rerun with `--force`.
 Without `failure`: a build, stop. Tests: stop if the failures (`results.failedTests`) could cover the flag's code; else ask the user to accept them as known.
 
 ## 3. Find every usage
