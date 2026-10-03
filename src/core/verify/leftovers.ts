@@ -7,6 +7,7 @@ import { FEATURE_MANAGEMENT_SECTION } from "../discover.js";
 import { discoverCandidates } from "../inventory.js";
 import { findIdentifiers, findMentions } from "../mentions.js";
 import type { CheckFinding, CheckResult, FlagCandidateSource } from "../types.js";
+import { relativePath } from "../util.js";
 import { checkResult, configFindings, plural, type VerifyContext } from "./context.js";
 
 const STILL: Record<FlagCandidateSource, string> = {
@@ -46,8 +47,17 @@ export async function leftoversCheck(v: VerifyContext): Promise<CheckResult> {
     // `GetValue<bool>("FeatureManagement:Flag")` reads it by its section-qualified key.
     literals.flatMap((name) => [`${FEATURE_MANAGEMENT_SECTION}__${name}`, `${FEATURE_MANAGEMENT_SECTION}:${name}`]),
   );
+  // A local, parameter or field the flag's value travelled through is only checked in its own file.
+  const scopes = new Map<string, Set<string> | "everywhere">();
+  for (const n of v.baseline.names.filter((x) => x.kind === "wrapper")) {
+    const current = scopes.get(n.name);
+    if (!n.file || current === "everywhere") scopes.set(n.name, "everywhere");
+    else scopes.set(n.name, new Set([...(current ?? []), n.file]));
+  }
   for (const hit of hits) {
     const isLiteral = literals.includes(hit.token);
+    const scope = isLiteral ? "everywhere" : scopes.get(hit.token);
+    if (scope instanceof Set && !scope.has(relativePath(v.root, hit.file))) continue;
     // A bare literal name in code is an identifier that merely shares the name; only its comments and
     // config keys (`new-checkout: true`) count.
     if (isLiteral && !hit.inComment && !hit.isConfigKey) continue;

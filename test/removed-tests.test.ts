@@ -3,8 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { words } from "../src/core/flag-words.js";
 import type { RecordedName } from "../src/core/types.js";
-import { classifyRemovedTests, type RemovedTestsContext, words } from "../src/core/verify/removed-tests.js";
+import { classifyRemovedTests, type RemovedTestsContext } from "../src/core/verify/removed-tests.js";
 
 let tmp: string;
 const git = (...args: string[]) => execFileSync("git", args, { cwd: tmp, encoding: "utf8" }).trim();

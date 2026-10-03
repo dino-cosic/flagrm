@@ -349,6 +349,16 @@ describe("leftovers check", () => {
     expect(report.status).toBe("fail");
   });
 
+  it("checks a name recorded for one file only in that file", async () => {
+    await takeBaseline();
+    const service = "backend/src/Shop.Api/Services/CheckoutService.cs";
+    addNames(tmp, FLAG, [{ name: "express", kind: "wrapper", source: "agent", file: service }]);
+    applyAfter();
+    const express = (r: VerifyReport) => findings(r, "leftovers").filter((f) => f.endsWith("still references express"));
+    // after/ still has `express` in CheckoutService.cs and in CheckoutServiceTests.cs: only the first counts.
+    expect(express(await verify()).map((f) => f.split(":")[0])).toEqual([`fail ${service}`, `fail ${service}`]);
+  });
+
   it("fails on a leftover call of a wrapper the agent recorded", async () => {
     await takeBaseline();
     addNames(tmp, FLAG, [{ name: "IsNewCheckoutEnabledAsync", kind: "wrapper", source: "agent" }]);

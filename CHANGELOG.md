@@ -26,6 +26,18 @@ contain breaking changes.
 
 ### Added
 
+- .NET discovery follows a flag's value: bool locals, fields and properties
+  assigned `IsEnabled(<flag>)`, methods that only return it (or a ternary on
+  it; static ones as `Class.Method`), and the bool parameters it is passed
+  to. `flagrm list` shows them as `flow`; `baseline` records as wrappers the
+  ones that clearly name the flag and lists the rest as `suggestedNames`. A
+  local, parameter or field (recorded with `file`) is only checked in its own
+  file; a method or property must contain the flag's whole name, or a flag
+  word with a digit. A parameter of one of several same-named methods, or a
+  method whose name another method shares, is only suggested. Test calls
+  passing `true`/`false` for such a parameter are listed as
+  `parameterizedTests`.
+- `baseline --name X --file <path>` checks the name only in that file.
 - The baseline records its configuration (`config` in `baseline.json`): each
   project's resolved build and test commands with a hash of the files they
   name (`.slnf`, `.runsettings`, filter lists; not `.sln`/`.csproj`),

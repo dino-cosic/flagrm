@@ -8,7 +8,7 @@ import {
   addNames,
   assertNoEditsSinceBaseline,
   baselinePath,
-  discoverNames,
+  discoverFlag,
   flagDir,
   mergeNames,
   runChecks,
@@ -102,17 +102,25 @@ addCommonOptions(
     "how --name entries are matched: alias (qualified constant) or wrapper (identifier, calls included)",
     "alias",
   )
+  .option("--file <path>", "check the --name entries only in this file (a local, parameter or field)")
   .option("--force", "start over: replace the baseline, only while the code is unedited since it")
   .action(
-    async (flag: string, opts: CommonOptions & { checks: boolean; name: string[]; kind: string; force?: boolean }) => {
+    async (
+      flag: string,
+      opts: CommonOptions & { checks: boolean; name: string[]; kind: string; file?: string; force?: boolean },
+    ) => {
       const { root, projects } = loadWorkspace(opts);
       if (opts.kind !== "alias" && opts.kind !== "wrapper") {
         fail(new Error(`--kind must be alias or wrapper, not "${opts.kind}".`));
       }
+      if (opts.file && opts.name.length === 0) fail(new Error("--file scopes --name entries; pass --name too."));
+      const scope = opts.file && relativePath(root, path.resolve(opts.file));
+      if (scope?.startsWith("..")) fail(new Error(`--file ${opts.file} is outside ${root}.`));
       const added: RecordedName[] = opts.name.map((name) => ({
         name,
         kind: opts.kind as RecordedName["kind"],
         source: "agent",
+        ...(scope ? { file: scope } : {}),
       }));
       let result: ReturnType<typeof writeBaseline>;
       try {
@@ -127,14 +135,8 @@ addCommonOptions(
         } else {
           const git = gitState(root);
           const checks = opts.checks ? await runChecks(projects, flagDir(root, flag)) : undefined;
-          result = writeBaseline(
-            root,
-            flag,
-            projects,
-            git,
-            checks,
-            mergeNames(await discoverNames(projects, flag), added),
-          );
+          const { names, ...flow } = await discoverFlag(projects, flag);
+          result = writeBaseline(root, flag, projects, git, checks, mergeNames(names, added), flow);
         }
       } catch (err) {
         fail(err);

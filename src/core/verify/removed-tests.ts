@@ -6,6 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { flagWords, words } from "../flag-words.js";
 import { fileAt } from "../git.js";
 import { escapeRegExp, isTestPath } from "../scan.js";
 import type { RecordedName } from "../types.js";
@@ -54,23 +55,6 @@ export function classifyRemovedTests(
 }
 
 // --- renames -------------------------------------------------------------------
-
-/** Words that say nothing about which flag a name is about. */
-const GENERIC = new Set(
-  "feature features flag flags toggle key keys enabled disabled enable disable is has use get async on off the"
-    .split(" ")
-    .concat(["when", "with", "if", "and"]),
-);
-
-/** Lowercase words of a name: `Vfo1FoundationEnabled_Saves` → vfo1, foundation, enabled, saves. */
-export function words(name: string): string[] {
-  return (name.match(/[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+[0-9]*|[A-Z]+[0-9]*|[0-9]+/g) ?? []).map((w) => w.toLowerCase());
-}
-
-/** Words of the flag's recorded names, which a renamed test drops (`useVfo1Terminology` → vfo1, terminology). */
-function flagWords(names: RecordedName[]): Set<string> {
-  return new Set(names.flatMap((n) => words(n.name)).filter((w) => !GENERIC.has(w)));
-}
 
 /** A test name's class (`Ns.ClassTests`, JUnit classname) and its own name (method or title). */
 function split(key: string): { owner: string; own: string } {

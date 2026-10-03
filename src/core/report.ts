@@ -36,12 +36,25 @@ export function printInventory(report: ListReport): void {
           pc.dim(` · ${byProject}`);
     console.log(`${pc.bold(entry.flag)}  ${pc.dim(`${entry.type} · ${stateLabel(entry.state)} ·`)} ${usage}`);
 
-    const project = pad([...entry.definitions, ...entry.config].map((x) => x.project));
+    const project = pad([...entry.definitions, ...entry.config, ...entry.flow].map((x) => x.project));
     const kind = pad(entry.definitions.map((d) => d.kind));
     const name = pad(entry.definitions.map((d) => d.name));
     for (const d of entry.definitions) {
       console.log(
         `  ${pc.dim("defined")}  ${pc.dim(project(d.project))}  ${pc.dim(kind(d.kind))}  ${name(d.name)}  ${pc.cyan(`${rel(d.file)}:${d.line}`)}`,
+      );
+    }
+    const flowKind = pad(entry.flow.map((n) => n.kind));
+    const flowName = pad(entry.flow.map((n) => n.name));
+    for (const n of entry.flow) {
+      console.log(
+        `  ${pc.dim("flows  ")}  ${pc.dim(project(n.project))}  ${pc.dim(flowKind(n.kind))}  ${flowName(n.name)}  ${pc.cyan(`${rel(n.file)}:${n.line}`)}` +
+          (n.record ? "" : pc.dim("  (suggested)")),
+      );
+    }
+    if (entry.parameterizedTests.length) {
+      console.log(
+        `  ${pc.dim("tests  ")}  ${plural(entry.parameterizedTests.length, "test call")} pass the flag's value as a literal`,
       );
     }
     const env = pad(entry.config.map((c) => c.environment));
@@ -54,7 +67,10 @@ export function printInventory(report: ListReport): void {
     console.log("");
   }
   console.log(
-    pc.dim("Reference counts are direct uses of the flag's literal and definitions, not reads through wrappers."),
+    pc.dim(
+      "Reference counts are direct uses of the flag's literal and definitions, not reads through wrappers. " +
+        "`flows` are the names its value travels through; `baseline` records the ones not marked suggested.",
+    ),
   );
 }
 
@@ -80,8 +96,24 @@ export function printBaseline(baseline: Baseline, file: string): void {
     if (c.failure) console.log(`    ${pc.yellow("setup problem:")} ${c.failure.message}`);
   }
   if (baseline.names.length) {
-    const names = baseline.names.map((n) => (n.kind === "literal" ? n.name : `${n.name} (${n.kind})`));
+    const names = baseline.names.map((n) =>
+      n.kind === "literal" ? n.name : `${n.name} (${n.kind}${n.file ? ` in ${n.file}` : ""})`,
+    );
     console.log(`  names: ${pc.dim(names.join(", "))}`);
+  }
+  for (const n of baseline.suggestedNames ?? []) {
+    console.log(
+      `  ${pc.yellow("suggested")} ${n.name} ${pc.dim(`(${n.kind})`)} ${pc.cyan(`${rel(n.file)}:${n.line}`)} ` +
+        pc.dim(
+          `if it only carries this flag: --name ${n.name} --kind wrapper` +
+            (n.kind === "method" || n.kind === "property" ? "" : ` --file ${rel(n.file)}`),
+        ),
+    );
+  }
+  for (const t of baseline.parameterizedTests ?? []) {
+    console.log(
+      `  ${pc.dim("test passes")} ${t.parameter}: ${t.value} ${pc.dim(`to ${t.method}`)} ${pc.cyan(`${rel(t.file)}:${t.line}`)}`,
+    );
   }
 }
 

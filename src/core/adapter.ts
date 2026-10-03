@@ -1,5 +1,5 @@
 import type { AdapterId, ProjectConfig, ToolConfig } from "./config.js";
-import type { FlagCandidate } from "./types.js";
+import type { FlagCandidate, FlagFlowName, ParameterizedTest } from "./types.js";
 
 /** Everything an adapter needs to work on one configured project. */
 export interface ProjectContext {
@@ -24,6 +24,12 @@ export interface Adapter {
   defaultGlobs: string[];
   /** Candidate flag names for `flagrm list`. */
   discover(ctx: ProjectContext): Promise<FlagCandidate[]>;
+  /**
+   * Where each flag's value goes: the locals, fields, properties, methods and
+   * parameters that hold or pass it, and tests that call such a parameter
+   * with a `true`/`false` literal.
+   */
+  flow?(ctx: ProjectContext, flags: FlagRef[]): FlagFlow;
   /** Build/test commands to use when the project doesn't configure its own. */
   defaultCommands?(ctx: ProjectContext): { build?: string; test?: string };
   /**
@@ -32,6 +38,17 @@ export interface Adapter {
    * when the adapter has nothing to go on (e.g. no build log).
    */
   unusedDiagnostics?(ctx: ProjectContext, input: UnusedDiagnosticsInput): UnusedDiagnosticsResult | undefined;
+}
+
+/** A flag and the qualified names code reads it by (`FeatureFlags.NewCheckout`). */
+export interface FlagRef {
+  flag: string;
+  aliases: string[];
+}
+
+export interface FlagFlow {
+  names: FlagFlowName[];
+  tests: ParameterizedTest[];
 }
 
 export interface UnusedDiagnosticsInput {

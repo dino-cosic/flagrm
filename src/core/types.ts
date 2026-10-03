@@ -101,6 +101,14 @@ export interface FlagInventoryEntry {
    * Comments, definitions and config entries are not counted, and neither
    * are reads through wrappers.
    */
+  /**
+   * Names the flag's value travels through. `record` names contain one of the
+   * flag's words, so `baseline` records them as wrappers; the others are only
+   * suggested (`enabled`, `Plural` would match unrelated code).
+   */
+  flow: Array<FlagFlowName & { record: boolean }>;
+  /** Tests that pass a `true`/`false` literal for one of the `parameter` names in `flow`. */
+  parameterizedTests: ParameterizedTest[];
   references: {
     total: number;
     /** Distinct files with at least one reference. */
@@ -109,6 +117,37 @@ export interface FlagInventoryEntry {
     tests: number;
     byProject: Record<string, number>;
   };
+}
+
+/** A name the flag's value travels through, found by following it from the flag's evaluations. */
+export interface FlagFlowName {
+  flag: string;
+  /** As code refers to it; a static method qualified by its class (`CollectionTerminology.Plural`). */
+  name: string;
+  kind: "local" | "field" | "property" | "method" | "parameter";
+  /**
+   * A parameter of one of several same-named methods the call could reach, or
+   * an instance method whose name another method shares; never recorded automatically.
+   */
+  ambiguous?: boolean;
+  project: string;
+  /** Absolute file path of the declaration or assignment. */
+  file: string;
+  /** 1-based line number. */
+  line: number;
+}
+
+/** A test call passing a `true`/`false` literal for a parameter the flag's value is passed as. */
+export interface ParameterizedTest {
+  flag: string;
+  project: string;
+  /** Absolute file path. */
+  file: string;
+  /** 1-based line number. */
+  line: number;
+  method: string;
+  parameter: string;
+  value: boolean;
 }
 
 export interface ListReport {
@@ -176,6 +215,12 @@ export interface RecordedName {
   name: string;
   kind: RecordedNameKind;
   source: "discovery" | "agent";
+  /**
+   * Only this file (relative to the config root) is checked for the name: a
+   * local, parameter or field exists only there, and the same name elsewhere
+   * is another variable.
+   */
+  file?: string;
 }
 
 /** `.flagrm/<flag>/baseline.json`: the state of the code before the removal. */
@@ -191,6 +236,10 @@ export interface Baseline {
   names: RecordedName[];
   /** The configuration the baseline was taken with; `verify` warns about changes to it. */
   config?: ConfigSnapshot;
+  /** Names the flag's value travels through that are too generic to record; confirm them with `--name`. */
+  suggestedNames?: FlagFlowName[];
+  /** Tests that pass a `true`/`false` literal for a parameter the flag's value is passed as. */
+  parameterizedTests?: ParameterizedTest[];
 }
 
 /** A resolved build or test command and the files it names (a solution filter, run settings), hashed. */

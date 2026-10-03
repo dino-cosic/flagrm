@@ -6,10 +6,12 @@
 
 import path from "node:path";
 import type { Workspace } from "./adapter.js";
+import { flagWords, mentionsFlag, namesFlag } from "./flag-words.js";
 import { findMentions } from "./mentions.js";
 import { isTestPath } from "./scan.js";
 import {
   type FlagCandidate,
+  type FlagFlowName,
   type FlagInventoryEntry,
   type FlagState,
   JSON_SCHEMA_VERSION,
@@ -48,6 +50,8 @@ export async function buildInventory(projects: Workspace): Promise<ListReport> {
         definitions: [],
         config: [],
         references: { total: 0, files: 0, tests: 0, byProject: {} },
+        flow: [],
+        parameterizedTests: [],
       };
       entries.set(c.flag, entry);
       involved.set(entry, new Set());
@@ -67,6 +71,7 @@ export async function buildInventory(projects: Workspace): Promise<ListReport> {
   }
 
   countReferences(projects, [...entries.values()]);
+  followFlow(projects, [...entries.values()]);
 
   const order = projects.map(({ ctx }) => ctx.name);
   const byLocation = (a: { project: string; file: string; line: number }, b: typeof a) =>
@@ -133,4 +138,38 @@ function countReferences(projects: Workspace, entries: FlagInventoryEntry[]): vo
     files.set(entry, seen);
   }
   for (const [entry, seen] of files) entry.references.files = seen.size;
+}
+
+/**
+ * Where each flag's value goes, from the adapters that can follow it. A name
+ * is marked `record` when it says it is about the flag; a generic one
+ * (`enabled`, `Plural`) recorded as a wrapper would match unrelated code.
+ */
+function followFlow(projects: Workspace, entries: FlagInventoryEntry[]): void {
+  const byFlag = new Map(entries.map((e) => [e.flag, e]));
+  const refs = entries.map((e) => ({ flag: e.flag, aliases: e.definitions.map((d) => d.name) }));
+  for (const { adapter, ctx } of projects) {
+    if (!adapter.flow) continue;
+    const { names, tests } = adapter.flow(ctx, refs);
+    for (const name of names) {
+      const entry = byFlag.get(name.flag);
+      if (!entry) continue;
+      const words = flagWords([{ name: entry.flag }, ...entry.definitions]);
+      const flagNames = [entry.flag, ...entry.definitions.map((d) => d.name.split(".").pop() ?? d.name)];
+      entry.flow.push({ ...name, record: !name.ambiguous && recordable(name, flagNames, words) });
+    }
+    for (const test of tests) byFlag.get(test.flag)?.parameterizedTests.push(test);
+  }
+}
+
+/**
+ * A local, parameter or field is only looked for in its own file, so one of
+ * the flag's words in its name is enough (`useVfo1Terminology`). A method or
+ * property is looked for everywhere, so its name has to name the flag
+ * (`IsNewCheckoutEnabledAsync`); `express` or `GetCheckout` would match
+ * unrelated code.
+ */
+function recordable(name: FlagFlowName, flagNames: string[], words: Set<string>): boolean {
+  const scoped = name.kind === "local" || name.kind === "parameter" || name.kind === "field";
+  return scoped ? mentionsFlag(name.name, words) : namesFlag(name.name, flagNames, words);
 }

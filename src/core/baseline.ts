@@ -8,7 +8,15 @@ import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { environmentProblem } from "./environment.js";
 import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
-import { type Baseline, type CheckRun, type GitState, JSON_SCHEMA_VERSION, type RecordedName } from "./types.js";
+import {
+  type Baseline,
+  type CheckRun,
+  type FlagFlowName,
+  type GitState,
+  JSON_SCHEMA_VERSION,
+  type ParameterizedTest,
+  type RecordedName,
+} from "./types.js";
 import { readJson, relativePath } from "./util.js";
 import { collectTestResults } from "./verify/test-results.js";
 
@@ -202,6 +210,7 @@ export function writeBaseline(
   git: GitState,
   checks?: CheckRun[],
   names: RecordedName[] = [],
+  flow?: Omit<FlagDiscovery, "names">,
 ): { baseline: Baseline; file: string } {
   const baseline: Baseline = {
     schemaVersion: JSON_SCHEMA_VERSION,
@@ -213,6 +222,8 @@ export function writeBaseline(
     config: configSnapshot(projects),
   };
   if (checks) baseline.checks = checks;
+  if (flow?.suggestedNames.length) baseline.suggestedNames = flow.suggestedNames;
+  if (flow?.parameterizedTests.length) baseline.parameterizedTests = flow.parameterizedTests;
   return saveBaseline(root, baseline);
 }
 
@@ -223,22 +234,64 @@ function saveBaseline(root: string, baseline: Baseline): { baseline: Baseline; f
   return { baseline, file };
 }
 
-/** The flag's names from discovery: the literal, then each definition's qualified name. */
-export async function discoverNames(projects: Workspace, flag: string): Promise<RecordedName[]> {
-  const entry = (await buildInventory(projects)).flags.find((f) => f.flag === flag);
-  return mergeNames(
-    [{ name: flag, kind: "literal", source: "discovery" }],
-    (entry?.definitions ?? []).map((d) => ({ name: d.name, kind: "alias", source: "discovery" })),
-  );
+/** What discovery knows about one flag before its removal. */
+export interface FlagDiscovery {
+  /** The literal, each definition's qualified name, and the flow names that mention the flag. */
+  names: RecordedName[];
+  /** Flow names too generic to record (`enabled`, `Plural`): the agent confirms them with `--name`. */
+  suggestedNames: FlagFlowName[];
+  parameterizedTests: ParameterizedTest[];
 }
 
-/** `existing` followed by the names in `added` it doesn't already have. */
+/**
+ * The flag's names from discovery: the literal, then each definition's
+ * qualified name, then the names its value travels through that contain one
+ * of the flag's words, as wrappers.
+ */
+export async function discoverFlag(projects: Workspace, flag: string): Promise<FlagDiscovery> {
+  const entry = (await buildInventory(projects)).flags.find((f) => f.flag === flag);
+  const flow = entry?.flow ?? [];
+  const names = mergeNames(
+    [{ name: flag, kind: "literal", source: "discovery" }],
+    [
+      ...(entry?.definitions ?? []).map((d): RecordedName => ({ name: d.name, kind: "alias", source: "discovery" })),
+      ...flow.filter((n) => n.record).map((n) => flowName(projects, n)),
+    ],
+  );
+  const key = (n: RecordedName) => `${n.name}\0${n.file ?? ""}`;
+  const recorded = new Set(names.map(key));
+  const suggestedNames = flow
+    .filter((n) => !n.record && !recorded.has(key(flowName(projects, n))))
+    .map(({ record: _record, ...name }) => name)
+    .filter((n, i, all) => all.findIndex((m) => m.name === n.name && m.file === n.file) === i);
+  return { names, suggestedNames, parameterizedTests: entry?.parameterizedTests ?? [] };
+}
+
+/** A flow name as a wrapper; a local, parameter or field only in its own file. */
+function flowName(projects: Workspace, n: FlagFlowName): RecordedName {
+  const name: RecordedName = { name: n.name, kind: "wrapper", source: "discovery" };
+  const root = projects[0]?.ctx.config.root;
+  if (root && (n.kind === "local" || n.kind === "parameter" || n.kind === "field"))
+    name.file = relativePath(root, n.file);
+  return name;
+}
+
+/** The names {@link discoverFlag} records. */
+export async function discoverNames(projects: Workspace, flag: string): Promise<RecordedName[]> {
+  return (await discoverFlag(projects, flag)).names;
+}
+
+/** `existing` followed by the names in `added` it doesn't already cover. */
 export function mergeNames(existing: RecordedName[], added: RecordedName[]): RecordedName[] {
-  const seen = new Set(existing.map((n) => n.name));
+  // A name recorded for every file already covers the same name in one file.
+  const key = (n: RecordedName) => `${n.name}\0${n.file ?? ""}`;
+  const seen = new Set(existing.map(key));
+  const everywhere = new Set(existing.filter((n) => !n.file).map((n) => n.name));
   const merged = [...existing];
   for (const n of added) {
-    if (seen.has(n.name)) continue;
-    seen.add(n.name);
+    if (seen.has(key(n)) || everywhere.has(n.name)) continue;
+    seen.add(key(n));
+    if (!n.file) everywhere.add(n.name);
     merged.push(n);
   }
   return merged;

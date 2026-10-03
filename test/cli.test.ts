@@ -125,13 +125,29 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
 
   it("baseline --name adds names to the existing baseline without rerunning it", () => {
     const { status, stdout } = runCli(
-      ["baseline", "NewCheckout", "--name", "IsNewCheckoutEnabledAsync", "--kind", "wrapper", "--json"],
+      ["baseline", "NewCheckout", "--name", "UseNewCheckout", "--kind", "wrapper", "--json"],
       dir,
     );
     expect(status).toBe(0);
     const baseline = JSON.parse(stdout);
     expect(baseline.names[0]).toEqual({ name: "NewCheckout", kind: "literal", source: "discovery" });
-    expect(baseline.names).toContainEqual({ name: "IsNewCheckoutEnabledAsync", kind: "wrapper", source: "agent" });
+    expect(baseline.names).toContainEqual({ name: "UseNewCheckout", kind: "wrapper", source: "agent" });
+  });
+
+  it("baseline --name --file records a name for one file", () => {
+    const file = path.join("backend", "src", "Shop.Api", "Services", "CheckoutService.cs");
+    const { status, stdout } = runCli(
+      ["baseline", "NewCheckout", "--name", "useNew", "--kind", "wrapper", "--file", file, "--json"],
+      dir,
+    );
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout).names).toContainEqual({
+      name: "useNew",
+      kind: "wrapper",
+      source: "agent",
+      file: "backend/src/Shop.Api/Services/CheckoutService.cs",
+    });
+    expect(runCli(["baseline", "NewCheckout", "--file", file], dir).status).toBe(2);
   });
 
   it("baseline refuses to overwrite an existing baseline without --force", () => {

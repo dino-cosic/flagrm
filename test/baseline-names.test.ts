@@ -42,17 +42,38 @@ describe("discoverNames", () => {
     expect(names.every((n) => n.source === "discovery")).toBe(true);
   });
 
+  it("records a local the flag's value is held in for its own file only, as a plain word would match other code", async () => {
+    const names = await discoverNames(workspace(), "ExpressShipping");
+    expect(names).toContainEqual({
+      name: "express",
+      kind: "wrapper",
+      source: "discovery",
+      file: "backend/src/Shop.Api/Services/CheckoutService.cs",
+    });
+  });
+
+  it("records the wrappers the flag's value travels through", async () => {
+    const names = await discoverNames(workspace(), FLAG);
+    expect(names).toContainEqual({ name: "IsNewCheckoutEnabledAsync", kind: "wrapper", source: "discovery" });
+  });
+
   it("records only the literal for a flag discovery does not know", async () => {
     expect(await discoverNames(workspace(), "Nope")).toEqual([{ name: "Nope", kind: "literal", source: "discovery" }]);
   });
 });
 
 describe("mergeNames", () => {
+  it("keeps the same name for another file, and drops one a name for every file already covers", () => {
+    const scoped = (file: string): RecordedName => ({ ...agent("useX"), file });
+    expect(mergeNames([scoped("a.cs")], [scoped("a.cs"), scoped("b.cs")])).toEqual([scoped("a.cs"), scoped("b.cs")]);
+    expect(mergeNames([agent("useX")], [scoped("a.cs")])).toEqual([agent("useX")]);
+  });
+
   it("appends new names and keeps the first entry for a duplicate", () => {
     const existing: RecordedName[] = [{ name: FLAG, kind: "literal", source: "discovery" }];
-    expect(mergeNames(existing, [agent(FLAG), agent("IsNewCheckoutEnabledAsync")])).toEqual([
+    expect(mergeNames(existing, [agent(FLAG), agent("UseNewCheckout")])).toEqual([
       existing[0],
-      agent("IsNewCheckoutEnabledAsync"),
+      agent("UseNewCheckout"),
     ]);
   });
 });
@@ -62,12 +83,12 @@ describe("addNames", () => {
     const git = { sha: "abc", dirty: false, dirtyFiles: [] };
     const checks = [{ project: "api", check: "build" as const, command: "x", exitCode: 0, durationMs: 1 }];
     writeBaseline(tmp, FLAG, workspace(), git, checks, await discoverNames(workspace(), FLAG));
-    const { baseline } = addNames(tmp, FLAG, [agent("IsNewCheckoutEnabledAsync")]);
+    const { baseline } = addNames(tmp, FLAG, [agent("UseNewCheckout")]);
     expect(baseline.git).toEqual(git);
     expect(baseline.checks).toEqual(checks);
-    expect(baseline.names.at(-1)).toEqual(agent("IsNewCheckoutEnabledAsync"));
-    const again = addNames(tmp, FLAG, [agent("IsNewCheckoutEnabledAsync")]);
-    expect(again.baseline.names.filter((n) => n.name === "IsNewCheckoutEnabledAsync")).toHaveLength(1);
+    expect(baseline.names.at(-1)).toEqual(agent("UseNewCheckout"));
+    const again = addNames(tmp, FLAG, [agent("UseNewCheckout")]);
+    expect(again.baseline.names.filter((n) => n.name === "UseNewCheckout")).toHaveLength(1);
   });
 
   it("throws a UsageError without a baseline", () => {
@@ -82,6 +103,6 @@ describe("validateAgentNames", () => {
   });
 
   it("accepts a wrapper name", () => {
-    expect(() => validateAgentNames(workspace(), [agent("IsNewCheckoutEnabledAsync")])).not.toThrow();
+    expect(() => validateAgentNames(workspace(), [agent("UseNewCheckout")])).not.toThrow();
   });
 });
