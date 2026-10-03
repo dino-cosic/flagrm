@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
+## [0.2.1] - 2026-10-04
+
+### Fixed
+
+- `flagrm scope` on Windows: `--json` printed the solution path with forward
+  slashes, and `--write` showed a wrong `.git/info/exclude` path (and could
+  write a wrong line to it) when the path held a short name such as
+  `RUNNER~1`.
+
 ## [0.2.0] - 2026-10-04
 
 ### Changed
@@ -135,6 +144,7 @@ removes the flag through the `flagrm-remove` skill, and flagrm checks the result
   `doctor` warns about an incremental `dotnet build`, which hides existing
   warnings from the dead-code comparison.
 
+[0.2.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.2.0
 [0.1.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.1.0
