@@ -140,6 +140,29 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(stderr).toContain("already exists; pass --name to add names, or --force to start over");
   });
 
+  it("baseline --force refuses to start over once the code is edited", () => {
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ffr-force-")));
+    try {
+      fs.cpSync(path.resolve(HERE, "fixtures", "realistic", "before"), repo, { recursive: true });
+      const git = (...args: string[]) => spawnSync("git", args, { cwd: repo });
+      git("init", "-q");
+      git("add", "-A");
+      git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
+      expect(runCli(["baseline", "NewCheckout", "--no-checks"], repo).status).toBe(0);
+      expect(runCli(["baseline", "NewCheckout", "--no-checks", "--force"], repo).status).toBe(0);
+      const file = path.join(repo, ".flagrm", "NewCheckout", "baseline.json");
+      const before = fs.readFileSync(file, "utf8");
+      fs.appendFileSync(path.join(repo, "frontend", "src", "main.ts"), "\n// edited\n");
+      const { status, stderr } = runCli(["baseline", "NewCheckout", "--no-checks", "--force"], repo);
+      expect(status).toBe(2);
+      expect(stderr).toContain("frontend/src/main.ts");
+      expect(stderr).toContain("git stash -u");
+      expect(fs.readFileSync(file, "utf8")).toBe(before);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   it("baseline rejects a flag evaluation method as a name, and an unknown kind", () => {
     const method = runCli(["baseline", "NewCheckout", "--name", "isEnabled"], dir);
     expect(method.status).toBe(2);

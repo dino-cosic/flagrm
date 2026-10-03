@@ -6,6 +6,7 @@ import pc from "picocolors";
 import type { Workspace } from "./core/adapter.js";
 import {
   addNames,
+  assertNoEditsSinceBaseline,
   baselinePath,
   discoverNames,
   flagDir,
@@ -101,7 +102,7 @@ addCommonOptions(
     "how --name entries are matched: alias (qualified constant) or wrapper (identifier, calls included)",
     "alias",
   )
-  .option("--force", "overwrite an existing baseline")
+  .option("--force", "start over: replace the baseline, only while the code is unedited since it")
   .action(
     async (flag: string, opts: CommonOptions & { checks: boolean; name: string[]; kind: string; force?: boolean }) => {
       const { root, projects } = loadWorkspace(opts);
@@ -116,7 +117,9 @@ addCommonOptions(
       let result: ReturnType<typeof writeBaseline>;
       try {
         validateAgentNames(projects, added);
-        if (fs.existsSync(baselinePath(root, flag)) && !opts.force) {
+        const exists = fs.existsSync(baselinePath(root, flag));
+        if (exists && opts.force) assertNoEditsSinceBaseline(root, flag);
+        if (exists && !opts.force) {
           if (added.length === 0) {
             throw new Error(`Baseline for ${flag} already exists; pass --name to add names, or --force to start over.`);
           }

@@ -4,7 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { dotnetAdapter } from "../src/adapters/dotnet/index.js";
-import { baselinePath, flagDir, runCheck, runChecks, writeBaseline } from "../src/core/baseline.js";
+import {
+  assertNoEditsSinceBaseline,
+  baselinePath,
+  flagDir,
+  runCheck,
+  runChecks,
+  UsageError,
+  writeBaseline,
+} from "../src/core/baseline.js";
 import { gitState } from "../src/core/git.js";
 import { JSON_SCHEMA_VERSION } from "../src/core/types.js";
 import { projectContext } from "./support/projects.js";
@@ -135,5 +143,51 @@ describe("runCheck", () => {
     });
     const [run] = await runChecks([{ adapter: dotnetAdapter, ctx }], path.join(tmp, ".flagrm", "F"));
     expect(run.results).toMatchObject({ total: 2, passed: 1, failed: 1, failedNames: ["A › two"] });
+  });
+});
+
+describe("assertNoEditsSinceBaseline", () => {
+  const commit = () => git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "c");
+  const baseline = () => {
+    const ctx = projectContext("generic", tmp, { name: "svc" });
+    writeBaseline(tmp, "F", [{ adapter: dotnetAdapter, ctx }], gitState(tmp));
+  };
+
+  beforeEach(() => {
+    git("init", "-q");
+    fs.writeFileSync(path.join(tmp, "a.cs"), "a");
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), "projects: []\n");
+    git("add", "-A");
+    commit();
+    baseline();
+  });
+
+  it("allows starting over before any edit, and after fixing only the flagrm config", () => {
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), "projects: []\n# test: dotnet test --filter X\n");
+    fs.writeFileSync(path.join(flagDir(tmp, "F"), "verify.json"), "{}");
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
+  });
+
+  it("refuses once the code is edited, and says to stash uncommitted edits", () => {
+    fs.writeFileSync(path.join(tmp, "a.cs"), "b");
+    fs.writeFileSync(path.join(tmp, "new.cs"), "n");
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).toThrow(UsageError);
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).toThrow(
+      /changed since the baseline of F \(a\.cs, new\.cs\).*git stash -u.*baseline F --force.*git stash pop/,
+    );
+  });
+
+  it("refuses edits committed after the baseline commit, which stashing can't set aside", () => {
+    fs.writeFileSync(path.join(tmp, "a.cs"), "b");
+    commit();
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).toThrow(/a\.cs.*committed since the baseline commit/);
+  });
+
+  it("allows starting over outside git, where edits can't be told", () => {
+    fs.rmSync(path.join(tmp, ".git"), { recursive: true });
+    baseline();
+    fs.writeFileSync(path.join(tmp, "a.cs"), "b");
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
   });
 });

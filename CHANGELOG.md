@@ -13,6 +13,10 @@ contain breaking changes.
   failed at the baseline: those are reported as known failures and only warn.
   Only new failures fail it, and they are listed. Test names are compared
   without xUnit data-row arguments. Needs `testResults`.
+- `baseline --force` refuses to replace a baseline once the code has changed
+  since its commit (`.flagrm/` and `flagrm.config.yaml` don't count), so a
+  rerun after fixing the setup can't record a half-done removal. The error
+  says how to set uncommitted edits aside with `git stash`.
 
 ### Added
 

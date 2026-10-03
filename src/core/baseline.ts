@@ -3,9 +3,12 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
+import { CONFIG_FILENAMES } from "./config.js";
 import { environmentProblem } from "./environment.js";
+import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
 import { type Baseline, type CheckRun, type GitState, JSON_SCHEMA_VERSION, type RecordedName } from "./types.js";
+import { readJson, relativePath } from "./util.js";
 import { collectTestResults } from "./verify/test-results.js";
 
 /**
@@ -243,6 +246,42 @@ export function mergeNames(existing: RecordedName[], added: RecordedName[]): Rec
     merged.push(n);
   }
   return merged;
+}
+
+/**
+ * Files changed since `sha` that count as edits to the code: everything but
+ * `.flagrm/` and the flagrm config, which may change to fix the setup.
+ * Undefined when git can't tell (not a repository, or `sha` isn't in it).
+ */
+export function editsSince(root: string, sha: string): string[] | undefined {
+  return changedFilesSince(root, sha)?.filter((rel) => !CONFIG_FILENAMES.includes(rel));
+}
+
+/**
+ * `baseline --force` starts over only before the removal began: the working
+ * tree must still match the baseline commit. Otherwise the new baseline would
+ * record half-removed code, and verify would no longer see those edits.
+ * Without git there is nothing to compare, so it is allowed.
+ */
+export function assertNoEditsSinceBaseline(root: string, flag: string): void {
+  const sha = readJson<Partial<Baseline>>(baselinePath(root, flag))?.git?.sha;
+  if (!sha) return;
+  const edits = editsSince(root, sha);
+  if (edits === undefined) {
+    throw new UsageError(
+      `The baseline commit ${sha.slice(0, 7)} of ${flag} is not in this repository, so flagrm can't tell whether the ` +
+        `code was edited since. If it wasn't, delete ${relativePath(root, flagDir(root, flag))}/ and take a new baseline.`,
+    );
+  }
+  if (edits.length === 0) return;
+  const shown = edits.slice(0, 5).join(", ") + (edits.length > 5 ? `, and ${edits.length - 5} more` : "");
+  const uncommitted = new Set(changedFilesSince(root, "HEAD") ?? []);
+  const fix = edits.every((rel) => uncommitted.has(rel))
+    ? `Set the edits aside with \`git stash -u\`, run \`flagrm baseline ${flag} --force\` again, then \`git stash pop\`.`
+    : `Some are committed since the baseline commit ${sha.slice(0, 7)}: check out code without the removal first.`;
+  throw new UsageError(
+    `The code changed since the baseline of ${flag} (${shown}), so --force would record a half-done removal. ${fix}`,
+  );
 }
 
 /** Append names to an existing baseline; its git state and checks stay as they are. */

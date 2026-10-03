@@ -88,7 +88,7 @@ interface ConfigFileShape {
   include?: string[];
 }
 
-const CONFIG_FILENAMES = ["flagrm.config.yaml", "flagrm.config.yml", "flagrm.config.json"];
+export const CONFIG_FILENAMES = ["flagrm.config.yaml", "flagrm.config.yml", "flagrm.config.json"];
 
 /** Known top-level `flagrm.config.yaml` keys — anything else is likely a typo. */
 const KNOWN_CONFIG_KEYS = [
