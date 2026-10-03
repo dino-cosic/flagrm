@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { dotnetAdapter } from "../src/adapters/dotnet/index.js";
+import { genericAdapter } from "../src/adapters/generic/index.js";
 import {
   assertNoEditsSinceBaseline,
   baselinePath,
@@ -114,6 +115,52 @@ describe("runChecks", () => {
     const adapter = { ...dotnetAdapter, defaultCommands: () => ({ build: `node -e ""` }) };
     const runs = await runChecks([{ adapter, ctx }], path.join(tmp, ".flagrm", "F"));
     expect(runs.map((r) => [r.check, r.command, r.exitCode])).toEqual([["build", `node -e ""`, 0]]);
+  });
+});
+
+describe("runChecks with overlapping testResults patterns", () => {
+  // Writes `file` (relative to the project) with one passing test named after the project.
+  const writes = (file: string, name: string) => {
+    const script = path.join(tmp, "write-trx.cjs");
+    fs.writeFileSync(
+      script,
+      "const fs = require('fs'), path = require('path'); const [file, name] = process.argv.slice(2);" +
+        "fs.mkdirSync(path.dirname(file), { recursive: true });" +
+        'fs.writeFileSync(file, `<TestRun><UnitTestResult testName="${name}" outcome="Passed"/></TestRun>`);',
+    );
+    return `node "${script}" ${file} ${name}`;
+  };
+  const project = (name: string, dir: string, file: string, pattern: string) => {
+    fs.mkdirSync(path.join(tmp, dir), { recursive: true });
+    return {
+      adapter: genericAdapter,
+      ctx: projectContext("generic", path.join(tmp, dir), { name, test: writes(file, name), testResults: pattern }),
+    };
+  };
+  const names = (runs: Awaited<ReturnType<typeof runChecks>>) =>
+    Object.fromEntries(runs.map((r) => [r.project, r.results?.names]));
+
+  it("doesn't count a result file another project's run just wrote", async () => {
+    const pattern = path.join(tmp, "**/TestResults/*.trx");
+    const runs = await runChecks(
+      [project("a", "a", "TestResults/a.trx", pattern), project("b", "b", "TestResults/b.trx", pattern)],
+      path.join(tmp, ".flagrm", "F"),
+      ["test"],
+    );
+    expect(names(runs)).toEqual({ a: ["a"], b: ["b"] });
+  });
+
+  it("reads a shared result file again when the next run rewrites it", async () => {
+    const pattern = path.join(tmp, "TestResults/results.trx");
+    const runs = await runChecks(
+      [
+        project("a", "a", "../TestResults/results.trx", pattern),
+        project("b", "b", "../TestResults/results.trx", pattern),
+      ],
+      path.join(tmp, ".flagrm", "F"),
+      ["test"],
+    );
+    expect(names(runs)).toEqual({ a: ["a"], b: ["b"] });
   });
 });
 

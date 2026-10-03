@@ -19,7 +19,7 @@ import {
   type RecordedName,
 } from "./types.js";
 import { readJson, relativePath } from "./util.js";
-import { collectTestResults, shortTestNames } from "./verify/test-results.js";
+import { type ClaimedResults, collectTestResults, shortTestNames } from "./verify/test-results.js";
 
 /**
  * `.flagrm/<flag>/` under the config root. A name that isn't safe as a directory
@@ -110,6 +110,7 @@ export async function runCheck(
   check: CheckRun["check"],
   command: string,
   logFile: string,
+  claimed?: ClaimedResults,
 ): Promise<CheckRun> {
   const started = Date.now();
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
@@ -136,7 +137,9 @@ export async function runCheck(
     if (problem) run.failure = { kind: "environment", message: problem };
   }
   const results =
-    check === "test" && ctx.project.testResults ? collectTestResults(ctx.project.testResults, started) : undefined;
+    check === "test" && ctx.project.testResults
+      ? collectTestResults(ctx.project.testResults, started, claimed)
+      : undefined;
   if (results) run.results = results;
   return run;
 }
@@ -224,11 +227,14 @@ export async function runChecks(
   only: ReadonlyArray<CheckRun["check"]> = ["build", "test"],
 ): Promise<CheckRun[]> {
   const runs: CheckRun[] = [];
+  // Projects whose `testResults` patterns overlap must not count each other's result files.
+  const claimed: ClaimedResults = new Map();
   for (const { adapter, ctx } of projects) {
     const commands = projectCommands(adapter, ctx);
     for (const check of only) {
       const command = commands[check];
-      if (command) runs.push(await runCheck(ctx, check, command, path.join(logDir, `${ctx.name}.${check}.log`)));
+      if (!command) continue;
+      runs.push(await runCheck(ctx, check, command, path.join(logDir, `${ctx.name}.${check}.log`), claimed));
     }
   }
   return runs;

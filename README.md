@@ -162,7 +162,7 @@ exclude: ['**/Migrations/**']
 Paths are relative to the config file, and commands run inside each project's
 path. Without `build` or `test`, the adapter's defaults are used (`dotnet build
 --no-incremental`, `npx ng build`, and so on). `testResults` (JUnit XML or TRX)
-lets `verify` compare individual tests against the baseline. `timeout`
+lets `verify` compare individual tests against the baseline. Only files written during the run are read, so result files left by earlier runs don't count, and projects whose patterns overlap don't count each other's files. `timeout`
 (seconds) fails a project's build or test command that runs longer, for example
 a test runner left in watch mode.
 

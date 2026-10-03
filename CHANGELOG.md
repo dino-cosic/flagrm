@@ -67,6 +67,12 @@ contain breaking changes.
   (requested vs installed versions), a command a build step couldn't find
   (and the project that runs it), or Docker not running for Testcontainers.
 
+### Fixed
+
+- Two projects whose `testResults` patterns overlap (`./**/TestResults/*.trx`)
+  no longer count each other's result files when their test runs follow each
+  other. Result files from earlier runs were already ignored.
+
 ## [0.1.1] - 2026-10-01
 
 ### Changed

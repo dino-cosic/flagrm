@@ -148,21 +148,33 @@ export function parseJUnit(xml: string): TestRunResults {
   return results;
 }
 
+/** Result files earlier runs read, with their modification time then: a file rewritten since is new data. */
+export type ClaimedResults = Map<string, number>;
+
 /**
  * Merge every result file matching `pattern` (an absolute path or glob)
  * modified at or after `since` — test runners keep older result files around.
- * Undefined when no such file exists.
+ * Files in `claimed` that haven't changed since are skipped: another
+ * project's run just wrote them, and an overlapping pattern
+ * (`./**\/TestResults/*.trx`) would count them twice. The files read are
+ * added to `claimed`. Undefined when no such file exists.
  */
-export function collectTestResults(pattern: string, since: number): TestRunResults | undefined {
+export function collectTestResults(
+  pattern: string,
+  since: number,
+  claimed: ClaimedResults = new Map(),
+): TestRunResults | undefined {
   // Filesystem timestamps can be coarser than Date.now().
   const cutoff = since - 2000;
   const files = fg
     .sync(path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern, { absolute: true, dot: true })
-    .filter((file) => fs.statSync(file).mtimeMs >= cutoff)
-    .sort();
+    .map((file) => ({ file, mtime: fs.statSync(file).mtimeMs }))
+    .filter(({ file, mtime }) => mtime >= cutoff && claimed.get(file) !== mtime)
+    .sort((a, b) => a.file.localeCompare(b.file));
+  for (const { file, mtime } of files) claimed.set(file, mtime);
   if (files.length === 0) return undefined;
   const merged = empty();
-  for (const file of files) {
+  for (const { file } of files) {
     const xml = fs.readFileSync(file, "utf8");
     const parsed = /<TestRun\b/.test(xml) ? parseTrx(xml) : parseJUnit(xml);
     merged.total += parsed.total;
