@@ -14,6 +14,14 @@ contain breaking changes.
   Only new failures fail it, and they are listed. Test names are compared
   without xUnit data-row arguments. Needs `testResults`.
 
+### Added
+
+- A failed build or test run whose log shows a machine setup problem gets
+  `failure: { kind: "environment", message }` in `baseline.json` and the
+  `verify`/`doctor` output: a .NET SDK that doesn't match `global.json`
+  (requested vs installed versions), a command a build step couldn't find
+  (and the project that runs it), or Docker not running for Testcontainers.
+
 ## [0.1.1] - 2026-10-01
 
 ### Changed

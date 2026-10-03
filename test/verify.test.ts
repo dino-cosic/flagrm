@@ -124,6 +124,24 @@ describe("verify on the realistic fixture", () => {
     expect(report.status).toBe("fail");
   });
 
+  it("names a setup problem behind a failed build instead of its error lines", async () => {
+    const missingTool = (config: ToolConfig) => {
+      for (const p of config.projects) {
+        p.build = "flagrm-no-such-command-xyz";
+        p.test = undefined;
+      }
+    };
+    await takeBaseline();
+    applyAfter();
+    const report = await verify({ skip: ["tests"] }, missingTool);
+    const build = report.checks.find((c) => c.id === "build");
+    expect(build?.status).toBe("fail");
+    expect(build?.findings.filter((f) => f.severity === "info").map((f) => f.message)).toEqual([
+      "setup problem: `flagrm-no-such-command-xyz` is not installed or not on PATH",
+      "setup problem: `flagrm-no-such-command-xyz` is not installed or not on PATH",
+    ]);
+  });
+
   it("warns when a template changed but the Angular build only runs tsc", async () => {
     const tscOnly = (config: ToolConfig) => {
       for (const p of config.projects) {

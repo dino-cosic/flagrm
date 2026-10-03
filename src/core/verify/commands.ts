@@ -24,8 +24,15 @@ function failedRunFindings(run: CheckRun): CheckFinding[] {
       file: run.log,
     },
   ];
-  for (const line of errorExcerpt(run.log)) findings.push({ severity: "info", message: line, project: run.project });
+  if (run.failure) findings.push(setupFinding(run));
+  else
+    for (const line of errorExcerpt(run.log)) findings.push({ severity: "info", message: line, project: run.project });
   return findings;
+}
+
+/** A failed run's setup problem: the machine, not the edit, is what needs fixing. */
+function setupFinding(run: CheckRun): CheckFinding {
+  return { severity: "info", message: `setup problem: ${run.failure?.message}`, project: run.project };
 }
 
 export function buildCheck(v: VerifyContext): CheckResult {
@@ -133,6 +140,7 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
       if (failures?.new.length !== 0) failed++;
       known += failures?.known.length ?? 0;
       findings.push(...failedTestFindings(run, failures));
+      if (run.failure) findings.push(setupFinding(run));
     }
     const ctx = v.projects.find(({ ctx }) => ctx.name === run.project)?.ctx;
     const project = ctx?.project;

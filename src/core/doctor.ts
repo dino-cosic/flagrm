@@ -132,7 +132,7 @@ async function configChecks(
       add(
         "fail",
         `${ctx.name}: \`${command}\` failed (exit ${run.exitCode}, log ${relativePath(cwd, run.log ?? "")})`,
-        errorExcerpt(run.log, 3),
+        run.failure ? [`setup problem: ${run.failure.message}`] : errorExcerpt(run.log, 3),
       );
     }
   }

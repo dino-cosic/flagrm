@@ -10,8 +10,7 @@ description: >
 
 # Remove a feature flag
 
-**The flag is permanently ON.** Keep the ON path, delete the OFF path and
-everything only it used. Behavior with the flag ON must not change.
+**The flag is permanently ON.** Keep the ON path, delete the OFF path and everything only it used. Behavior with the flag ON must not change.
 
 You find and edit the code. `flagrm` records the state before you start and
 decides when you are done: **done means `flagrm verify <flag> --json` exited 0.**
@@ -28,8 +27,9 @@ Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx f
 
 ## 2. Baseline
 
-`flagrm baseline <flag> --json` records the git commit, build and test results and the flag's `names[]`. A `checks[]`
-entry with a non-zero `exitCode`: a build, stop. Tests: stop if the failures could cover the flag's code; else ask the user to accept them as known.
+`flagrm baseline <flag> --json` records the git commit, build and test results and the flag's `names[]`.
+A `checks[]` entry with a non-zero `exitCode` and a `failure`: a setup problem, not broken code. Show the user `failure.message` and stop.
+Without `failure`: a build, stop. Tests: stop if the failures could cover the flag's code; else ask the user to accept them as known.
 
 ## 3. Find every usage
 

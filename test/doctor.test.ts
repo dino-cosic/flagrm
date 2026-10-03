@@ -116,7 +116,7 @@ describe("runDoctor", () => {
   it("shows the error lines of a failed command, not its warnings", async () => {
     const log = [
       "src/A.cs(8,9): warning CA1305: The behavior of string.Format could vary [Core.csproj]",
-      'util/RustSdk/RustSdk.csproj(38,5): error MSB3073: The command "cargo build" exited with code 127.',
+      "src/Api/Program.cs(12,5): error CS0103: The name 'Foo' does not exist in the current context [Api.csproj]",
       "    1 Error(s)",
       "    0 Error(s)",
     ];
@@ -124,6 +124,18 @@ describe("runDoctor", () => {
     commitAll();
     const build = (await runDoctor(tmp, { run: true })).checks.find((c) => c.message.includes("failed (exit 1"));
     expect(build?.details).toEqual([log[1]]);
+  });
+
+  it("shows a setup problem instead of the error lines", async () => {
+    failingBuild(
+      ['util/RustSdk/RustSdk.csproj(38,5): error MSB3073: The command "cargo build" exited with code 127.'],
+      1,
+    );
+    commitAll();
+    const build = (await runDoctor(tmp, { run: true })).checks.find((c) => c.message.includes("failed (exit 1"));
+    expect(build?.details).toEqual([
+      "setup problem: `cargo` is not installed or not on PATH (needed by util/RustSdk/RustSdk.csproj)",
+    ]);
   });
 
   it("finds error lines in colored output", async () => {

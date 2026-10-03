@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
+import { environmentProblem } from "./environment.js";
 import { buildInventory } from "./inventory.js";
 import { type Baseline, type CheckRun, type GitState, JSON_SCHEMA_VERSION, type RecordedName } from "./types.js";
 import { collectTestResults } from "./verify/test-results.js";
@@ -82,6 +83,10 @@ export async function runCheck(
     durationMs: Date.now() - started,
     log: logFile,
   };
+  if (run.exitCode !== 0) {
+    const problem = environmentProblem(fs.readFileSync(logFile, "utf8"), ctx.root);
+    if (problem) run.failure = { kind: "environment", message: problem };
+  }
   const results =
     check === "test" && ctx.project.testResults ? collectTestResults(ctx.project.testResults, started) : undefined;
   if (results) run.results = results;

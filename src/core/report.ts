@@ -78,6 +78,7 @@ export function printBaseline(baseline: Baseline, file: string): void {
     console.log(
       `  ${c.project} ${c.check}: ${status} ${pc.dim(`${c.command} — ${Math.round(c.durationMs / 100) / 10}s`)}`,
     );
+    if (c.failure) console.log(`    ${pc.yellow("setup problem:")} ${c.failure.message}`);
   }
   if (baseline.names.length) {
     const names = baseline.names.map((n) => (n.kind === "literal" ? n.name : `${n.name} (${n.kind})`));

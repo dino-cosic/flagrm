@@ -145,6 +145,15 @@ export interface CheckRun {
   log?: string;
   /** For a test run in a project with `testResults`: what the result files report. */
   results?: TestRunResults;
+  /** Why a failed run failed, when the log shows a machine setup problem rather than broken code. */
+  failure?: CheckFailure;
+}
+
+/** `environment`: the machine isn't set up to run the command (missing SDK or tool, Docker not running). */
+export interface CheckFailure {
+  kind: "environment";
+  /** One line: what is missing and how to fix it. */
+  message: string;
 }
 
 export interface GitState {
