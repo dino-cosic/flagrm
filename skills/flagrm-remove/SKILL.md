@@ -29,7 +29,7 @@ Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx f
 
 `flagrm baseline <flag> --json` records the git commit, build and test results and the flag's `names[]`.
 A `checks[]` entry with a non-zero `exitCode` and a `failure`: a setup problem. Show the user `failure.message`; once fixed, rerun with `--force`.
-Without `failure`: a build, stop. Tests: stop if the failures could cover the flag's code; else ask the user to accept them as known.
+Without `failure`: a build, stop. Tests: stop if the failures (`results.failedTests`) could cover the flag's code; else ask the user to accept them as known.
 
 ## 3. Find every usage
 

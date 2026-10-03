@@ -79,7 +79,15 @@ export function compareTests(v: VerifyContext): TestComparison[] {
       renamed: [],
       excludedByConfig: [],
       unexplained: [],
+      newFailures: [],
+      knownFailures: [],
     };
+    if (after) comparison.failed = after.failed;
+    const failures = splitBaselineFailures(v, run);
+    if (failures) {
+      comparison.newFailures = shortTestNames(failures.new);
+      comparison.knownFailures = shortTestNames(failures.known);
+    }
     if (before && after) {
       const { removed, added } = diffTestNames(before.names, after.names);
       Object.assign(comparison, { removed, added });

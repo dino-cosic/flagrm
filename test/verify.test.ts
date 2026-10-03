@@ -194,6 +194,9 @@ describe("verify on the realistic fixture", () => {
           renamed: [],
           excludedByConfig: [],
           unexplained: [],
+          failed: 0,
+          newFailures: [],
+          knownFailures: [],
         },
       ]);
       expect(report.runs.find((r) => r.check === "test")?.results).not.toHaveProperty("names");
@@ -289,6 +292,11 @@ describe("verify on the realistic fixture", () => {
         expect(tests?.summary).toContain("apart from 1 known failure");
         expect(findings(report, "tests")).toEqual([expect.stringContaining("1 test fails, as at the baseline")]);
         expect(tests?.findings.map((f) => f.message)).toContain(`known failure: CheckoutComponent › ${KNOWN}`);
+        expect(report.tests[0]).toMatchObject({
+          failed: 1,
+          newFailures: [],
+          knownFailures: [`CheckoutComponent › ${KNOWN}`],
+        });
         expect(report.status).toBe("pass");
       });
 
@@ -305,6 +313,11 @@ describe("verify on the realistic fixture", () => {
         ]);
         const info = tests?.findings.filter((f) => f.severity === "info").map((f) => f.message);
         expect(info).toEqual([`new failure: CheckoutComponent › ${OTHER}`, "plus 1 known failure from the baseline"]);
+        expect(report.tests[0]).toMatchObject({
+          failed: 2,
+          newFailures: [`CheckoutComponent › ${OTHER}`],
+          knownFailures: [`CheckoutComponent › ${KNOWN}`],
+        });
       });
     });
 

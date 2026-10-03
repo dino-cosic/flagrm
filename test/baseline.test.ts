@@ -7,7 +7,9 @@ import { dotnetAdapter } from "../src/adapters/dotnet/index.js";
 import {
   assertNoEditsSinceBaseline,
   baselinePath,
+  baselineSummary,
   flagDir,
+  readBaseline,
   runCheck,
   runChecks,
   UsageError,
@@ -189,5 +191,49 @@ describe("assertNoEditsSinceBaseline", () => {
     baseline();
     fs.writeFileSync(path.join(tmp, "a.cs"), "b");
     expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
+  });
+});
+
+describe("baselineSummary", () => {
+  it("prints test results as counts and at most 20 short failed names, without the config", () => {
+    const failedNames = Array.from({ length: 25 }, (_, i) => `Ns.T.Fails${i}(sut: x${i})`);
+    const names = [...failedNames, ...Array.from({ length: 1000 }, (_, i) => `Ns.T.Passes${i}(sut: y)`)];
+    const ctx = projectContext("generic", tmp, { name: "svc" });
+    const run = {
+      project: "svc",
+      check: "test" as const,
+      command: "t",
+      exitCode: 1,
+      durationMs: 1,
+      results: { total: 1025, passed: 1000, failed: 25, skipped: 0, names, failedNames, files: ["a.trx", "b.trx"] },
+    };
+    const { baseline, file } = writeBaseline(tmp, "F", [{ adapter: dotnetAdapter, ctx }], { sha: null, dirty: false }, [
+      run,
+    ]);
+    const summary = baselineSummary(baseline, file) as { checks: Array<{ results: Record<string, unknown> }> };
+    expect(summary).not.toHaveProperty("config");
+    expect(summary.checks[0].results).toEqual({
+      total: 1025,
+      passed: 1000,
+      failed: 25,
+      skipped: 0,
+      files: 2,
+      failedTests: failedNames.slice(0, 20).map((_, i) => `T.Fails${i}(…)`),
+      moreFailedTests: 5,
+    });
+    expect(JSON.stringify(summary).length).toBeLessThan(3000);
+    // baseline.json keeps every name.
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).checks[0].results.names).toHaveLength(1025);
+  });
+});
+
+describe("readBaseline", () => {
+  it("reads a version 6 baseline.json, whose shape version 7 only extended", () => {
+    const ctx = projectContext("generic", tmp, { name: "svc" });
+    const { file } = writeBaseline(tmp, "F", [{ adapter: dotnetAdapter, ctx }], { sha: null, dirty: false });
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), schemaVersion: 6 }));
+    expect(readBaseline(tmp, "F").baseline.schemaVersion).toBe(6);
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), schemaVersion: 5 }));
+    expect(() => readBaseline(tmp, "F")).toThrow(UsageError);
   });
 });

@@ -11,6 +11,8 @@ function tests(c: Partial<TestComparison>): TestComparison {
     renamed: [],
     excludedByConfig: [],
     unexplained: [],
+    newFailures: [],
+    knownFailures: [],
     ...c,
   };
 }

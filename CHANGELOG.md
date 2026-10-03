@@ -9,6 +9,14 @@ contain breaking changes.
 
 ### Changed
 
+- **Breaking:** JSON schema version 7. `baseline --json` prints a summary of
+  `baseline.json` instead of the whole file: each test run's results as
+  counts with at most 20 short failed test names (`failedTests`,
+  `moreFailedTests`), and no `config` snapshot. On a large suite the full
+  output was megabytes. `baseline.json` is unchanged, and version 6 files are
+  still read.
+- `verify`'s `tests[]` reports `failed` and the short names of `newFailures`
+  and `knownFailures` per project.
 - `verify` no longer fails the `tests` check when every failing test already
   failed at the baseline: those are reported as known failures and only warn.
   Only new failures fail it, and they are listed. Test names are compared

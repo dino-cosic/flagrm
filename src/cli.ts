@@ -8,6 +8,7 @@ import {
   addNames,
   assertNoEditsSinceBaseline,
   baselinePath,
+  baselineSummary,
   discoverFlag,
   flagDir,
   mergeNames,
@@ -142,7 +143,7 @@ addCommonOptions(
         fail(err);
       }
       if (opts.json) {
-        console.log(JSON.stringify({ ...result.baseline, baselineFile: result.file }, null, 2));
+        console.log(JSON.stringify(baselineSummary(result.baseline, result.file), null, 2));
       } else {
         printBaseline(result.baseline, result.file);
       }

@@ -16,8 +16,15 @@ import type { AdapterId } from "./config.js";
  *   `failedNames`: the comparison is in `tests`, failed tests in the findings),
  *   and one `tests` warning for all tests that no longer run.
  * - 6: `verify` reports `skipped`, the checks `--skip` left out.
+ * - 7: `baseline --json` prints a summary of `baseline.json`: test results as
+ *   counts and at most 20 short failed test names (`failedTests`), no
+ *   `config`. `baseline.json` itself is unchanged, so version 6 files are
+ *   still read.
  */
-export const JSON_SCHEMA_VERSION = 6;
+export const JSON_SCHEMA_VERSION = 7;
+
+/** `baseline.json` versions this flagrm reads: 7 only added optional fields to 6. */
+export const READABLE_BASELINE_VERSIONS: readonly number[] = [6, 7];
 
 /** Where a candidate flag name was discovered by `flagrm list`. */
 export type FlagCandidateSource =
@@ -293,6 +300,12 @@ export interface TestComparison {
   removed: string[];
   /** Tests that did not run at the baseline. */
   added: string[];
+  /** How many tests failed now (data rows counted). */
+  failed?: number;
+  /** Short names of failed tests that didn't fail at the baseline. */
+  newFailures: string[];
+  /** Short names of failed tests that failed at the baseline too. */
+  knownFailures: string[];
   /** Removed in the diff: gone from a changed test file, or a data row dropped from one. */
   deleted: string[];
   /** Renamed without the flag's words (`Save_Vfo1Enabled_Works` → `Save_Works`); `to` is in `added`. */

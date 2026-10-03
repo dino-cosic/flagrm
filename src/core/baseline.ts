@@ -15,10 +15,11 @@ import {
   type GitState,
   JSON_SCHEMA_VERSION,
   type ParameterizedTest,
+  READABLE_BASELINE_VERSIONS,
   type RecordedName,
 } from "./types.js";
 import { readJson, relativePath } from "./util.js";
-import { collectTestResults } from "./verify/test-results.js";
+import { collectTestResults, shortTestNames } from "./verify/test-results.js";
 
 /**
  * `.flagrm/<flag>/` under the config root. A name that isn't safe as a directory
@@ -41,6 +42,41 @@ export function verifyPath(root: string, flag: string): string {
   return path.join(flagDir(root, flag), "verify.json");
 }
 
+/** At most this many failed test names in `baseline --json`. */
+const MAX_FAILED_NAMES = 20;
+
+/**
+ * What `baseline --json` prints: the baseline without the per-test name lists
+ * (every test of a large suite, with its data-row arguments: megabytes) and
+ * the config snapshot. Failed tests are listed by short name, at most 20;
+ * `baseline.json` keeps everything.
+ */
+export function baselineSummary(baseline: Baseline, file: string): Record<string, unknown> {
+  const { config: _config, checks, ...rest } = baseline;
+  return {
+    ...rest,
+    ...(checks
+      ? {
+          checks: checks.map(({ results, ...run }) => {
+            if (!results) return run;
+            const { names: _names, failedNames, files, ...counts } = results;
+            const failed = shortTestNames(failedNames);
+            return {
+              ...run,
+              results: {
+                ...counts,
+                files: files.length,
+                failedTests: failed.slice(0, MAX_FAILED_NAMES),
+                ...(failed.length > MAX_FAILED_NAMES ? { moreFailedTests: failed.length - MAX_FAILED_NAMES } : {}),
+              },
+            };
+          }),
+        }
+      : {}),
+    baselineFile: file,
+  };
+}
+
 /** A problem with how flagrm was run (missing baseline, stale schema) rather than with the code under check. */
 export class UsageError extends Error {}
 
@@ -53,7 +89,7 @@ export function readBaseline(root: string, flag: string): { baseline: Baseline; 
     );
   }
   const baseline = JSON.parse(fs.readFileSync(file, "utf8")) as Baseline;
-  if (baseline.schemaVersion !== JSON_SCHEMA_VERSION) {
+  if (!READABLE_BASELINE_VERSIONS.includes(baseline.schemaVersion)) {
     throw new UsageError(
       `${file} was written by schema version ${baseline.schemaVersion}; this flagrm expects ${JSON_SCHEMA_VERSION}. ` +
         `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`,

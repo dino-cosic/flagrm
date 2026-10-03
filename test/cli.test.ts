@@ -39,7 +39,7 @@ describe("CLI end-to-end (spawned dist/cli.js)", () => {
     const { status, stdout } = runCli(["list", "--json"], tmp);
     expect(status).toBe(0);
     const report = JSON.parse(stdout);
-    expect(report.schemaVersion).toBe(6);
+    expect(report.schemaVersion).toBe(7);
     expect(Array.isArray(report.candidates)).toBe(true);
     const entry = report.flags.find((f: { flag: string }) => f.flag === "EnableNewDashboard");
     expect(entry).toBeDefined();
@@ -110,7 +110,7 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     const { status, stdout } = runCli(["baseline", "NewCheckout", "--no-checks", "--json"], dir);
     expect(status).toBe(0);
     const baseline = JSON.parse(stdout);
-    expect(baseline).toMatchObject({ schemaVersion: 6, flag: "NewCheckout", git: { sha: null, dirty: false } });
+    expect(baseline).toMatchObject({ schemaVersion: 7, flag: "NewCheckout", git: { sha: null, dirty: false } });
     expect(baseline.checks).toBeUndefined();
     const file = path.join(dir, ".flagrm", "NewCheckout", "baseline.json");
     expect(baseline.baselineFile).toBe(file);
