@@ -209,6 +209,13 @@ function firstArgument(args: string): string {
   return splitTopLevel(args)[0] ?? "";
 }
 
+/**
+ * Generic type arguments right after a name (`Dictionary<string, bool>`, one
+ * level nested): their commas don't split. A `<` or `>` anywhere else is an
+ * operator (`a < b`, `x => x.Id`), not a bracket.
+ */
+const TYPE_ARGS = /^<(?:[\w\s.,?[\]]|<[\w\s.,?[\]]*>)*>/;
+
 /** Split an argument or parameter list at its top-level commas. */
 function splitTopLevel(list: string): string[] {
   const out: string[] = [];
@@ -221,8 +228,11 @@ function splitTopLevel(list: string): string[] {
       if (c === "\\") i++;
       else if (c === quote) quote = undefined;
     } else if (c === '"' || c === "'") quote = c;
-    else if ("([{<".includes(c)) depth++;
-    else if (")]}>".includes(c)) depth--;
+    else if (c === "<" && /\w/.test(list[i - 1] ?? "")) {
+      const args = TYPE_ARGS.exec(list.slice(i));
+      if (args) i += args[0].length - 1;
+    } else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
     else if (c === "," && depth === 0) {
       out.push(list.slice(start, i));
       start = i + 1;

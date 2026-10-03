@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import fg from "fast-glob";
 import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
 import { CONFIG_FILENAMES } from "./config.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
@@ -341,23 +342,33 @@ export function mergeNames(existing: RecordedName[], added: RecordedName[]): Rec
 
 /**
  * Files changed since `sha` that count as edits to the code: everything but
- * `.flagrm/` and the flagrm config, which may change to fix the setup.
- * Undefined when git can't tell (not a repository, or `sha` isn't in it).
+ * `.flagrm/`, the flagrm config, which may change to fix the setup, and the
+ * files matching `testResults` patterns (absolute), which the baseline's own
+ * test run writes. Undefined when git can't tell (not a repository, or `sha`
+ * isn't in it).
  */
-export function editsSince(root: string, sha: string): string[] | undefined {
-  return changedFilesSince(root, sha)?.filter((rel) => !CONFIG_FILENAMES.includes(rel));
+export function editsSince(root: string, sha: string, testResults: readonly string[] = []): string[] | undefined {
+  const results = new Set(
+    testResults.flatMap((pattern) =>
+      fg
+        .sync(path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern, { absolute: true, dot: true })
+        .map((file) => relativePath(root, file)),
+    ),
+  );
+  return changedFilesSince(root, sha)?.filter((rel) => !CONFIG_FILENAMES.includes(rel) && !results.has(rel));
 }
 
 /**
  * `baseline --force` starts over only before the removal began: the working
  * tree must still match the baseline commit. Otherwise the new baseline would
  * record half-removed code, and verify would no longer see those edits.
- * Without git there is nothing to compare, so it is allowed.
+ * Without git there is nothing to compare, so it is allowed. Files matching
+ * `testResults` (absolute patterns) are not edits.
  */
-export function assertNoEditsSinceBaseline(root: string, flag: string): void {
+export function assertNoEditsSinceBaseline(root: string, flag: string, testResults: readonly string[] = []): void {
   const sha = readJson<Partial<Baseline>>(baselinePath(root, flag))?.git?.sha;
   if (!sha) return;
-  const edits = editsSince(root, sha);
+  const edits = editsSince(root, sha, testResults);
   if (edits === undefined) {
     throw new UsageError(
       `The baseline commit ${sha.slice(0, 7)} of ${flag} is not in this repository, so flagrm can't tell whether the ` +

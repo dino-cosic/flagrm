@@ -110,26 +110,31 @@ addCommonOptions(
   .option("--name <name>", "add a name the flag is read through (repeatable)", collect, [])
   .option(
     "--kind <kind>",
-    "how --name entries are matched: alias (qualified constant) or wrapper (identifier, calls included)",
-    "alias",
+    "how --name entries are matched: alias (qualified constant) or wrapper (identifier, calls included); default alias, wrapper with --file",
   )
-  .option("--file <path>", "check the --name entries only in this file (a local, parameter or field)")
+  .option(
+    "--file <path>",
+    "check the --name entries only in this file (a local, parameter or field; implies --kind wrapper)",
+  )
   .option("--force", "start over: replace the baseline, only while the code is unedited since it")
   .action(
     async (
       flag: string,
-      opts: CommonOptions & { checks: boolean; name: string[]; kind: string; file?: string; force?: boolean },
+      opts: CommonOptions & { checks: boolean; name: string[]; kind?: string; file?: string; force?: boolean },
     ) => {
       const { root, projects } = loadWorkspace(opts);
-      if (opts.kind !== "alias" && opts.kind !== "wrapper") {
-        fail(new Error(`--kind must be alias or wrapper, not "${opts.kind}".`));
+      // Only wrappers are matched per file: a name scoped with --file is a local, parameter or field.
+      const kind = opts.kind ?? (opts.file ? "wrapper" : "alias");
+      if (kind !== "alias" && kind !== "wrapper") {
+        fail(new Error(`--kind must be alias or wrapper, not "${kind}".`));
       }
       if (opts.file && opts.name.length === 0) fail(new Error("--file scopes --name entries; pass --name too."));
+      if (opts.file && kind !== "wrapper") fail(new Error("--file scopes wrapper names; drop --kind alias."));
       const scope = opts.file && relativePath(root, path.resolve(opts.file));
       if (scope?.startsWith("..")) fail(new Error(`--file ${opts.file} is outside ${root}.`));
       const added: RecordedName[] = opts.name.map((name) => ({
         name,
-        kind: opts.kind as RecordedName["kind"],
+        kind: kind as RecordedName["kind"],
         source: "agent",
         ...(scope ? { file: scope } : {}),
       }));
@@ -137,7 +142,10 @@ addCommonOptions(
       try {
         validateAgentNames(projects, added);
         const exists = fs.existsSync(baselinePath(root, flag));
-        if (exists && opts.force) assertNoEditsSinceBaseline(root, flag);
+        if (exists && opts.force) {
+          const testResults = projects.flatMap(({ ctx }) => (ctx.project.testResults ? [ctx.project.testResults] : []));
+          assertNoEditsSinceBaseline(root, flag, testResults);
+        }
         if (exists && !opts.force) {
           if (added.length === 0) {
             throw new Error(`Baseline for ${flag} already exists; pass --name to add names, or --force to start over.`);

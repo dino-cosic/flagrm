@@ -142,5 +142,30 @@ function isDeleted(name: string, keyStillRuns: boolean, files: ChangedTestFile[]
     junit
       ? text.includes(own)
       : new RegExp(`\\b${escapeRegExp(own)}\\b`).test(text) && (!ownerName || text.includes(ownerName));
-  return files.some((f) => has(f.before) && (f.now === undefined || !has(f.now) || keyStillRuns));
+  return files.some(
+    (f) =>
+      has(f.before) &&
+      (f.now === undefined ||
+        !has(f.now) ||
+        (keyStillRuns && dataRows(f.now, own, junit) < dataRows(f.before, own, junit))),
+  );
+}
+
+/** xUnit (`InlineData`, `[Bit]AutoData(...)` with values), NUnit and MSTest attributes that each add a data row. */
+const DATA_ROW = /\b(?:\w*InlineData|\w*AutoData|TestCase|DataRow)\s*\(/g;
+
+/**
+ * How many data rows `own` has in `text`: the row attributes between the end
+ * of the previous member and its declaration. For JUnit names (`it.each`
+ * titles), how often the title appears.
+ */
+function dataRows(text: string, own: string, junit: boolean): number {
+  if (junit) return text.split(own).length - 1;
+  let rows = 0;
+  for (const m of text.matchAll(new RegExp(`\\b${escapeRegExp(own)}\\s*\\(`, "g"))) {
+    const before = text.slice(0, m.index);
+    const start = Math.max(before.lastIndexOf("}"), before.lastIndexOf(";"), before.lastIndexOf("{")) + 1;
+    rows += before.slice(start).match(DATA_ROW)?.length ?? 0;
+  }
+  return rows;
 }

@@ -114,6 +114,18 @@ describe("classifyRemovedTests", () => {
       expect(result).toMatchObject({ deleted: removed, unexplained: [] });
     });
 
+    it("doesn't count a data row as deleted when the changed file still has every row", () => {
+      write(
+        "test/Core.Test/PolicyTests.cs",
+        "class PolicyTests {\n  [Fact] public void Saves() {}\n" +
+          "  [Theory, InlineData(true), InlineData(false)] public void Quote(bool on) {}\n}\n",
+      );
+      const removed = ["Ns.PolicyTests.Quote(on: False)"];
+      const after = ["Ns.PolicyTests.Saves", "Ns.PolicyTests.Quote(on: True)"];
+      const result = classifyRemovedTests(removed, [], after, ctx({ sha, changedFiles: changed() }));
+      expect(result).toMatchObject({ deleted: [], unexplained: removed });
+    });
+
     it("counts a test in an untouched file as excluded when the test config changed, unexplained otherwise", () => {
       const removed = ["Ns.UntouchedTests.Runs"];
       const base = { sha, changedFiles: changed() };

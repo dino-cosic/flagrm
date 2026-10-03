@@ -37,12 +37,12 @@ export function setupReport(projects: Workspace, root: string, probes: SetupProb
     const sdk = sdkProblem(ctx.root, probes, root);
     if (sdk) entry.sdk = sdk;
     const solution = solutionFor(ctx, projectCommands(adapter, ctx));
-    if (typeof solution !== "string") entry.note = solution.note;
+    if ("note" in solution) entry.note = solution.note;
     else {
       try {
-        entry.setup = solutionSetup(solution, probes, root);
+        entry.setup = solutionSetup(solution.solution, probes, root, solution.only);
       } catch (err) {
-        entry.note = `can't read ${relativePath(root, solution)}: ${err instanceof Error ? err.message : String(err)}`;
+        entry.note = `can't read ${relativePath(root, solution.solution)}: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
     out.push(entry);
@@ -56,26 +56,46 @@ const SOLUTION_ARG = /(?<=^|\s)(?:(["'])([^"']+\.sln[xf]?)\1|([^\s"']+\.sln[xf]?
 /** The solution path in a SOLUTION_ARG match, quoted or not. */
 const solutionArg = (m: RegExpExecArray | null) => m?.[2] ?? m?.[3];
 
+/** A project file (`.csproj`, `.fsproj`, ...) named by a command. */
+const PROJECT_ARG = /(?<=^|\s)["']?[^\s"']+\.\w*proj["']?(?=\s|$)/;
+
 /**
- * The solution a project builds: the one its build or test command names
- * (through flagrm.slnf, the one it filters), or the only one in its directory.
+ * The solution a project builds: the one its build or test command names, or
+ * the only one in its directory. When the command names a solution filter
+ * (a user's own or flagrm.slnf), the solution it filters, with `only` its
+ * projects: that is the scope, which flagrm only narrows further.
  */
-function solutionFor(ctx: ProjectContext, commands: { build?: string; test?: string }): string | { note: string } {
+function solutionFor(
+  ctx: ProjectContext,
+  commands: { build?: string; test?: string },
+): { solution: string; only?: string[] } | { note: string } {
+  for (const command of [commands.build, commands.test]) {
+    if (command && PROJECT_ARG.test(command) && !SOLUTION_ARG.test(command)) {
+      return { note: `\`${command}\` builds a project, not a solution: nothing to narrow` };
+    }
+  }
   for (const command of [commands.build, commands.test]) {
     const arg = command && solutionArg(SOLUTION_ARG.exec(command));
     if (!arg) continue;
     const file = path.resolve(ctx.root, arg);
     if (!fs.existsSync(file)) return { note: `${arg} (from \`${command}\`) not found` };
-    if (!file.endsWith(".slnf")) return file;
+    if (!file.endsWith(".slnf")) return { solution: file };
     try {
-      const inner = JSON.parse(fs.readFileSync(file, "utf8"))?.solution?.path;
-      if (typeof inner === "string") return path.resolve(path.dirname(file), inner.replace(/\\/g, "/"));
+      const { path: inner, projects } = JSON.parse(fs.readFileSync(file, "utf8"))?.solution ?? {};
+      if (typeof inner === "string") {
+        const solution = path.resolve(path.dirname(file), inner.replace(/\\/g, "/"));
+        const dir = path.dirname(solution);
+        const only = Array.isArray(projects)
+          ? projects.filter((p) => typeof p === "string").map((p) => path.resolve(dir, p.replace(/\\/g, "/")))
+          : undefined;
+        return { solution, only };
+      }
     } catch {
       return { note: `can't read ${arg}` };
     }
   }
   const found = fg.sync("*.{sln,slnx}", { cwd: ctx.root, absolute: true });
-  if (found.length === 1) return found[0];
+  if (found.length === 1) return { solution: found[0] };
   return { note: found.length ? "several solutions: name one in build/test" : "no solution file found" };
 }
 
@@ -135,9 +155,14 @@ export function writeScope(
   return steps;
 }
 
-/** `command` building `slnf` instead of the solution it names, or the solution `dotnet` would find. */
+/**
+ * `command` building `slnf` instead of the solution it names, or the solution
+ * `dotnet` would find. A command naming a project file is left as it is:
+ * `dotnet` takes one project or solution, not both.
+ */
 export function pointAt(command: string, slnf: string): string {
   if (SOLUTION_ARG.test(command)) return command.replace(SOLUTION_ARG, slnf);
+  if (PROJECT_ARG.test(command)) return command;
   return command.replace(/\bdotnet\s+(build|test)\b/, `dotnet $1 ${slnf}`);
 }
 

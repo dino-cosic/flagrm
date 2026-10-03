@@ -149,10 +149,39 @@ describe("writeScope", () => {
     expect(config).toContain("build: dotnet build flagrm.slnf --no-incremental # build all");
     expect(config).toContain("test: dotnet test flagrm.slnf --logger trx");
 
-    // Again, now through flagrm.slnf: the same solution is checked and nothing changes.
+    // Again, now through flagrm.slnf: its projects are the scope, and none of them has to be left out.
     const again = workspace();
-    const second = writeScope(setupReport(again, tmp, probes()), again, tmp, path.join(tmp, "flagrm.config.yaml"));
-    expect(second.map((s) => s.status)).toEqual(["unchanged", "unchanged", "unchanged"]);
+    expect(setupReport(again, tmp, probes())[0].setup?.leaveOut).toEqual([]);
+    expect(writeScope(setupReport(again, tmp, probes()), again, tmp, path.join(tmp, "flagrm.config.yaml"))).toEqual([]);
+  });
+
+  it("narrows a solution filter the commands already name, never widening it", () => {
+    write(
+      "ci.slnf",
+      JSON.stringify({
+        solution: {
+          path: "server.sln",
+          projects: ["src\\Core\\Core.csproj", "src\\Api\\Api.csproj", "util\\RustSdk\\RustSdk.csproj"],
+        },
+      }),
+    );
+    write("flagrm.config.yaml", CONFIG.replace(/server\.sln/g, "ci.slnf"));
+    const projects = workspace();
+    writeScope(setupReport(projects, tmp, probes()), projects, tmp, path.join(tmp, "flagrm.config.yaml"));
+    const slnf = JSON.parse(fs.readFileSync(path.join(tmp, "flagrm.slnf"), "utf8"));
+    expect(slnf.solution.projects).toEqual(["src\\Core\\Core.csproj", "src\\Api\\Api.csproj"]);
+    expect(fs.readFileSync(path.join(tmp, "flagrm.config.yaml"), "utf8")).toContain(
+      "test: dotnet test flagrm.slnf --logger trx",
+    );
+  });
+
+  it("leaves a command that builds a project file alone", () => {
+    write("flagrm.config.yaml", CONFIG.replace("dotnet test server.sln", "dotnet test test/Api.Test/Api.Test.csproj"));
+    const projects = workspace();
+    const report = setupReport(projects, tmp, probes());
+    expect(report[0].setup).toBeUndefined();
+    expect(report[0].note).toContain("builds a project, not a solution");
+    expect(writeScope(report, projects, tmp, path.join(tmp, "flagrm.config.yaml"))).toEqual([]);
   });
 
   it("changes nothing when nothing has to be left out", () => {
@@ -175,6 +204,7 @@ describe("pointAt", () => {
       "dotnet build ../flagrm.slnf -c Release",
     );
     expect(pointAt("dotnet test --logger trx", "flagrm.slnf")).toBe("dotnet test flagrm.slnf --logger trx");
+    expect(pointAt("dotnet test tests/Api.Tests.csproj", "flagrm.slnf")).toBe("dotnet test tests/Api.Tests.csproj");
   });
 });
 

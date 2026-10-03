@@ -194,4 +194,21 @@ public class Vfo1B { public bool HasVfo1() => true; }
       ].sort(),
     );
   });
+
+  it("splits arguments holding lambdas, comparisons and generic types", async () => {
+    write(
+      "test/Core.Test/LambdaTests.cs",
+      `public class LambdaTests
+{
+    [Fact]
+    public void Lambdas() =>
+        Assert.True(LicenseRules.CanUseLicense(Build(x => x.Id), new Dictionary<string, bool>(), false, a > b));
+}
+`,
+    );
+    const tests = (await vfo1()).parameterizedTests.filter((t) => t.file.endsWith("LambdaTests.cs"));
+    expect(tests.map((t) => `${t.method}(${t.parameter}: ${t.value})`)).toEqual([
+      "CanUseLicense(useSharedFolderTerminology: false)",
+    ]);
+  });
 });

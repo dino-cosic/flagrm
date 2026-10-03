@@ -67,6 +67,14 @@ describe("initProject with tools", () => {
   });
 });
 
+describe("initProject over an invalid tools:", () => {
+  it("replaces the invalid value with the chosen tools", () => {
+    write("flagrm.config.yaml", "tools: [cursor]\nprojects: []\n");
+    initProject(tmp, ["claude-code"]);
+    expect(savedTools(tmp)).toEqual(["claude-code"]);
+  });
+});
+
 describe("updateProject with tools", () => {
   it("refreshes only the listed tools' files", () => {
     initProject(tmp);

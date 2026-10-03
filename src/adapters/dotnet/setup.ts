@@ -140,10 +140,18 @@ export interface SolutionSetup {
  * Check a solution's projects against the machine: a project whose build
  * runs `cargo` needs it on PATH, one using Testcontainers needs Docker. Each
  * such project is left out, and so is every project that references one,
- * directly or not (it can't build, or can't run, without it).
+ * directly or not (it can't build, or can't run, without it). With `only`
+ * (the project files a solution filter keeps), the other projects aren't built
+ * and so aren't checked or kept.
  */
-export function solutionSetup(solution: string, probes: SetupProbes, root: string): SolutionSetup {
-  const projects = solutionProjects(solution);
+export function solutionSetup(
+  solution: string,
+  probes: SetupProbes,
+  root: string,
+  only?: readonly string[],
+): SolutionSetup {
+  const kept = only && new Set(only);
+  const projects = solutionProjects(solution).filter((p) => !kept || kept.has(p.file));
   const info = new Map(projects.map((p) => [p.file, projectInfo(p.file)]));
   const rel = (file: string) => path.relative(root, file).split(path.sep).join("/");
   const problems: string[] = [];

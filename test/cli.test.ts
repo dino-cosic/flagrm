@@ -136,10 +136,7 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
 
   it("baseline --name --file records a name for one file", () => {
     const file = path.join("backend", "src", "Shop.Api", "Services", "CheckoutService.cs");
-    const { status, stdout } = runCli(
-      ["baseline", "NewCheckout", "--name", "useNew", "--kind", "wrapper", "--file", file, "--json"],
-      dir,
-    );
+    const { status, stdout } = runCli(["baseline", "NewCheckout", "--name", "useNew", "--file", file, "--json"], dir);
     expect(status).toBe(0);
     expect(JSON.parse(stdout).names).toContainEqual({
       name: "useNew",
@@ -148,6 +145,9 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
       file: "backend/src/Shop.Api/Services/CheckoutService.cs",
     });
     expect(runCli(["baseline", "NewCheckout", "--file", file], dir).status).toBe(2);
+    const alias = runCli(["baseline", "NewCheckout", "--name", "useNew", "--kind", "alias", "--file", file], dir);
+    expect(alias.status).toBe(2);
+    expect(alias.stderr).toContain("--file scopes wrapper names");
   });
 
   it("baseline refuses to overwrite an existing baseline without --force", () => {
@@ -165,6 +165,10 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
       git("add", "-A");
       git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
       expect(runCli(["baseline", "NewCheckout", "--no-checks"], repo).status).toBe(0);
+      expect(runCli(["baseline", "NewCheckout", "--no-checks", "--force"], repo).status).toBe(0);
+      // A test result file the baseline's own run left behind (testResults) is not an edit.
+      fs.mkdirSync(path.join(repo, "backend", "TestResults"));
+      fs.writeFileSync(path.join(repo, "backend", "TestResults", "run.trx"), "<TestRun />\n");
       expect(runCli(["baseline", "NewCheckout", "--no-checks", "--force"], repo).status).toBe(0);
       const file = path.join(repo, ".flagrm", "NewCheckout", "baseline.json");
       const before = fs.readFileSync(file, "utf8");

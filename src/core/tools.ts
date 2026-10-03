@@ -46,7 +46,13 @@ export function saveTools(
   if (!file) return { path: "flagrm.config.yaml", status: "skipped" };
   const rel = relativePath(root, file);
   const text = fs.readFileSync(file, "utf8");
-  if (savedTools(root)?.join() === tools.join()) return { path: rel, status: "unchanged" };
+  let current: string | undefined;
+  try {
+    current = savedTools(root)?.join();
+  } catch {
+    // An invalid `tools:` (say `[cursor]`) is what `init --tool` replaces.
+  }
+  if (current === tools.join()) return { path: rel, status: "unchanged" };
   let next: string;
   if (file.endsWith(".json")) {
     next = `${JSON.stringify({ ...JSON.parse(text), tools }, null, 2)}\n`;

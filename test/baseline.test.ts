@@ -227,6 +227,13 @@ describe("assertNoEditsSinceBaseline", () => {
     );
   });
 
+  it("doesn't count files matching testResults as edits", () => {
+    fs.mkdirSync(path.join(tmp, "TestResults"));
+    fs.writeFileSync(path.join(tmp, "TestResults", "run.trx"), "<TestRun />");
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).toThrow(/TestResults\/run\.trx/);
+    expect(() => assertNoEditsSinceBaseline(tmp, "F", [path.join(tmp, "TestResults", "*.trx")])).not.toThrow();
+  });
+
   it("refuses edits committed after the baseline commit, which stashing can't set aside", () => {
     fs.writeFileSync(path.join(tmp, "a.cs"), "b");
     commit();

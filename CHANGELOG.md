@@ -26,7 +26,8 @@ contain breaking changes.
   Only new failures fail it, and they are listed. Test names are compared
   without xUnit data-row arguments. Needs `testResults`.
 - `baseline --force` refuses to replace a baseline once the code has changed
-  since its commit (`.flagrm/` and `flagrm.config.yaml` don't count), so a
+  since its commit (`.flagrm/`, `flagrm.config.yaml` and files matching
+  `testResults` don't count), so a
   rerun after fixing the setup can't record a half-done removal. The error
   says how to set uncommitted edits aside with `git stash`.
 - Tests that no longer run are sorted by why (`tests[]` in `verify --json`):
@@ -53,7 +54,9 @@ contain breaking changes.
   projects a solution filter would leave out: those and every project that
   references them. `--write` creates `flagrm.slnf`, adds it to
   `.git/info/exclude` and points the project's build and test at it, editing
-  `flagrm.config.yaml` in place. `doctor` (and so `init`) reports the same
+  `flagrm.config.yaml` in place. When the commands already name a solution
+  filter, `flagrm.slnf` keeps only its projects; a command that names a
+  project file is left alone. `doctor` (and so `init`) reports the same
   problems: a missing SDK fails, a missing `cargo` or Docker warns.
 - README: leave a locale-dependent test out with `--filter` rather than
   forcing `LC_ALL` for the whole run.
@@ -73,7 +76,8 @@ contain breaking changes.
   method whose name another method shares, is only suggested. Test calls
   passing `true`/`false` for such a parameter are listed as
   `parameterizedTests`.
-- `baseline --name X --file <path>` checks the name only in that file.
+- `baseline --name X --file <path>` records `X` as a wrapper checked only in
+  that file.
 - The baseline records its configuration (`config` in `baseline.json`): each
   project's resolved build and test commands with a hash of the files they
   name (`.slnf`, `.runsettings`, filter lists; not `.sln`/`.csproj`),
