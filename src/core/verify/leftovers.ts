@@ -9,6 +9,7 @@ import { findIdentifiers, findMentions } from "../mentions.js";
 import type { CheckFinding, CheckResult, FlagCandidateSource } from "../types.js";
 import { relativePath } from "../util.js";
 import { checkResult, configFindings, plural, type VerifyContext } from "./context.js";
+import { deletedTextFindings } from "./deleted-text.js";
 
 const STILL: Record<FlagCandidateSource, string> = {
   config: "still configured",
@@ -88,5 +89,8 @@ export async function leftoversCheck(v: VerifyContext): Promise<CheckResult> {
       : [fails && `${plural(fails, "reference")} left`, warns && `${plural(warns, "comment")} naming the flag`]
           .filter(Boolean)
           .join(", ");
-  return checkResult("leftovers", summary, [...findings, ...configFindings(v, "leftovers")]);
+  const offTests = deletedTextFindings(v);
+  const offCount = offTests.filter((f) => f.severity === "warn").length;
+  const withOff = offCount ? `${summary}; ${plural(offCount, "warning")} about tests of deleted text` : summary;
+  return checkResult("leftovers", withOff, [...findings, ...offTests, ...configFindings(v, "leftovers")]);
 }

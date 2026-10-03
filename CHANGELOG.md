@@ -26,6 +26,11 @@ contain breaking changes.
 
 ### Added
 
+- `verify` warns in `leftovers` about tests of the OFF path that never name
+  the flag: a test that still checks a string literal the removal deleted
+  from the code (and that no other code still has). When a test checked the
+  deleted text but none checks the text kept on the same line, it warns
+  that the ON path lost its test coverage.
 - .NET discovery follows a flag's value: bool locals, fields and properties
   assigned `IsEnabled(<flag>)`, methods that only return it (or a ternary on
   it; static ones as `Class.Method`), and the bool parameters it is passed
