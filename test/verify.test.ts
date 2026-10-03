@@ -141,8 +141,10 @@ describe("verify on the realistic fixture", () => {
   describe("test counts", () => {
     // The removal also changes feature-flag.service.spec.ts: one of its tests runs too.
     const SERVICE = `<testcase classname="FeatureFlagService" name="reads flags from the environment"/>`;
-    const junit = (...names: string[]) =>
-      `<testsuite>${names.map((n) => `<testcase classname="CheckoutComponent" name="${n}"/>`).join("")}${SERVICE}</testsuite>`;
+    const testcase = (name: string, body = "") =>
+      `<testcase classname="CheckoutComponent" name="${name}">${body}</testcase>`;
+    const junit = (...cases: string[]) =>
+      `<testsuite>${cases.map((c) => (c.startsWith("<") ? c : testcase(c))).join("")}${SERVICE}</testsuite>`;
     const full = (name: string) => `CheckoutComponent › ${name}`;
     const ON = "places the order through the checkout API when NewCheckout is on";
     const OFF = "falls back to the legacy cart when NewCheckout is off";
@@ -180,6 +182,46 @@ describe("verify on the realistic fixture", () => {
       expect(findings(report, "tests")).toEqual([expect.stringContaining("warn 2 tests no longer run")]);
       expect(report.status).toBe("pass");
       expect((await verify({ skip: ["build"], strict: true }, withTests)).status).toBe("fail");
+    });
+
+    describe("failing tests", () => {
+      // Like withTests, but the command exits 1 when the results it copies contain a failure.
+      const failing = (config: ToolConfig) => {
+        withTests(config);
+        const web = config.projects.find((p) => p.name === "web");
+        if (web)
+          web.test = `node -e "const fs=require('fs');fs.copyFileSync('results.src.xml','junit.xml');process.exit(/<failure/.test(fs.readFileSync('junit.xml','utf8'))?1:0)"`;
+      };
+      const fail = (name: string) => testcase(name, `<failure message="boom"/>`);
+      const KNOWN = "formats prices in the user's locale";
+
+      it("passes with a warning when every failure already failed at the baseline", async () => {
+        results(junit(fail(KNOWN), ON, OFF, OTHER));
+        await takeBaseline(failing, true);
+        applyAfter();
+        const report = await verify({ skip: ["build"] }, failing);
+        const tests = report.checks.find((c) => c.id === "tests");
+        expect(tests?.status).toBe("warn");
+        expect(tests?.summary).toContain("apart from 1 known failure");
+        expect(findings(report, "tests")).toEqual([expect.stringContaining("1 test fails, as at the baseline")]);
+        expect(tests?.findings.map((f) => f.message)).toContain(`known failure: CheckoutComponent › ${KNOWN}`);
+        expect(report.status).toBe("pass");
+      });
+
+      it("fails on a test that passed at the baseline, listing only the new failures", async () => {
+        results(junit(fail(KNOWN), ON, OFF, OTHER));
+        await takeBaseline(failing, true);
+        applyAfter();
+        results(junit(fail(KNOWN), fail(OTHER), ON, OFF));
+        const report = await verify({ skip: ["build"] }, failing);
+        const tests = report.checks.find((c) => c.id === "tests");
+        expect(tests?.status).toBe("fail");
+        expect(findings(report, "tests")).toEqual([
+          expect.stringContaining("1 test fails that passed or didn't run at the baseline"),
+        ]);
+        const info = tests?.findings.filter((f) => f.severity === "info").map((f) => f.message);
+        expect(info).toEqual([`new failure: CheckoutComponent › ${OTHER}`, "plus 1 known failure from the baseline"]);
+      });
     });
 
     it("fingerprints the tree after the commands, including a report they write outside .gitignore", async () => {

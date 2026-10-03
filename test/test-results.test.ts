@@ -8,6 +8,7 @@ import {
   parseJUnit,
   parseTrx,
   shortTestName,
+  splitFailures,
 } from "../src/core/verify/test-results.js";
 
 const TRX = `<?xml version="1.0" encoding="utf-8"?>
@@ -106,5 +107,23 @@ describe("diffTestNames", () => {
     const before = ["Checkout › returns undefined (flag off)"];
     const after = ["Checkout › returns undefined (flag on)"];
     expect(diffTestNames(before, after)).toEqual({ removed: before, added: after });
+  });
+});
+
+describe("splitFailures", () => {
+  it("matches TRX data rows without their arguments, since AutoData values change between runs", () => {
+    const before = ["Ns.T.Saves(sut: Castle.Proxy, id: 7f3a)"];
+    const now = ["Ns.T.Saves(sut: Castle.Proxy, id: 91bc)"];
+    expect(splitFailures(before, now)).toEqual({ known: now, new: [] });
+  });
+
+  it("counts rows per test: a second failing row of the same theory is new", () => {
+    const before = ["Ns.T.Quote(on: False)"];
+    const now = ["Ns.T.Quote(on: False)", "Ns.T.Quote(on: True)"];
+    expect(splitFailures(before, now)).toEqual({ known: [now[0]], new: [now[1]] });
+  });
+
+  it("keeps JUnit names whole", () => {
+    expect(splitFailures(["A › shows (x)"], ["A › shows (y)"])).toEqual({ known: [], new: ["A › shows (y)"] });
   });
 });

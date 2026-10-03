@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
+## [Unreleased]
+
+### Changed
+
+- `verify` no longer fails the `tests` check when every failing test already
+  failed at the baseline: those are reported as known failures and only warn.
+  Only new failures fail it, and they are listed. Test names are compared
+  without xUnit data-row arguments. Needs `testResults`.
+
 ## [0.1.1] - 2026-10-01
 
 ### Changed

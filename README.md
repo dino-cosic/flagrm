@@ -116,7 +116,7 @@ the OFF path, on purpose, and explains that in its notes.
 | `leftovers` | A recorded name (the flag literal, its constants, wrappers the agent recorded) is still in code or config. A mention in a comment is a warning |
 | `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files |
 | `build` | A project's build command fails |
-| `tests` | A test that passed at the baseline fails. Tests that no longer run, and changed test files none of whose tests ran, are warnings for the agent to account for |
+| `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. Tests that no longer run, and changed test files none of whose tests ran, are warnings for the agent to account for |
 
 In typed code, deleting the flag's definition turns every missed reference into
 a compile error, so the build does most of the work. `leftovers` covers what the

@@ -13,7 +13,7 @@ import { escapeRegExp, isTestPath } from "../scan.js";
 import type { CheckFinding, CheckResult, CheckRun, TestComparison } from "../types.js";
 import { relativePath } from "../util.js";
 import { checkResult, plural, skippedResult, type VerifyContext } from "./context.js";
-import { diffTestNames } from "./test-results.js";
+import { diffTestNames, shortTestNames, splitFailures } from "./test-results.js";
 
 function failedRunFindings(run: CheckRun): CheckFinding[] {
   const findings: CheckFinding[] = [
@@ -66,16 +66,73 @@ export function compareTests(v: VerifyContext): TestComparison[] {
   return out;
 }
 
+/**
+ * For a test run that exited non-zero: its failed tests split into the ones
+ * that already failed at the baseline and new ones. Undefined when that can't
+ * be told (no result files now or at the baseline, or none of them failed, so
+ * the command broke some other way).
+ */
+function splitBaselineFailures(v: VerifyContext, run: CheckRun): { known: string[]; new: string[] } | undefined {
+  const before = v.baseline.checks?.find((c) => c.project === run.project && c.check === "test")?.results;
+  if (!before || !run.results?.failed) return undefined;
+  return splitFailures(before.failedNames, run.results.failedNames);
+}
+
+/**
+ * A failed test run fails the check, unless every failed test already failed
+ * at the baseline: those are known failures, and only warn.
+ */
+function failedTestFindings(run: CheckRun, failures: { known: string[]; new: string[] } | undefined): CheckFinding[] {
+  const list = (names: string[], prefix: string): CheckFinding[] =>
+    shortTestNames(names)
+      .slice(0, 20)
+      .map((name) => ({ severity: "info", message: `${prefix}: ${name}`, project: run.project }));
+  if (!failures) {
+    return [...failedRunFindings(run).slice(0, 1), ...list(run.results?.failedNames ?? [], "failed")];
+  }
+  if (failures.new.length === 0) {
+    return [
+      {
+        severity: "warn",
+        message: `${plural(failures.known.length, "test fails", "tests fail")}, as at the baseline (known failures; log: ${run.log})`,
+        project: run.project,
+        file: run.log,
+      },
+      ...list(failures.known, "known failure"),
+    ];
+  }
+  return [
+    {
+      severity: "fail",
+      message: `${plural(failures.new.length, "test fails that", "tests fail that")} passed or didn't run at the baseline (log: ${run.log})`,
+      project: run.project,
+      file: run.log,
+    },
+    ...list(failures.new, "new failure"),
+    ...(failures.known.length
+      ? [
+          {
+            severity: "info" as const,
+            message: `plus ${plural(failures.known.length, "known failure")} from the baseline`,
+            project: run.project,
+          },
+        ]
+      : []),
+  ];
+}
+
 export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): CheckResult {
   const runs = v.runs.filter((r) => r.check === "test");
   if (runs.length === 0) return skippedResult("tests", "no test command configured");
   const findings: CheckFinding[] = [];
+  let failed = 0;
+  let known = 0;
   for (const run of runs) {
     if (run.exitCode !== 0) {
-      findings.push(...failedRunFindings(run).slice(0, 1));
-      for (const name of run.results?.failedNames.slice(0, 20) ?? []) {
-        findings.push({ severity: "info", message: `failed: ${name}`, project: run.project });
-      }
+      const failures = splitBaselineFailures(v, run);
+      if (failures?.new.length !== 0) failed++;
+      known += failures?.known.length ?? 0;
+      findings.push(...failedTestFindings(run, failures));
     }
     const ctx = v.projects.find(({ ctx }) => ctx.name === run.project)?.ctx;
     const project = ctx?.project;
@@ -117,9 +174,9 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
   const counts = comparisons
     .filter((c) => c.after !== undefined)
     .map((c) => (c.before === undefined ? `${c.project} ${c.after}` : `${c.project} ${c.before} → ${c.after}`));
-  const failed = runs.filter((r) => r.exitCode !== 0).length;
   const summary = [
     failed ? `${plural(failed, "test run")} failed` : "tests passed",
+    known ? `apart from ${plural(known, "known failure")}` : undefined,
     counts.length ? `(${counts.join(", ")})` : undefined,
   ]
     .filter(Boolean)

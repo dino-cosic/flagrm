@@ -117,6 +117,24 @@ export function diffTestNames(before: string[], after: string[]): { removed: str
   return { removed: onlyIn(before, after), added: onlyIn(after, before) };
 }
 
+/**
+ * Split the tests failing now into the ones that already failed at the
+ * baseline (`known`) and the rest (`new`). Names are compared without TRX
+ * data-row arguments, counting rows per test: a theory whose OFF row failed at
+ * the baseline and whose ON row fails now has a new failure.
+ */
+export function splitFailures(baseline: string[], now: string[]): { known: string[]; new: string[] } {
+  const left = new Map<string, number>();
+  for (const name of baseline) left.set(testKey(name), (left.get(testKey(name)) ?? 0) + 1);
+  const out = { known: [] as string[], new: [] as string[] };
+  for (const name of now) {
+    const n = left.get(testKey(name)) ?? 0;
+    if (n > 0) left.set(testKey(name), n - 1);
+    (n > 0 ? out.known : out.new).push(name);
+  }
+  return out;
+}
+
 /** One `<testcase>` per test; a `<failure>`/`<error>` child fails it, `<skipped>` skips it. */
 export function parseJUnit(xml: string): TestRunResults {
   const results = empty();
