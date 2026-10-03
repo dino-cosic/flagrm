@@ -118,6 +118,12 @@ the OFF path, on purpose, and explains that in its notes.
 | `build` | A project's build command fails |
 | `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. Tests that no longer run, and changed test files none of whose tests ran, are warnings for the agent to account for |
 
+The baseline also records the configuration it was taken with: each project's
+resolved build and test commands, the files they name (a `.slnf`, a
+`.runsettings`, a filter list) and the text of `flagrm.config.yaml`. When any
+of it changed since, the check it affects warns and shows the difference: a
+narrower test command makes "no new failures" mean less.
+
 In typed code, deleting the flag's definition turns every missed reference into
 a compile error, so the build does most of the work. `leftovers` covers what the
 compiler cannot see: config files, templates, comments and wrappers.

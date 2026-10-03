@@ -6,8 +6,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { errorExcerpt, incrementalBuildGap, projectCommands, runCheck, templateCheckGap } from "./baseline.js";
+import { errorExcerpt, incrementalBuildGap, runCheck, templateCheckGap } from "./baseline.js";
 import { findConfigFile, loadConfig } from "./config.js";
+import { projectCommands } from "./config-snapshot.js";
 import { gitState, isAncestor } from "./git.js";
 import { AGENT_SKILL_DIRS, installedSkillVersion, SKILLS, stopHookState } from "./install.js";
 import { packageVersion } from "./package.js";

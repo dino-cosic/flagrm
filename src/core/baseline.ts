@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
 import { CONFIG_FILENAMES } from "./config.js";
+import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { environmentProblem } from "./environment.js";
 import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
@@ -145,12 +146,6 @@ function failureReason(exit: CommandExit, timeout: number | undefined): string |
   return undefined;
 }
 
-/** A project's build/test commands: the configured ones, or the adapter's defaults when it configures neither. */
-export function projectCommands(adapter: Adapter, ctx: ProjectContext): { build?: string; test?: string } {
-  const configured = ctx.project.build !== undefined || ctx.project.test !== undefined;
-  return configured ? { build: ctx.project.build, test: ctx.project.test } : (adapter.defaultCommands?.(ctx) ?? {});
-}
-
 /**
  * Why an Angular project's build can't catch template errors, if it can't:
  * `tsc` never reads templates, so a member removed or renamed in a component
@@ -215,6 +210,7 @@ export function writeBaseline(
     projects: projects.map(({ ctx }) => ({ name: ctx.name, adapter: ctx.project.adapter })),
     git,
     names,
+    config: configSnapshot(projects),
   };
   if (checks) baseline.checks = checks;
   return saveBaseline(root, baseline);

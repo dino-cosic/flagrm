@@ -32,6 +32,8 @@ export interface ProjectConfig {
 export interface ToolConfig {
   /** Directory of the config file (or the working directory without one); `.flagrm/` lives here. */
   root: string;
+  /** Absolute path of the config file, when there is one. */
+  file?: string;
   projects: ProjectConfig[];
   /** Additional glob patterns to exclude from scanning, on top of the built-in ignore list. */
   exclude: string[];
@@ -333,6 +335,7 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
 
   return {
     root: fileDir,
+    file: configPath && fs.existsSync(configPath) ? configPath : undefined,
     projects,
     exclude: [...(file.exclude ?? []), ...(cli.exclude ?? [])],
     include: [...(file.include ?? []), ...(cli.include ?? [])],

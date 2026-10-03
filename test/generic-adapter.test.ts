@@ -108,16 +108,35 @@ describe("verify on the Go fixture", () => {
   });
 
   it("runs the configured build and test commands", async () => {
-    const commands = (build: number, test: number) => (config: ToolConfig) => {
-      config.projects[0].build = `node -e "process.exit(${build})"`;
-      config.projects[0].test = `node -e "process.exit(${test})"`;
+    // The same commands as at the baseline (a changed command warns); the exit codes come from the environment.
+    const commands = (config: ToolConfig) => {
+      config.projects[0].build = `node -e "process.exit(+process.env.GO_BUILD_EXIT)"`;
+      config.projects[0].test = `node -e "process.exit(+process.env.GO_TEST_EXIT)"`;
     };
-    writeBaseline(tmp, FLAG, workspace(tmp), gitState(tmp), undefined, await discoverNames(workspace(tmp), FLAG));
+    const exits = (build: number, test: number) => {
+      process.env.GO_BUILD_EXIT = String(build);
+      process.env.GO_TEST_EXIT = String(test);
+    };
+    writeBaseline(
+      tmp,
+      FLAG,
+      workspace(tmp, commands),
+      gitState(tmp),
+      undefined,
+      await discoverNames(workspace(tmp), FLAG),
+    );
     applyAfter();
-    const ok = await verify(commands(0, 0));
-    expect(status(ok)).toMatchObject({ build: "pass", tests: "pass" });
-    const broken = await verify(commands(1, 2));
-    expect(status(broken)).toMatchObject({ build: "fail", tests: "fail" });
-    expect(broken.status).toBe("fail");
+    try {
+      exits(0, 0);
+      const ok = await verify(commands);
+      expect(status(ok)).toMatchObject({ build: "pass", tests: "pass" });
+      exits(1, 2);
+      const broken = await verify(commands);
+      expect(status(broken)).toMatchObject({ build: "fail", tests: "fail" });
+      expect(broken.status).toBe("fail");
+    } finally {
+      delete process.env.GO_BUILD_EXIT;
+      delete process.env.GO_TEST_EXIT;
+    }
   });
 });

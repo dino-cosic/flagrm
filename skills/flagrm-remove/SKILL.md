@@ -85,4 +85,4 @@ Suggest `/flagrm-verify <flag>` for the overview and commit message. Don't commi
 - Never lift code out of the OFF path into live code.
 - Match the file's formatting; don't refactor unrelated code.
 - Never edit `.flagrm/`. Rerun `flagrm baseline <flag>` only with `--name`, or with `--force` before your first edit (it refuses after).
-- Never `--skip` a failing check, and never change a test's expected value to pass.
+- Never `--skip` a failing check, and never change a test's expected value or the build/test commands to pass.

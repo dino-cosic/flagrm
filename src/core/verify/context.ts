@@ -1,4 +1,5 @@
 import type { Workspace } from "../adapter.js";
+import type { ConfigChange } from "../config-snapshot.js";
 import type { Baseline, CheckFinding, CheckId, CheckResult, CheckRun } from "../types.js";
 
 /** Everything the checks read. Nothing in here is re-derived by a check. */
@@ -12,6 +13,18 @@ export interface VerifyContext {
   changedFiles?: string[];
   /** Build/test commands this verify ran. */
   runs: CheckRun[];
+  /** How the configuration differs from the baseline's. */
+  configChanges: ConfigChange[];
+}
+
+/** Warnings about the configuration changes that affect check `id`. */
+export function configFindings(v: VerifyContext, id: ConfigChange["check"]): CheckFinding[] {
+  return v.configChanges
+    .filter((c) => c.check === id)
+    .flatMap((c) => [
+      { severity: "warn" as const, message: c.message, project: c.project },
+      ...(c.details ?? []).map((line) => ({ severity: "info" as const, message: line, project: c.project })),
+    ]);
 }
 
 /** A check's status is the worst severity among its findings. */

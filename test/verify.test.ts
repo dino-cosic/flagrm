@@ -115,7 +115,7 @@ describe("verify on the realistic fixture", () => {
         p.test = undefined;
       }
     };
-    await takeBaseline();
+    await takeBaseline(failingBuild);
     applyAfter();
     const report = await verify({ skip: [] }, failingBuild);
     expect(status(report)).toMatchObject({ build: "fail", tests: "skipped" });
@@ -131,7 +131,7 @@ describe("verify on the realistic fixture", () => {
         p.test = undefined;
       }
     };
-    await takeBaseline();
+    await takeBaseline(missingTool);
     applyAfter();
     const report = await verify({ skip: ["tests"] }, missingTool);
     const build = report.checks.find((c) => c.id === "build");
@@ -200,6 +200,22 @@ describe("verify on the realistic fixture", () => {
       expect(findings(report, "tests")).toEqual([expect.stringContaining("warn 2 tests no longer run")]);
       expect(report.status).toBe("pass");
       expect((await verify({ skip: ["build"], strict: true }, withTests)).status).toBe("fail");
+    });
+
+    it("warns when the test command changed since the baseline", async () => {
+      results(junit(ON, OFF, OTHER));
+      await takeBaseline(withTests, true);
+      applyAfter();
+      const narrower = (config: ToolConfig) => {
+        withTests(config);
+        const web = config.projects.find((p) => p.name === "web");
+        if (web) web.test = `${web.test} checkout`;
+      };
+      const report = await verify({ skip: ["build"] }, narrower);
+      expect(status(report).tests).toBe("warn");
+      expect(findings(report, "tests")).toEqual([
+        expect.stringMatching(/^warn test command changed since the baseline: `node .*` → `node .* checkout`$/),
+      ]);
     });
 
     describe("failing tests", () => {

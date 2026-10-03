@@ -12,7 +12,7 @@ import { errorExcerpt, templateCheckGap } from "../baseline.js";
 import { escapeRegExp, isTestPath } from "../scan.js";
 import type { CheckFinding, CheckResult, CheckRun, TestComparison } from "../types.js";
 import { relativePath } from "../util.js";
-import { checkResult, plural, skippedResult, type VerifyContext } from "./context.js";
+import { checkResult, configFindings, plural, skippedResult, type VerifyContext } from "./context.js";
 import { diffTestNames, shortTestNames, splitFailures } from "./test-results.js";
 
 function failedRunFindings(run: CheckRun): CheckFinding[] {
@@ -35,10 +35,18 @@ function setupFinding(run: CheckRun): CheckFinding {
   return { severity: "info", message: `setup problem: ${run.failure?.message}`, project: run.project };
 }
 
+/** No command to run: skipped, unless the baseline had one, which is worth a warning. */
+function noCommandResult(v: VerifyContext, id: "build" | "tests"): CheckResult {
+  const summary = `no ${id === "build" ? "build" : "test"} command configured`;
+  const findings = configFindings(v, id);
+  return findings.length ? checkResult(id, summary, findings) : skippedResult(id, summary);
+}
+
 export function buildCheck(v: VerifyContext): CheckResult {
   const runs = v.runs.filter((r) => r.check === "build");
-  if (runs.length === 0) return skippedResult("build", "no build command configured");
+  if (runs.length === 0) return noCommandResult(v, "build");
   const findings = runs.flatMap((r) => (r.exitCode === 0 ? [] : failedRunFindings(r)));
+  findings.push(...configFindings(v, "build"));
   for (const run of runs) {
     const project = v.projects.find(({ ctx }) => ctx.name === run.project);
     const gap = project && templateCheckGap(project.adapter, run.command);
@@ -130,8 +138,8 @@ function failedTestFindings(run: CheckRun, failures: { known: string[]; new: str
 
 export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): CheckResult {
   const runs = v.runs.filter((r) => r.check === "test");
-  if (runs.length === 0) return skippedResult("tests", "no test command configured");
-  const findings: CheckFinding[] = [];
+  if (runs.length === 0) return noCommandResult(v, "tests");
+  const findings: CheckFinding[] = configFindings(v, "tests");
   let failed = 0;
   let known = 0;
   for (const run of runs) {

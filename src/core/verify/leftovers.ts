@@ -7,7 +7,7 @@ import { FEATURE_MANAGEMENT_SECTION } from "../discover.js";
 import { discoverCandidates } from "../inventory.js";
 import { findIdentifiers, findMentions } from "../mentions.js";
 import type { CheckFinding, CheckResult, FlagCandidateSource } from "../types.js";
-import { checkResult, plural, type VerifyContext } from "./context.js";
+import { checkResult, configFindings, plural, type VerifyContext } from "./context.js";
 
 const STILL: Record<FlagCandidateSource, string> = {
   config: "still configured",
@@ -78,5 +78,5 @@ export async function leftoversCheck(v: VerifyContext): Promise<CheckResult> {
       : [fails && `${plural(fails, "reference")} left`, warns && `${plural(warns, "comment")} naming the flag`]
           .filter(Boolean)
           .join(", ");
-  return checkResult("leftovers", summary, findings);
+  return checkResult("leftovers", summary, [...findings, ...configFindings(v, "leftovers")]);
 }

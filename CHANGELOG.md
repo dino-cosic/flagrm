@@ -20,6 +20,12 @@ contain breaking changes.
 
 ### Added
 
+- The baseline records its configuration (`config` in `baseline.json`): each
+  project's resolved build and test commands with a hash of the files they
+  name (`.slnf`, `.runsettings`, filter lists; not `.sln`/`.csproj`),
+  `testResults`, and the text of `flagrm.config.yaml`. `verify` warns when
+  they changed since: a command or named file in `build`/`tests`, any other
+  config change in `leftovers` with the changed lines.
 - A failed build or test run whose log shows a machine setup problem gets
   `failure: { kind: "environment", message }` in `baseline.json` and the
   `verify`/`doctor` output: a .NET SDK that doesn't match `global.json`

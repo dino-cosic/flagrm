@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Workspace } from "../adapter.js";
 import { flagDir, readBaseline, runChecks, verifyPath } from "../baseline.js";
+import { configChanges as configChangesSince, configSnapshot } from "../config-snapshot.js";
 import { changedFilesSince, gitState, treeFingerprint } from "../git.js";
 import {
   CHECK_IDS,
@@ -50,7 +51,8 @@ export async function verifyFlag(
   // after the commands: a test report they write outside .gitignore is part of it.
   const fingerprint = treeFingerprint(root);
 
-  const v: VerifyContext = { root, flag, projects, baseline, changedFiles, runs };
+  const configChanges = configChangesSince(baseline.config, configSnapshot(projects));
+  const v: VerifyContext = { root, flag, projects, baseline, changedFiles, runs, configChanges };
   const tests = compareTests(v);
   const run: Record<Exclude<CheckId, "leftovers">, () => CheckResult> = {
     "dead-code": () => deadCodeCheck(v),

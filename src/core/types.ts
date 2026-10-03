@@ -189,6 +189,21 @@ export interface Baseline {
   checks?: CheckRun[];
   /** Names the `leftovers` check looks for. */
   names: RecordedName[];
+  /** The configuration the baseline was taken with; `verify` warns about changes to it. */
+  config?: ConfigSnapshot;
+}
+
+/** A resolved build or test command and the files it names (a solution filter, run settings), hashed. */
+export interface CommandSnapshot {
+  command: string;
+  /** Paths relative to the config root. */
+  files: Array<{ path: string; sha256: string }>;
+}
+
+export interface ConfigSnapshot {
+  /** The config file (relative to the config root) and its text; absent without one. */
+  file?: { path: string; text: string };
+  projects: Array<{ name: string; build?: CommandSnapshot; test?: CommandSnapshot; testResults?: string }>;
 }
 
 // ---------------------------------------------------------------------------
