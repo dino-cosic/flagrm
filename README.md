@@ -93,8 +93,10 @@ of these reasons is a warning, for the agent to explain in its notes.
    records wrappers and aliases with `flagrm baseline <flag> --name`, removes
    the flag, and repeats `flagrm verify <flag>` until it passes.
 3. **The Stop hook** (Claude Code) keeps the agent from finishing while a
-   removal is in progress (uncommitted changes on top of its baseline commit)
-   and not verified.
+   removal is in progress and not verified. In progress means a file git
+   tracks changed on top of the baseline commit (changes to
+   `flagrm.config.yaml` and untracked files don't count, so a removal paused
+   on a question to the user doesn't block), or the last verify used `--skip`.
 4. **`/flagrm-verify <flag>`** runs `flagrm verify <flag> --md` and adds notes
    and a commit message.
 

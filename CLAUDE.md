@@ -23,7 +23,7 @@ Biome excludes `dist/`, `examples/`, `skills/` and `test/fixtures/`. Never refor
 
 A CLI that gives AI coding agents (Claude Code, Copilot, Codex) guardrails for removing feature flags. **The agent does the reasoning and edits; flagrm never edits source code.** It only records a baseline and deterministically decides when the removal is done. Per CONTRIBUTING, a new command or check should be something an agent can't cheaply and reliably do itself.
 
-Flow: `init` installs config + skills + Stop hook → agent runs `/flagrm-remove <flag>` (`skills/flagrm-remove/SKILL.md`) → `flagrm baseline <flag>` records git sha, build/test results and flag names in `.flagrm/<flag>/baseline.json` → agent edits, adding wrappers/aliases via `baseline --name X --kind wrapper|alias` → loops `flagrm verify <flag>` until exit 0 → the Stop hook (`flagrm hook stop`) blocks Claude Code from finishing unless `verify.json` passed for the *exact current tree*.
+Flow: `init` installs config + skills + Stop hook → agent runs `/flagrm-remove <flag>` (`skills/flagrm-remove/SKILL.md`) → `flagrm baseline <flag>` records git sha, build/test results and flag names in `.flagrm/<flag>/baseline.json` → agent edits, adding wrappers/aliases via `baseline --name X --kind wrapper|alias` → loops `flagrm verify <flag>` until exit 0 → the Stop hook (`flagrm hook stop`) blocks Claude Code from finishing, once tracked files other than the config changed (or the last verify used `--skip`), unless `verify.json` passed for the *exact current tree*.
 
 ## Architecture
 

@@ -43,6 +43,32 @@ describe("stopDecision", () => {
     expect(stopDecision(tmp, {})).toEqual({ block: false });
   });
 
+  it("allows while the removal is paused before any edit: only the flagrm config or untracked files changed", () => {
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), "projects: []\n");
+    commit("config");
+    baseline();
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), "projects: []\n# test: dotnet test flagrm.slnf\n");
+    fs.mkdirSync(path.join(tmp, "TestResults"));
+    fs.writeFileSync(path.join(tmp, "TestResults", "run.trx"), "<TestRun/>");
+    fs.writeFileSync(path.join(tmp, "flagrm.slnf"), "{}");
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
+  });
+
+  it("blocks a deleted tracked file", () => {
+    baseline();
+    fs.rmSync(path.join(tmp, "a.txt"));
+    expect(stopDecision(tmp, {}).block).toBe(true);
+  });
+
+  it("blocks before any edit when the last verify skipped checks", () => {
+    baseline();
+    verified("pass", "NewCheckout", ["tests"]);
+    expect(stopDecision(tmp, {})).toEqual({
+      block: true,
+      reason: "flagrm: NewCheckout verified with --skip tests — run flagrm verify NewCheckout --json without --skip",
+    });
+  });
+
   it("blocks an edited tree without a verify result", () => {
     baseline();
     edit("b\n");

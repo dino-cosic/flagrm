@@ -40,6 +40,15 @@ export function changedFilesSince(cwd: string, sha: string): string[] | undefine
   return [...new Set([...paths(diff.stdout), ...untracked(cwd)])].sort();
 }
 
+/**
+ * Tracked files modified or deleted in the working tree since `sha` (staged
+ * or not); untracked files don't count. Undefined when git can't tell.
+ */
+export function trackedChangesSince(cwd: string, sha: string): string[] | undefined {
+  const diff = git(cwd, "diff", "-z", "--name-only", "--no-renames", "--relative", sha, ...PATHSPEC);
+  return diff.ok ? paths(diff.stdout).sort() : undefined;
+}
+
 /** A file's content at `sha`, or undefined when it did not exist there. */
 export function fileAt(cwd: string, sha: string, relativePath: string): string | undefined {
   const result = git(cwd, "show", `${sha}:./${relativePath.split(path.sep).join("/")}`);

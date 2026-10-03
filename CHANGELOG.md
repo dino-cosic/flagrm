@@ -15,6 +15,10 @@ contain breaking changes.
   `moreFailedTests`), and no `config` snapshot. On a large suite the full
   output was megabytes. `baseline.json` is unchanged, and version 6 files are
   still read.
+- The Stop hook only blocks once the removal has edited a file git tracks
+  (other than `flagrm.config.yaml`), or the last verify used `--skip`. A
+  removal paused on a question to the user, a config fix or an untracked
+  file such as a stray test result no longer blocks.
 - `verify`'s `tests[]` reports `failed` and the short names of `newFailures`
   and `knownFailures` per project.
 - `verify` no longer fails the `tests` check when every failing test already
