@@ -178,7 +178,8 @@ describe("runCheck", () => {
     const log = path.join(tmp, "slow.log");
     const run = await runCheck(ctx, "test", `node -e "setTimeout(() => {}, 10000)"`, log);
     expect(run.exitCode).toBe(1);
-    expect(run.durationMs).toBeLessThan(5000);
+    // Killed well before the command's own 10s; taskkill is slow on a loaded Windows runner.
+    expect(run.durationMs).toBeLessThan(9000);
     expect(fs.readFileSync(log, "utf8")).toContain("flagrm: error: timed out after 0.5s");
   });
 

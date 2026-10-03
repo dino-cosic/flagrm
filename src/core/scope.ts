@@ -95,7 +95,8 @@ function solutionFor(
     }
   }
   const found = fg.sync("*.{sln,slnx}", { cwd: ctx.root, absolute: true });
-  if (found.length === 1) return { solution: found[0] };
+  // fast-glob returns forward slashes, also on Windows.
+  if (found.length === 1) return { solution: path.normalize(found[0]) };
   return { note: found.length ? "several solutions: name one in build/test" : "no solution file found" };
 }
 
@@ -166,6 +167,20 @@ export function pointAt(command: string, slnf: string): string {
   return command.replace(/\bdotnet\s+(build|test)\b/, `dotnet $1 ${slnf}`);
 }
 
+/**
+ * `file` with symlinks resolved and, on Windows, 8.3 short names expanded
+ * (`RUNNER~1`): git prints long names, `os.tmpdir()` may give short ones. A
+ * file that doesn't exist yet resolves through its directory.
+ */
+function realPath(file: string): string {
+  try {
+    return fs.realpathSync.native(file);
+  } catch {
+    const dir = path.dirname(file);
+    return dir === file ? file : path.join(realPath(dir), path.basename(file));
+  }
+}
+
 function excludeFromGit(root: string, file: string): ScopeStep {
   const git = (...args: string[]) => spawnSync("git", args, { cwd: root, encoding: "utf8" });
   const top = git("rev-parse", "--show-toplevel");
@@ -173,9 +188,9 @@ function excludeFromGit(root: string, file: string): ScopeStep {
   if (top.status !== 0 || exclude.status !== 0)
     return { path: ".git/info/exclude", status: "skipped", note: "not a git repository" };
   const excludeFile = exclude.stdout.trim();
-  const line = `/${relativePath(fs.realpathSync(top.stdout.trim()), fs.realpathSync(file))}`;
+  const line = `/${relativePath(realPath(top.stdout.trim()), realPath(file))}`;
   const text = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, "utf8") : "";
-  const shown = relativePath(root, excludeFile);
+  const shown = relativePath(realPath(root), realPath(excludeFile));
   if (text.split(/\r?\n/).includes(line)) return { path: shown, status: "unchanged" };
   fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
   fs.appendFileSync(excludeFile, `${text && !text.endsWith("\n") ? "\n" : ""}${line}\n`, "utf8");

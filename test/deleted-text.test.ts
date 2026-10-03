@@ -7,6 +7,7 @@ import { writeBaseline } from "../src/core/baseline.js";
 import { loadConfig } from "../src/core/config.js";
 import { gitState } from "../src/core/git.js";
 import { resolveProjects } from "../src/core/registry.js";
+import { relativePath } from "../src/core/util.js";
 import { stringLiterals } from "../src/core/verify/deleted-text.js";
 import { verifyFlag } from "../src/core/verify/index.js";
 
@@ -112,7 +113,7 @@ describe("tests of deleted text", () => {
     const check = await leftovers();
     expect(check?.status).toBe("warn");
     expect(check?.summary).toContain("3 warnings about tests of deleted text");
-    const lines = check?.findings.map((f) => `${f.file ? `${path.relative(tmp, f.file)}:${f.line} ` : ""}${f.message}`);
+    const lines = check?.findings.map((f) => `${f.file ? `${relativePath(tmp, f.file)}:${f.line} ` : ""}${f.message}`);
     expect(lines).toEqual([
       `${TESTS}:7 \`Single_Off\` checks "Single organization policy", which the removal deleted from ${CODE}: ` +
         "likely a test of the OFF path (the flag mock returns false by default); delete it",
