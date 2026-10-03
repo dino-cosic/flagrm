@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { verifyMarkdown } from "../src/core/markdown.js";
-import type { VerifyReport } from "../src/core/types.js";
+import type { TestComparison, VerifyReport } from "../src/core/types.js";
+
+function tests(c: Partial<TestComparison>): TestComparison {
+  return {
+    project: "api",
+    removed: [],
+    added: [],
+    deleted: [],
+    renamed: [],
+    excludedByConfig: [],
+    unexplained: [],
+    ...c,
+  };
+}
 
 function report(overrides: Partial<VerifyReport> = {}): VerifyReport {
   return {
@@ -24,7 +37,7 @@ function report(overrides: Partial<VerifyReport> = {}): VerifyReport {
     ],
     skipped: ["build"],
     runs: [],
-    tests: [{ project: "api", before: 9, after: 7, removed: ["T.Off1", "T.Off2"], added: [] }],
+    tests: [tests({ before: 9, after: 7, removed: ["T.Off1", "T.Off2"], deleted: ["T.Off1", "T.Off2"] })],
     changedFiles: ["src/a.ts", "src/b.cs"],
     ...overrides,
   };
@@ -45,7 +58,7 @@ describe("verifyMarkdown", () => {
         "",
         "**Files changed since baseline (2):** `src/a.ts`, `src/b.cs`",
         "",
-        "**Tests that no longer run (2):** `T.Off1`, `T.Off2`",
+        "**Tests deleted (2):** `T.Off1`, `T.Off2`",
         "",
         "**Warnings:**",
         "- `src/a.ts:3` comment mentions NewCheckout",
@@ -81,23 +94,45 @@ describe("verifyMarkdown", () => {
     const md = verifyMarkdown(
       report({
         tests: [
-          {
-            project: "api",
+          tests({
             before: 3,
             after: 1,
-            removed: [
+            unexplained: [
               "Bit.Api.Test.JobTests.Run_WhenOff(sutProvider: SutProvider`1 { Fixture = [···] })",
               "Bit.Api.Test.JobTests.Quote(express: True)",
               "Bit.Api.Test.JobTests.Quote(express: False)",
             ],
             added: ["sorts devices › sorts devices"],
-          },
+          }),
         ],
       }),
       "/r",
     );
-    expect(md).toContain("**Tests that no longer run (3):** `JobTests.Run_WhenOff(…)`, `JobTests.Quote(…) ×2`");
+    expect(md).toContain(
+      "**Tests that no longer run, unexplained (3):** `JobTests.Run_WhenOff(…)`, `JobTests.Quote(…) ×2`",
+    );
     expect(md).toContain("**New tests (1):** `sorts devices`");
+  });
+
+  it("lists each reason a test no longer runs, and renamed tests once, not as new", () => {
+    const md = verifyMarkdown(
+      report({
+        tests: [
+          tests({
+            deleted: ["Ns.T.Off"],
+            renamed: [{ from: "Ns.T.Save_Vfo1Enabled", to: "Ns.T.Save" }],
+            excludedByConfig: ["Ns.IntegrationT.Db"],
+            added: ["Ns.T.Save", "Ns.T.New"],
+          }),
+        ],
+      }),
+      "/r",
+    );
+    expect(md).toContain("**Tests deleted (1):** `T.Off`");
+    expect(md).toContain("**Tests excluded by a config change (1):** `IntegrationT.Db`");
+    expect(md).toContain("**Tests renamed (1):** `T.Save_Vfo1Enabled` → `T.Save`");
+    expect(md).toContain("**New tests (1):** `T.New`");
+    expect(md).not.toContain("unexplained");
   });
 
   it("caps long lists at 20 entries", () => {

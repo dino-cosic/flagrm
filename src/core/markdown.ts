@@ -6,7 +6,7 @@
 
 import type { CheckFinding, CheckStatus, VerifyReport } from "./types.js";
 import { relativePath } from "./util.js";
-import { shortTestNames } from "./verify/test-results.js";
+import { shortTestName, shortTestNames } from "./verify/test-results.js";
 
 const ICON: Record<CheckStatus, string> = { pass: "✅", fail: "❌", warn: "⚠️", skipped: "➖" };
 
@@ -38,11 +38,21 @@ export function verifyMarkdown(report: VerifyReport, root: string): string {
   ];
   const changed = report.changedFiles ?? [];
   if (changed.length) out.push("", `**Files changed since baseline (${changed.length}):** ${codeList(changed)}`);
-  const removed = report.tests.flatMap((t) => t.removed);
-  if (removed.length) {
-    out.push("", `**Tests that no longer run (${removed.length}):** ${codeList(shortTestNames(removed))}`);
+  const all = <K extends "deleted" | "excludedByConfig" | "unexplained">(key: K) => report.tests.flatMap((t) => t[key]);
+  const renamed = report.tests.flatMap((t) => t.renamed);
+  for (const [names, title] of [
+    [all("deleted"), "Tests deleted"],
+    [all("excludedByConfig"), "Tests excluded by a config change"],
+    [all("unexplained"), "Tests that no longer run, unexplained"],
+  ] as const) {
+    if (names.length) out.push("", `**${title} (${names.length}):** ${codeList(shortTestNames(names))}`);
   }
-  const added = report.tests.flatMap((t) => t.added);
+  if (renamed.length) {
+    const pairs = renamed.map((r) => `\`${shortTestName(r.from)}\` → \`${shortTestName(r.to)}\``);
+    out.push("", `**Tests renamed (${renamed.length}):** ${pairs.slice(0, MAX_ITEMS).join(", ")}`);
+  }
+  const renamedTo = new Set(renamed.map((r) => r.to));
+  const added = report.tests.flatMap((t) => t.added).filter((name) => !renamedTo.has(name));
   if (added.length) out.push("", `**New tests (${added.length}):** ${codeList(shortTestNames(added))}`);
   for (const [severity, title] of [
     ["fail", "Failures"],

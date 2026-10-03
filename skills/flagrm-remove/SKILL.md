@@ -69,7 +69,7 @@ Read `patterns.md` in this skill's directory when a case is unclear.
 | `leftovers` | Remove each reference listed. A comment is a warning: reword or delete it |
 | `dead-code` | Delete what the removal left unused |
 | `build` | Fix the error your edit caused; don't touch unrelated code. `tsc` skips templates: grep `.html` for each member you removed or renamed |
-| `tests` | A new failure means ON behavior changed: fix the edit, not the test. Known failures (failed at the baseline) only warn. Tests that no longer run must be ones you deleted on purpose. A changed test file whose tests didn't run: run them yourself and report it |
+| `tests` | A new failure means ON behavior changed: fix the edit, not the test. Known failures (failed at the baseline) only warn. A test listed as no longer running (`unexplained`) must be one you removed on purpose: say why. A changed test file whose tests didn't run: run them yourself and report it |
 
 Exit 2 is a usage or config error: read the message. `--skip build,tests` is fine for a quick check
 in between; only a full run counts, and the Stop hook won't let you finish on one with `--skip`. After three failed attempts on one check, show the user the findings.

@@ -54,7 +54,7 @@ When the agent reports back, review the result:
 /flagrm-verify NewCheckout
 ```
 
-You get a short overview (checks, changed files, tests that no longer run) and
+You get a short overview (checks, changed files, tests deleted or renamed) and
 a proposed commit message. The agent never commits for you. The overview looks
 like this (abridged):
 
@@ -66,15 +66,19 @@ like this (abridged):
 | leftovers | ✅ pass | no recorded name left in code or config |
 | dead-code | ✅ pass | no new unused-code diagnostics |
 | build | ✅ pass | web, api built successfully |
-| tests | ⚠️ warn | tests passed (web 24 → 21, api 18 → 16) |
+| tests | ✅ pass | tests passed (web 24 → 22: 2 deleted, 1 renamed; api 18 → 16: 2 deleted) |
 
 **Files changed since baseline (26):** `backend/src/Shop.Api/Services/CheckoutService.cs`, ...
 
-**Tests that no longer run (5):** `LegacyPricingCalculatorTests.AppliesBulkDiscount`, ...
+**Tests deleted (4):** `LegacyPricingCalculatorTests.AppliesBulkDiscount`, ...
+
+**Tests renamed (1):** `CheckoutComponent › places the order when NewCheckout is on` → `CheckoutComponent › places the order`
 ```
 
-A warning is not a failure. Here the agent deleted the tests that covered only
-the OFF path, on purpose, and explains that in its notes.
+Tests that no longer run are sorted by why: deleted in the diff (the OFF
+path's tests), renamed without the flag in the name, or left out by a test
+command changed since the baseline. Only a test that no longer runs for none
+of these reasons is a warning, for the agent to explain in its notes.
 
 ## How it works
 
@@ -116,7 +120,7 @@ the OFF path, on purpose, and explains that in its notes.
 | `leftovers` | A recorded name (the flag literal, its constants, wrappers the agent recorded) is still in code or config. A mention in a comment is a warning |
 | `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files |
 | `build` | A project's build command fails |
-| `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. Tests that no longer run, and changed test files none of whose tests ran, are warnings for the agent to account for |
+| `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. A test that no longer runs though the diff neither deletes nor renames it and the test config is unchanged, and a changed test file none of whose tests ran, are warnings for the agent to account for |
 
 The baseline also records the configuration it was taken with: each project's
 resolved build and test commands, the files they name (a `.slnf`, a

@@ -88,7 +88,7 @@ export function shortTestNames(names: string[]): string[] {
  * AutoFixture-style attributes put random values in them on every run. JUnit
  * names are kept whole (a test title may contain parentheses).
  */
-function testKey(name: string): string {
+export function testKey(name: string): string {
   if (name.includes(JUNIT_SEPARATOR)) return name;
   const m = /^([\w.`+<>,[\]]+)\(.*\)$/s.exec(name);
   return m ? m[1] : name;

@@ -3,7 +3,6 @@ import type { DoctorReport, DoctorStatus } from "./doctor.js";
 import type { StepResult, StepStatus } from "./install.js";
 import type { Baseline, CheckStatus, ConfigState, FlagInventoryEntry, ListReport, VerifyReport } from "./types.js";
 import { plural, relativePath } from "./util.js";
-import { shortTestNames } from "./verify/test-results.js";
 
 /** A path relative to the working directory, with `/` separators on every platform. */
 function rel(file: string): string {
@@ -119,12 +118,6 @@ export function printVerifyReport(report: VerifyReport, file: string): void {
     }
     if (check.findings.length > shown.length) {
       console.log(pc.dim(`      … ${check.findings.length - shown.length} more (see --json)`));
-    }
-    if (check.id === "tests") {
-      const removed = shortTestNames(report.tests.flatMap((t) => t.removed));
-      for (const name of removed.slice(0, MAX_FINDINGS)) console.log(pc.dim(`      no longer runs: ${name}`));
-      if (removed.length > MAX_FINDINGS)
-        console.log(pc.dim(`      … ${removed.length - MAX_FINDINGS} more (see --md)`));
     }
   }
   if (report.strict && warned) console.log(pc.dim("\n  --strict: warnings count as failures."));

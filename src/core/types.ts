@@ -240,10 +240,18 @@ export interface TestComparison {
   project: string;
   before?: number;
   after?: number;
-  /** Baseline tests that no longer run: deleted with the OFF path, or renamed. */
+  /** Baseline tests that no longer run, sorted into the four lists below. */
   removed: string[];
   /** Tests that did not run at the baseline. */
   added: string[];
+  /** Removed in the diff: gone from a changed test file, or a data row dropped from one. */
+  deleted: string[];
+  /** Renamed without the flag's words (`Save_Vfo1Enabled_Works` → `Save_Works`); `to` is in `added`. */
+  renamed: Array<{ from: string; to: string }>;
+  /** Not deleted, but the project's test command, its named files or `testResults` changed since the baseline. */
+  excludedByConfig: string[];
+  /** None of the above: the only ones `verify` warns about. */
+  unexplained: string[];
 }
 
 /** A build/test run in a verify report: test counts without the per-test name lists. */

@@ -183,11 +183,23 @@ describe("verify on the realistic fixture", () => {
       applyAfter();
       const report = await verify({ skip: ["build"] }, withTests);
       expect(status(report).tests).toBe("pass");
-      expect(report.tests).toEqual([{ project: "web", before: 4, after: 4, removed: [], added: [] }]);
+      expect(report.tests).toEqual([
+        {
+          project: "web",
+          before: 4,
+          after: 4,
+          removed: [],
+          added: [],
+          deleted: [],
+          renamed: [],
+          excludedByConfig: [],
+          unexplained: [],
+        },
+      ]);
       expect(report.runs.find((r) => r.check === "test")?.results).not.toHaveProperty("names");
     });
 
-    it("warns once about the tests that no longer run, and fails with --strict", async () => {
+    it("sorts tests that no longer run into renamed and deleted, without a warning", async () => {
       results(junit(ON, OFF, OTHER));
       await takeBaseline(withTests, true);
       applyAfter();
@@ -196,10 +208,48 @@ describe("verify on the realistic fixture", () => {
       expect(report.tests[0]).toMatchObject({
         removed: [full(ON), full(OFF)],
         added: [full("places the order through the checkout API")],
+        // The title lost "when NewCheckout is on"; the OFF test is gone from checkout.component.spec.ts.
+        renamed: [{ from: full(ON), to: full("places the order through the checkout API") }],
+        deleted: [full(OFF)],
+        excludedByConfig: [],
+        unexplained: [],
       });
-      expect(findings(report, "tests")).toEqual([expect.stringContaining("warn 2 tests no longer run")]);
+      expect(status(report).tests).toBe("pass");
+      expect(report.checks.find((c) => c.id === "tests")?.summary).toBe(
+        "tests passed (web 4 → 3: 1 deleted, 1 renamed)",
+      );
+    });
+
+    it("warns about a test that no longer runs for no reason in the diff, and fails with --strict", async () => {
+      results(junit(ON, OFF, OTHER));
+      await takeBaseline(withTests, true);
+      applyAfter();
+      results(junit("places the order through the checkout API"));
+      const report = await verify({ skip: ["build"] }, withTests);
+      expect(report.tests[0].unexplained).toEqual([full(OTHER)]);
+      expect(findings(report, "tests")).toEqual([
+        expect.stringContaining("warn 1 test no longer runs though the diff"),
+      ]);
+      expect(report.checks.find((c) => c.id === "tests")?.findings.map((f) => f.message)).toContain(
+        `no longer runs: ${full(OTHER)}`,
+      );
       expect(report.status).toBe("pass");
       expect((await verify({ skip: ["build"], strict: true }, withTests)).status).toBe("fail");
+    });
+
+    it("counts tests left out by a changed test command as excluded by config", async () => {
+      results(junit(ON, OFF, OTHER));
+      await takeBaseline(withTests, true);
+      applyAfter();
+      results(junit("places the order through the checkout API"));
+      const narrower = (config: ToolConfig) => {
+        withTests(config);
+        const web = config.projects.find((p) => p.name === "web");
+        if (web) web.test = `${web.test} checkout`;
+      };
+      const report = await verify({ skip: ["build"] }, narrower);
+      expect(report.tests[0]).toMatchObject({ excludedByConfig: [full(OTHER)], unexplained: [] });
+      expect(findings(report, "tests")).toEqual([expect.stringContaining("warn test command changed")]);
     });
 
     it("warns when the test command changed since the baseline", async () => {
@@ -279,7 +329,7 @@ describe("verify on the realistic fixture", () => {
       results(`<testsuite><testcase classname="CheckoutComponent" name="${OTHER}"/></testsuite>`);
       const report = await verify({ skip: ["build"] }, withTests);
       expect(findings(report, "tests")).toEqual([
-        expect.stringContaining("warn 3 tests no longer run"),
+        expect.stringContaining("warn 1 test no longer runs"),
         expect.stringContaining(
           "warn frontend/src/app/core/feature-flag.service.spec.ts: changed, but none of its tests ran",
         ),

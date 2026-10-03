@@ -17,6 +17,12 @@ contain breaking changes.
   since its commit (`.flagrm/` and `flagrm.config.yaml` don't count), so a
   rerun after fixing the setup can't record a half-done removal. The error
   says how to set uncommitted edits aside with `git stash`.
+- Tests that no longer run are sorted by why (`tests[]` in `verify --json`):
+  `deleted` (gone from a changed test file, or a data row dropped from one),
+  `renamed` (the same test without the flag's words in its name, matched to
+  the new test), `excludedByConfig` (the test command or its files changed
+  since the baseline) and `unexplained`. Only `unexplained` tests warn; the
+  summary counts the others, and `--md` lists each group.
 
 ### Added
 

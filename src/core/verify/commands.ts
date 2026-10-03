@@ -13,6 +13,7 @@ import { escapeRegExp, isTestPath } from "../scan.js";
 import type { CheckFinding, CheckResult, CheckRun, TestComparison } from "../types.js";
 import { relativePath } from "../util.js";
 import { checkResult, configFindings, plural, skippedResult, type VerifyContext } from "./context.js";
+import { classifyRemovedTests } from "./removed-tests.js";
 import { diffTestNames, shortTestNames, splitFailures } from "./test-results.js";
 
 function failedRunFindings(run: CheckRun): CheckFinding[] {
@@ -74,8 +75,25 @@ export function compareTests(v: VerifyContext): TestComparison[] {
       after: after?.total,
       removed: [],
       added: [],
+      deleted: [],
+      renamed: [],
+      excludedByConfig: [],
+      unexplained: [],
     };
-    if (before && after) Object.assign(comparison, diffTestNames(before.names, after.names));
+    if (before && after) {
+      const { removed, added } = diffTestNames(before.names, after.names);
+      Object.assign(comparison, { removed, added });
+      Object.assign(
+        comparison,
+        classifyRemovedTests(removed, added, after.names, {
+          root: v.root,
+          sha: v.baseline.git.sha,
+          changedFiles: v.changedFiles,
+          names: v.baseline.names,
+          testConfigChanged: v.configChanges.some((c) => c.check === "tests" && c.project === run.project),
+        }),
+      );
+    }
     out.push(comparison);
   }
   return out;
@@ -166,13 +184,16 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
         project: run.project,
       });
     }
-    const removed = comparison?.removed.length ?? 0;
-    if (removed) {
+    const unexplained = comparison?.unexplained ?? [];
+    if (unexplained.length) {
       findings.push({
         severity: "warn",
-        message: `${plural(removed, "test no longer runs", "tests no longer run")} (fine if they only covered the OFF path or were renamed; say so in the PR)`,
+        message: `${plural(unexplained.length, "test no longer runs", "tests no longer run")} though the diff doesn't delete or rename it and the test config is unchanged: account for ${unexplained.length === 1 ? "it" : "them"} in the PR`,
         project: run.project,
       });
+      for (const name of shortTestNames(unexplained).slice(0, 20)) {
+        findings.push({ severity: "info", message: `no longer runs: ${name}`, project: run.project });
+      }
     }
     if (run.results && ctx) {
       for (const file of changedTestFiles(v, ctx.root)) {
@@ -189,11 +210,20 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
   }
   const counts = comparisons
     .filter((c) => c.after !== undefined)
-    .map((c) => (c.before === undefined ? `${c.project} ${c.after}` : `${c.project} ${c.before} → ${c.after}`));
+    .map((c) => {
+      if (c.before === undefined) return `${c.project} ${c.after}`;
+      const why = [
+        c.deleted.length && `${c.deleted.length} deleted`,
+        c.renamed.length && `${c.renamed.length} renamed`,
+        c.excludedByConfig.length && `${c.excludedByConfig.length} excluded by config`,
+        c.unexplained.length && `${c.unexplained.length} unexplained`,
+      ].filter(Boolean);
+      return `${c.project} ${c.before} → ${c.after}${why.length ? `: ${why.join(", ")}` : ""}`;
+    });
   const summary = [
     failed ? `${plural(failed, "test run")} failed` : "tests passed",
     known ? `apart from ${plural(known, "known failure")}` : undefined,
-    counts.length ? `(${counts.join(", ")})` : undefined,
+    counts.length ? `(${counts.join("; ")})` : undefined,
   ]
     .filter(Boolean)
     .join(" ");
