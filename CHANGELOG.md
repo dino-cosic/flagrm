@@ -23,6 +23,9 @@ contain breaking changes.
   part of a removal: verify's changed files, `baseline --force` and the Stop
   hook ignore them, so generated output such as `graphify-out/` no longer
   invalidates a passing verify.
+- `flagrm doctor` and the `/flagrm-remove` precondition accept a tree whose
+  only uncommitted files are flagrm's setup files or paths matching `exclude`,
+  so a freshly run `flagrm init` no longer blocks the first removal.
 
 ### Added
 

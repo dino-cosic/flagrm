@@ -18,7 +18,7 @@ Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx f
 
 ## 1. Preconditions
 
-- `git status --porcelain` must print nothing. Otherwise ask the user to commit or stash.
+- `flagrm doctor` must not warn about uncommitted files (flagrm's own setup files and `exclude`d paths don't count). Otherwise ask the user to commit or stash.
 - No `flagrm.config.yaml`: run `flagrm init` and fill in project paths and build/test commands with the user.
   Its doctor reports a missing SDK, `cargo` or Docker: show it. For `cargo`/Docker, offer `flagrm scope`; `--write` only on a yes.
 - `flagrm list --json`: find the flag in `flags[]`. Not there: show the closest names and ask.

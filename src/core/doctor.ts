@@ -9,6 +9,7 @@ import path from "node:path";
 import { realProbes, type SetupProbes } from "../adapters/dotnet/setup.js";
 import type { Workspace } from "./adapter.js";
 import { errorExcerpt, incrementalBuildGap, runCheck, templateCheckGap } from "./baseline.js";
+import { changeFilter, changeFilterAt } from "./change-filter.js";
 import { findConfigFile, loadConfig, TOOL_IDS, type ToolId } from "./config.js";
 import { projectCommands } from "./config-snapshot.js";
 import { gitState, isAncestor } from "./git.js";
@@ -54,9 +55,18 @@ export async function runDoctor(cwd: string, options: DoctorOptions = {}): Promi
   await configChecks(cwd, configFile, options, add);
 
   const git = gitState(root);
+  // flagrm's own setup files and `exclude`d paths aren't part of a removal, so they needn't be committed first.
+  const dirty = git.dirtyFiles ?? [];
+  const ignore = changeFilterAt(root);
+  const other = dirty.filter((rel) => !ignore(rel));
+  const setup = dirty.filter(changeFilter());
   if (git.sha === null) add("warn", "not a git repository: verify can't diff against the baseline");
-  else if (git.dirty)
-    add("warn", `${git.dirtyFiles?.length ?? 0} uncommitted files — commit or stash before a removal`);
+  else if (other.length) add("warn", `${other.length} uncommitted files — commit or stash before a removal`);
+  else if (setup.length)
+    add(
+      "ok",
+      `working tree clean apart from flagrm's setup files (${setup.length}): commit them before or with the removal`,
+    );
   else add("ok", "working tree clean");
 
   const gitignore = path.join(root, ".gitignore");

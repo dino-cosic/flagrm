@@ -221,7 +221,24 @@ describe("runDoctor", () => {
     ).toBe(true);
   });
 
+  it("treats a tree whose only uncommitted files are flagrm's setup as clean", async () => {
+    fs.appendFileSync(path.join(tmp, ".gitignore"), "bin/\n");
+    fs.appendFileSync(path.join(tmp, "flagrm.config.yaml"), "# edited\n");
+    expect((await runDoctor(tmp)).checks.map((c) => `${c.status} ${c.message}`)).toContain(
+      "ok working tree clean apart from flagrm's setup files (2): commit them before or with the removal",
+    );
+  });
+
+  it("doesn't count paths matching exclude as uncommitted", async () => {
+    fs.appendFileSync(path.join(tmp, "flagrm.config.yaml"), "exclude: ['graphify-out/**']\n");
+    commitAll();
+    fs.mkdirSync(path.join(tmp, "graphify-out"));
+    fs.writeFileSync(path.join(tmp, "graphify-out", "graph.json"), "{}");
+    expect((await problems()).filter((p) => p.includes("uncommitted"))).toEqual([]);
+  });
+
   it("warns on a dirty tree, an outdated skill, a missing hook and an abandoned baseline", async () => {
+    fs.writeFileSync(path.join(tmp, "src.txt"), "an edit\n");
     stampSkill(path.join(tmp, ".claude/skills/flagrm-remove/SKILL.md"), "0.0.1");
     fs.writeFileSync(path.join(tmp, ".claude/settings.json"), "{}\n");
     fs.mkdirSync(path.join(tmp, ".flagrm", "Old"), { recursive: true });
