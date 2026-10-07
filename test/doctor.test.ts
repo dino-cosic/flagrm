@@ -36,7 +36,7 @@ const failingBuild = (lines: string[], code: number) => {
 /** A test command that writes `xml` as its JUnit results to .flagrm/r.xml (gitignored), then exits with `code`. */
 const testWriting = (xml: string, code = 0) => {
   fs.writeFileSync(path.join(tmp, "r.src.xml"), xml);
-  return `node -e "const fs=require('fs');fs.mkdirSync('.flagrm',{recursive:true});fs.copyFileSync('r.src.xml','.flagrm/r.xml');process.exit(${code})"`;
+  return `node -e "const fs=require('fs');fs.mkdirSync('.flagrm',{recursive:true});fs.writeFileSync('.flagrm/r.xml',fs.readFileSync('r.src.xml'));process.exit(${code})"`;
 };
 const problems = async (cwd = tmp, options = {}) =>
   (await runDoctor(cwd, options)).checks.filter((c) => c.status !== "ok").map((c) => `${c.status} ${c.message}`);

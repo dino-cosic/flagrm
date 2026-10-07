@@ -223,8 +223,12 @@ describe("verify on the realistic fixture", () => {
     const withTests = (config: ToolConfig) => {
       for (const p of config.projects) {
         // `false`: no command, not even the adapter's default. api gets a no-op build.
+        // Rewrite rather than copy: copyFileSync keeps the source's mtime on Windows, so verify would skip it as stale.
         p.build = p.name === "api" ? `node -e ""` : false;
-        p.test = p.name === "web" ? `node -e "require('fs').copyFileSync('results.src.xml', 'junit.xml')"` : false;
+        p.test =
+          p.name === "web"
+            ? `node -e "require('fs').writeFileSync('junit.xml', require('fs').readFileSync('results.src.xml'))"`
+            : false;
         p.testResults = p.name === "web" ? path.join(tmp, "frontend", "junit.xml") : undefined;
       }
     };
@@ -363,7 +367,7 @@ describe("verify on the realistic fixture", () => {
         withTests(config);
         const web = config.projects.find((p) => p.name === "web");
         if (web)
-          web.test = `node -e "const fs=require('fs');fs.copyFileSync('results.src.xml','junit.xml');process.exit(/<failure/.test(fs.readFileSync('junit.xml','utf8'))?1:0)"`;
+          web.test = `node -e "const fs=require('fs');fs.writeFileSync('junit.xml',fs.readFileSync('results.src.xml'));process.exit(/<failure/.test(fs.readFileSync('junit.xml','utf8'))?1:0)"`;
       };
       const fail = (name: string) => testcase(name, `<failure message="boom"/>`);
       const KNOWN = "formats prices in the user's locale";
