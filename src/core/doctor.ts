@@ -136,12 +136,37 @@ async function configChecks(
           if (gap) add("warn", `${ctx.name}: ${gap}`);
         }
       }
+      if (check === "test" && !commands.testResults) {
+        add(
+          "warn",
+          `${ctx.name}: test command has no testResults — verify can't compare tests by name, so a test that fails before the removal fails verify too`,
+        );
+      }
       if (!options.run) {
-        add("ok", `${ctx.name}: ${check} command \`${command}\``);
+        const source = commands.defaults.includes(check) ? " (adapter default)" : "";
+        add("ok", `${ctx.name}: ${check} command \`${command}\`${source}`);
         continue;
       }
       const log = path.join(root, ".flagrm", "doctor", `${ctx.name}.${check}.log`);
       const run = await runCheck(ctx, check, command, log, undefined, commands.testResults);
+      // Proven here rather than halfway through a removal: without readable results, verify can't compare tests.
+      if (check === "test" && commands.testResults && !run.results) {
+        add(
+          "fail",
+          `${ctx.name}: \`${command}\` wrote no test results matching ${relativePath(cwd, commands.testResults)}`,
+          run.exitCode === 0 ? undefined : errorExcerpt(run.log, 3),
+        );
+        continue;
+      }
+      // A suite that is already red is no setup problem: the baseline records those tests as known failures.
+      if (run.exitCode !== 0 && run.results?.failed) {
+        const failed = run.results.failed;
+        add(
+          "warn",
+          `${ctx.name}: \`${command}\`: ${failed === 1 ? "1 test fails already — the baseline records it as a known failure" : `${failed} tests fail already — the baseline records them as known failures`}, which verify only warns about`,
+        );
+        continue;
+      }
       if (run.exitCode === 0) {
         add("ok", `${ctx.name}: \`${command}\` passed`);
         continue;

@@ -18,6 +18,15 @@ contain breaking changes.
   warn. `flagrm scope --write` writes that `testResults` out along with the
   test command, and no longer folds long commands over two lines.
 
+### Added
+
+- `flagrm doctor` marks the build and test commands that are adapter
+  defaults, and warns about a test command without `testResults`. With
+  `--run` it fails when the test command writes no results matching
+  `testResults`, so a broken setup shows up before a removal instead of
+  halfway through, and only warns when tests already fail: the baseline
+  records those as known failures.
+
 ## [0.2.1] - 2026-10-04
 
 ### Fixed

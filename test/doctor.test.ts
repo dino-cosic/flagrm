@@ -13,7 +13,7 @@ const commitAll = () => {
   git("add", "-A");
   git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "setup");
 };
-const config = (build: string, test?: string) =>
+const config = (build: string, test?: string, testResults?: string) =>
   fs.writeFileSync(
     path.join(tmp, "flagrm.config.yaml"),
     [
@@ -24,6 +24,7 @@ const config = (build: string, test?: string) =>
       "    globs: ['**/*.txt']",
       `    build: ${JSON.stringify(build)}`,
       ...(test ? [`    test: ${JSON.stringify(test)}`] : []),
+      ...(testResults ? [`    testResults: ${testResults}`] : []),
       "",
     ].join("\n"),
   );
@@ -32,6 +33,11 @@ const failingBuild = (lines: string[], code: number) => {
   fs.writeFileSync(path.join(tmp, "build.log"), `${lines.join("\n")}\n`);
   config(`node -e "process.stdout.write(require('fs').readFileSync('build.log','utf8'));process.exit(${code})"`);
 };
+/** A test command that writes `xml` as its JUnit results to .flagrm/r.xml (gitignored), then exits with `code`. */
+const testWriting = (xml: string, code = 0) => {
+  fs.writeFileSync(path.join(tmp, "r.src.xml"), xml);
+  return `node -e "const fs=require('fs');fs.mkdirSync('.flagrm',{recursive:true});fs.copyFileSync('r.src.xml','.flagrm/r.xml');process.exit(${code})"`;
+};
 const problems = async (cwd = tmp, options = {}) =>
   (await runDoctor(cwd, options)).checks.filter((c) => c.status !== "ok").map((c) => `${c.status} ${c.message}`);
 
@@ -39,7 +45,7 @@ beforeEach(() => {
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "flagrm-doctor-")));
   git("init", "-q");
   initProject(tmp);
-  config('node -e ""', 'node -e ""');
+  config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml");
   commitAll();
 });
 
@@ -103,6 +109,44 @@ describe("runDoctor", () => {
       "fail svc: `definitely-not-installed-xyz` (from `definitely-not-installed-xyz build`) is not on PATH",
       "warn svc: no test command — verify can't compare tests",
     ]);
+  });
+
+  it("warns when a test command has no testResults to compare by name", async () => {
+    config('node -e ""', 'node -e ""');
+    commitAll();
+    expect(await problems()).toContain(
+      "warn svc: test command has no testResults — verify can't compare tests by name, so a test that fails before the removal fails verify too",
+    );
+  });
+
+  it("fails with --run when the test command writes no results matching testResults", async () => {
+    config('node -e ""', 'node -e ""', "./out/*.xml");
+    commitAll();
+    expect(await problems(tmp, { run: true })).toContain(
+      'fail svc: `node -e ""` wrote no test results matching out/*.xml',
+    );
+  });
+
+  it("only warns with --run when tests already fail: the baseline records them as known failures", async () => {
+    const test = testWriting('<testsuite><testcase classname="A" name="b"><failure/></testcase></testsuite>', 1);
+    config('node -e ""', test, "./.flagrm/r.xml");
+    commitAll();
+    const report = await runDoctor(tmp, { run: true });
+    expect(report.checks.filter((c) => c.status !== "ok").map((c) => `${c.status} ${c.message}`)).toEqual([
+      `warn svc: \`${test}\`: 1 test fails already — the baseline records it as a known failure, which verify only warns about`,
+    ]);
+    expect(report.status).toBe("ok");
+  });
+
+  it("labels the commands that are adapter defaults", async () => {
+    fs.writeFileSync(path.join(tmp, "package.json"), '{"scripts":{"build":"node -e \\"\\""}}\n');
+    fs.writeFileSync(
+      path.join(tmp, "flagrm.config.yaml"),
+      "projects:\n  - name: svc\n    adapter: generic\n    path: .\n    test: false\n",
+    );
+    commitAll();
+    const messages = (await runDoctor(tmp)).checks.map((c) => c.message);
+    expect(messages).toContain("svc: build command `npm run build` (adapter default)");
   });
 
   it("runs the commands with --run and fails on a non-zero exit", async () => {

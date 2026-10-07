@@ -111,7 +111,7 @@ of these reasons is a warning, for the agent to explain in its notes.
 | Command | What it does | Exit codes |
 |---|---|---|
 | `init` | Set up the config and `.gitignore` entry, and each chosen AI tool's files (asks, or `--tool claude-code,copilot,codex`; saved as `tools:`). Never overwrites or deletes | 0, 2 usage error |
-| `doctor` | Check the config, build and test commands (`--run` runs them), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
+| `doctor` | Check the config, build and test commands, marking adapter defaults and warning about a test command without `testResults` (`--run` runs them, fails when the test command writes no readable results, and only warns about tests that already fail), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
 | `scope` | For each .NET project, show what the machine lacks and which projects a solution filter would leave out; `--write` creates `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build and test at it | 0 nothing missing, 1 something missing |
 | `update` | Refresh the installed skills, prompt files, `AGENTS.md` block and hook from this flagrm version, for the config's `tools:` | 0 |
 | `list` | List every feature flag in the project: definitions, configured state per environment, reference counts | 0 |
