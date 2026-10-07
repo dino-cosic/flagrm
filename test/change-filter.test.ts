@@ -42,4 +42,19 @@ describe("changeFilter", () => {
     expect(ignore("src/Generated/Client.cs")).toBe(true);
     expect(ignore("backend/src/Checkout.cs")).toBe(false);
   });
+
+  it("treats an exclude that matches a directory as excluding everything under it, like scanning does", () => {
+    const ignore = changeFilter({
+      root,
+      exclude: ["graphify-out", "dist/", "src/Generated"],
+      projects: [project("backend")],
+    });
+    expect(ignore("graphify-out/graph.json")).toBe(true);
+    expect(ignore("graphify-out/nested/a.json")).toBe(true);
+    expect(ignore("dist/main.js")).toBe(true);
+    expect(ignore("backend/src/Generated/Client.cs")).toBe(true);
+    expect(ignore("graphify-outside/a.json")).toBe(false);
+    expect(ignore("src/app/graphify-out/a.json")).toBe(false);
+    expect(ignore("backend/src/Checkout.cs")).toBe(false);
+  });
 });

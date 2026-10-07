@@ -34,7 +34,7 @@ const isSetup = picomatch([...SETUP_PATTERNS], { dot: true });
  * setup files.
  */
 export function changeFilter(config?: Pick<ToolConfig, "root" | "exclude" | "projects">): ChangeFilter {
-  const exclude = config?.exclude.length ? picomatch(config.exclude, { dot: true }) : undefined;
+  const exclude = config?.exclude.length ? excludeMatcher(config.exclude) : undefined;
   const projectDirs = config
     ? config.projects.map((p) => relativePath(config.root, p.path)).filter((dir) => dir && !dir.startsWith(".."))
     : [];
@@ -43,6 +43,24 @@ export function changeFilter(config?: Pick<ToolConfig, "root" | "exclude" | "pro
     if (!exclude) return false;
     if (exclude(rel)) return true;
     return projectDirs.some((dir) => rel.startsWith(`${dir}/`) && exclude(rel.slice(dir.length + 1)));
+  };
+}
+
+/**
+ * Matches `exclude` the way scanning's fast-glob `ignore` does: a pattern
+ * that matches a directory (`graphify-out`, `graphify-out/`) excludes
+ * everything under it, so test the path and each of its parent directories.
+ */
+function excludeMatcher(patterns: readonly string[]): (rel: string) => boolean {
+  const isMatch = picomatch(
+    patterns.map((p) => p.replace(/\/+$/, "")),
+    { dot: true },
+  );
+  return (rel) => {
+    for (let end = rel.length; end > 0; end = rel.lastIndexOf("/", end - 1)) {
+      if (isMatch(rel.slice(0, end))) return true;
+    }
+    return false;
   };
 }
 
