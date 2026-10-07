@@ -127,7 +127,7 @@ of these reasons is a warning, for the agent to explain in its notes.
 | Check | Fails when |
 |---|---|
 | `leftovers` | A recorded name (the flag literal, its constants, wrappers the agent recorded) is still in code or config. A mention in a comment is a warning, and so is a test that checks text the removal deleted from the code (a test of the OFF path that never names the flag), or deleted text whose replacement on the same line no test checks (lost ON coverage) |
-| `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files |
+| `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files. A warning, from a text-based check, for a method, property, field or type that lost references in the diff and is now named only on its declaration line, which compilers don't report for public members (strings, templates, Razor views and config files count as references; comments don't) |
 | `build` | A project's build command fails |
 | `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. A test that no longer runs though the diff neither deletes nor renames it and the test config is unchanged, and a changed test file none of whose tests ran, are warnings for the agent to account for |
 

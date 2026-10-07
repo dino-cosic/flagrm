@@ -145,6 +145,22 @@ describe("verify on the realistic fixture", () => {
     expect(report.status).toBe("fail");
   });
 
+  it("warns about a declaration the removal left without references, which no compiler flags", async () => {
+    await takeBaseline();
+    applyAfter();
+    const file = path.join(tmp, "backend/src/Shop.Api/Services/CheckoutService.cs");
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, "utf8").replace("new Order(NewOrderId(),", 'new Order(Guid.NewGuid().ToString("N"),'),
+    );
+    const report = await verify();
+    expect(findings(report, "dead-code")).toEqual([
+      "warn backend/src/Shop.Api/Services/CheckoutService.cs:37 NewOrderId is now referenced only where it is declared: delete it if only the OFF path used it",
+    ]);
+    expect(status(report)["dead-code"]).toBe("warn");
+    expect(report.status).toBe("pass");
+  });
+
   it("fails when the build breaks", async () => {
     const failingBuild = (config: ToolConfig) => {
       for (const p of config.projects) {

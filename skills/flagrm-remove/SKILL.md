@@ -67,7 +67,7 @@ Read `patterns.md` in this skill's directory when a case is unclear.
 | Check | Fix |
 |---|---|
 | `leftovers` | Remove each reference listed. A comment is a warning: reword or delete it. A test checking text you deleted tests the OFF path: delete it. ON text no test checks: say so in your report |
-| `dead-code` | Delete what the removal left unused |
+| `dead-code` | Delete what the removal left unused. A declaration "referenced only where it is declared" (warning): delete it if only the OFF path used it; else say why it stays |
 | `build` | Fix the error your edit caused; don't touch unrelated code. `tsc` skips templates: grep `.html` for each member you removed or renamed |
 | `tests` | A new failure means ON behavior changed: fix the edit, not the test. Known failures (failed at the baseline) only warn. A test listed as no longer running (`unexplained`) must be one you removed on purpose: say why. A changed test file whose tests didn't run: run them yourself and report it |
 

@@ -41,6 +41,11 @@ contain breaking changes.
   config (tests it leaves out still count as excluded by config) and lists
   accepted known failures as info, so `--strict` can pass. A changed `tools:`
   no longer warns at all.
+- The `dead-code` check warns about a method, property, field or type the
+  removal left referenced only where it is declared. Compilers don't report
+  that for public or internal members. The check is text-based: strings,
+  templates, Razor views and config files count as references, comments
+  don't, and language keywords and the flag's recorded names are left out.
 
 ## [0.2.1] - 2026-10-04
 

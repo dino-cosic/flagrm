@@ -1,7 +1,8 @@
 /**
  * The `dead-code` check: compiler unused-code diagnostics in the changed
  * files that the baseline did not have (fail; warn when the adapter cannot
- * tell which ones are new).
+ * tell which ones are new), and declarations the removal left without
+ * references, which compilers don't flag for public members (warn).
  */
 
 import fs from "node:fs";
@@ -9,9 +10,15 @@ import path from "node:path";
 import { fileAt } from "../git.js";
 import type { CheckFinding, CheckResult } from "../types.js";
 import { checkResult, plural, skippedResult, type VerifyContext } from "./context.js";
+import { orphanFindings } from "./orphans.js";
 
 export function deadCodeCheck(v: VerifyContext): CheckResult {
-  const { findings, summary, analyzed } = compilerFindings(v);
+  const { findings, summary: compiler, analyzed } = compilerFindings(v);
+  const orphans = orphanFindings(v);
+  findings.push(...orphans);
+  const summary = orphans.length
+    ? `${compiler}; ${plural(orphans.length, "declaration")} left without references`
+    : compiler;
   // A check that did not look at every changed file must not read as a pass (a found diagnostic still fails it).
   if (!analyzed && !findings.some((f) => f.severity === "fail" || f.severity === "warn")) {
     return skippedResult("dead-code", summary, findings);
