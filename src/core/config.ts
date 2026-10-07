@@ -85,6 +85,8 @@ export interface CliPathOptions {
   exclude?: string[];
   /** Additional glob patterns to include (unioned with the config file's `include`). */
   include?: string[];
+  /** Don't warn about unknown keys (the Stop hook reads the config too, and must print nothing else). */
+  quiet?: boolean;
 }
 
 interface ProjectFileShape {
@@ -256,7 +258,13 @@ function adapterDefaults(adapter: AdapterId, file: ConfigFileShape): { methods: 
   return { methods: [...new Set([...frontend, ...backend])], attributes };
 }
 
-function parseProject(raw: unknown, index: number, file: ConfigFileShape, fileDir: string): ProjectConfig {
+function parseProject(
+  raw: unknown,
+  index: number,
+  file: ConfigFileShape,
+  fileDir: string,
+  quiet = false,
+): ProjectConfig {
   const where = `projects[${index}]`;
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error(`${where} must be an object with name, adapter and path.`);
@@ -269,7 +277,7 @@ function parseProject(raw: unknown, index: number, file: ConfigFileShape, fileDi
       `${where}: name "${name}" must start with a letter or digit and contain only letters, digits, _ . -`,
     );
   }
-  warnOnUnknownKeys(p, KNOWN_PROJECT_KEYS, `project "${name}"`);
+  if (!quiet) warnOnUnknownKeys(p, KNOWN_PROJECT_KEYS, `project "${name}"`);
   if (typeof p.adapter !== "string" || !(ADAPTER_IDS as readonly string[]).includes(p.adapter)) {
     throw new Error(`${where}: adapter "${String(p.adapter)}" is not one of ${ADAPTER_IDS.join(", ")}.`);
   }
@@ -316,14 +324,14 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
   if (configPath && fs.existsSync(configPath)) {
     file = readConfigFile(configPath);
     fileDir = path.dirname(configPath);
-    warnOnUnknownKeys(file, KNOWN_CONFIG_KEYS, configPath);
+    if (!cli.quiet) warnOnUnknownKeys(file, KNOWN_CONFIG_KEYS, configPath);
   }
 
   if (file.projects !== undefined && !Array.isArray(file.projects)) {
     throw new Error(`"projects" must be a list of { name, adapter, path } entries.`);
   }
   const projects = ((file.projects as unknown[] | undefined) ?? []).map((raw, i) =>
-    parseProject(raw, i, file, fileDir),
+    parseProject(raw, i, file, fileDir, cli.quiet),
   );
 
   const legacyProject = (name: "frontend" | "backend", adapter: AdapterId, dir: string): ProjectConfig => ({

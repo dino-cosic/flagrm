@@ -70,6 +70,14 @@ describe("loadConfig — unknown key warning", () => {
     spy.mockRestore();
   });
 
+  it("does not warn with quiet, at the top level or in a project", () => {
+    writeConfig("frontEnd: ./oops\nprojects:\n  - { name: api, adapter: dotnet, path: ./backend, tset: x }\n");
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    loadConfig({ quiet: true }, tmp);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it("does not warn when every key is recognized", () => {
     writeConfig(["backend: ./backend", "exclude:", "  - '**/bin/**'"].join("\n"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});

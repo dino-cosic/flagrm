@@ -16,6 +16,7 @@ import {
   UsageError,
   writeBaseline,
 } from "../src/core/baseline.js";
+import { changeFilter } from "../src/core/change-filter.js";
 import { gitState } from "../src/core/git.js";
 import { JSON_SCHEMA_VERSION } from "../src/core/types.js";
 import { projectContext } from "./support/projects.js";
@@ -231,6 +232,19 @@ describe("assertNoEditsSinceBaseline", () => {
     fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), "projects: []\n# test: dotnet test --filter X\n");
     fs.writeFileSync(path.join(flagDir(tmp, "F"), "verify.json"), "{}");
     expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
+  });
+
+  it("doesn't count flagrm's setup files or the filter's paths as edits", () => {
+    fs.writeFileSync(path.join(tmp, ".gitignore"), ".flagrm/\n");
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "x\n");
+    fs.mkdirSync(path.join(tmp, ".claude", "skills", "flagrm-remove"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, ".claude", "skills", "flagrm-remove", "SKILL.md"), "x\n");
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
+    fs.mkdirSync(path.join(tmp, "graphify-out"));
+    fs.writeFileSync(path.join(tmp, "graphify-out", "graph.json"), "{}");
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).toThrow(/graphify-out\/graph\.json/);
+    const ignore = changeFilter({ root: tmp, exclude: ["graphify-out/**"], projects: [] });
+    expect(() => assertNoEditsSinceBaseline(tmp, "F", [], ignore)).not.toThrow();
   });
 
   it("refuses once the code is edited, and says to stash uncommitted edits", () => {

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { headSha, isAncestor, treeAt, treeFingerprint } from "../src/core/git.js";
+import { changedFilesSince, headSha, isAncestor, treeAt, treeFingerprint } from "../src/core/git.js";
 
 let tmp: string;
 
@@ -111,6 +111,21 @@ describe("treeFingerprint", () => {
     } finally {
       fs.rmSync(plain, { recursive: true, force: true });
     }
+  });
+
+  it("leaves out the paths a filter ignores, matched literally, and so do the changed files", () => {
+    commit("init");
+    const head = headSha(tmp) as string;
+    fs.mkdirSync(path.join(tmp, "gen"));
+    fs.writeFileSync(path.join(tmp, "gen", "graph.json"), "{}");
+    fs.writeFileSync(path.join(tmp, "[ab].txt"), "generated");
+    fs.writeFileSync(path.join(tmp, "sub", "b.txt"), "tracked, edited, ignored");
+    const ignore = (rel: string) => rel.startsWith("gen/") || rel === "[ab].txt" || rel === "sub/b.txt";
+    expect(treeFingerprint(tmp, ignore)).toBe(treeAt(tmp, head));
+    expect(changedFilesSince(tmp, head, ignore)).toEqual([]);
+    fs.writeFileSync(path.join(tmp, "a.txt"), "edited");
+    expect(treeFingerprint(tmp, ignore)).not.toBe(treeAt(tmp, head));
+    expect(changedFilesSince(tmp, head, ignore)).toEqual(["a.txt"]);
   });
 });
 

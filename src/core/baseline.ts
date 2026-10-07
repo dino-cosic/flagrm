@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import fg from "fast-glob";
 import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
-import { CONFIG_FILENAMES } from "./config.js";
+import { type ChangeFilter, changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { environmentProblem } from "./environment.js";
 import { changedFilesSince } from "./git.js";
@@ -341,12 +341,17 @@ export function mergeNames(existing: RecordedName[], added: RecordedName[]): Rec
 
 /**
  * Files changed since `sha` that count as edits to the code: everything but
- * `.flagrm/`, the flagrm config, which may change to fix the setup, and the
- * files matching `testResults` patterns (absolute), which the baseline's own
- * test run writes. Undefined when git can't tell (not a repository, or `sha`
- * isn't in it).
+ * `.flagrm/`, what `ignore` names (flagrm's setup files, which may change to
+ * fix the setup, and `exclude`d paths), and the files matching `testResults`
+ * patterns (absolute), which the baseline's own test run writes. Undefined
+ * when git can't tell (not a repository, or `sha` isn't in it).
  */
-export function editsSince(root: string, sha: string, testResults: readonly string[] = []): string[] | undefined {
+export function editsSince(
+  root: string,
+  sha: string,
+  testResults: readonly string[] = [],
+  ignore: ChangeFilter = changeFilter(),
+): string[] | undefined {
   const results = new Set(
     testResults.flatMap((pattern) =>
       fg
@@ -354,7 +359,7 @@ export function editsSince(root: string, sha: string, testResults: readonly stri
         .map((file) => relativePath(root, file)),
     ),
   );
-  return changedFilesSince(root, sha)?.filter((rel) => !CONFIG_FILENAMES.includes(rel) && !results.has(rel));
+  return changedFilesSince(root, sha, ignore)?.filter((rel) => !results.has(rel));
 }
 
 /**
@@ -362,12 +367,17 @@ export function editsSince(root: string, sha: string, testResults: readonly stri
  * tree must still match the baseline commit. Otherwise the new baseline would
  * record half-removed code, and verify would no longer see those edits.
  * Without git there is nothing to compare, so it is allowed. Files matching
- * `testResults` (absolute patterns) are not edits.
+ * `testResults` (absolute patterns) and the ones `ignore` names are not edits.
  */
-export function assertNoEditsSinceBaseline(root: string, flag: string, testResults: readonly string[] = []): void {
+export function assertNoEditsSinceBaseline(
+  root: string,
+  flag: string,
+  testResults: readonly string[] = [],
+  ignore: ChangeFilter = changeFilter(),
+): void {
   const sha = readJson<Partial<Baseline>>(baselinePath(root, flag))?.git?.sha;
   if (!sha) return;
-  const edits = editsSince(root, sha, testResults);
+  const edits = editsSince(root, sha, testResults, ignore);
   if (edits === undefined) {
     throw new UsageError(
       `The baseline commit ${sha.slice(0, 7)} of ${flag} is not in this repository, so flagrm can't tell whether the ` +
@@ -376,7 +386,7 @@ export function assertNoEditsSinceBaseline(root: string, flag: string, testResul
   }
   if (edits.length === 0) return;
   const shown = edits.slice(0, 5).join(", ") + (edits.length > 5 ? `, and ${edits.length - 5} more` : "");
-  const uncommitted = new Set(changedFilesSince(root, "HEAD") ?? []);
+  const uncommitted = new Set(changedFilesSince(root, "HEAD", ignore) ?? []);
   const fix = edits.every((rel) => uncommitted.has(rel))
     ? `Set the edits aside with \`git stash -u\`, run \`flagrm baseline ${flag} --force\` again, then \`git stash pop\`.`
     : `Some are committed since the baseline commit ${sha.slice(0, 7)}: check out code without the removal first.`;

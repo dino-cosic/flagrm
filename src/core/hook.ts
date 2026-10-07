@@ -7,7 +7,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { CONFIG_FILENAMES, findConfigRoot } from "./config.js";
+import { changeFilterAt } from "./change-filter.js";
+import { findConfigRoot } from "./config.js";
 import { headSha, trackedChangesSince, treeFingerprint } from "./git.js";
 import type { Baseline, VerifyReport } from "./types.js";
 import { readJson } from "./util.js";
@@ -48,9 +49,10 @@ export interface StopDecision {
 /**
  * Whether to block the stop: a removal is in progress and no passing verify
  * matches the current tree. In progress means HEAD is still the baseline
- * commit and a file git tracks changed, other than the flagrm config (a
- * removal paused on a question to the user, or a stray test result file,
- * doesn't count), or the last verify skipped checks. Once HEAD moves (a
+ * commit and a file git tracks changed, other than flagrm's setup files and
+ * paths matching `exclude` (a removal paused on a question to the user, or a
+ * stray test result file, doesn't count), or the last verify skipped checks.
+ * The fingerprint leaves out the same paths, as verify's does. Once HEAD moves (a
  * commit, a branch switch, a merge), that removal is no longer guarded.
  */
 export function stopDecision(root: string, input: StopHookInput): StopDecision {
@@ -66,10 +68,11 @@ export function stopDecision(root: string, input: StopHookInput): StopDecision {
       .map((e) => path.join(dir, e.name))
       .filter((flagDir) => readJson<Baseline>(path.join(flagDir, "baseline.json"))?.git?.sha === head);
     if (active.length === 0) return { block: false };
-    const edited = (trackedChangesSince(root, head) ?? []).some((rel) => !CONFIG_FILENAMES.includes(rel));
+    const ignore = changeFilterAt(root);
+    const edited = (trackedChangesSince(root, head, ignore) ?? []).length > 0;
     const started = active.filter((flagDir) => edited || lastVerifySkipped(flagDir));
     if (started.length === 0) return { block: false };
-    const current = treeFingerprint(root);
+    const current = treeFingerprint(root, ignore);
     if (!current) return { block: false };
     const reasons = started.map((flagDir) => unverified(flagDir, current)).filter((r): r is string => r !== undefined);
     return reasons.length ? { block: true, reason: reasons.join("\n") } : { block: false };

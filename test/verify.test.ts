@@ -5,8 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addNames, discoverNames, runChecks, UsageError, writeBaseline } from "../src/core/baseline.js";
+import { changeFilterAt } from "../src/core/change-filter.js";
 import { loadConfig, type ToolConfig } from "../src/core/config.js";
 import { gitState, treeFingerprint } from "../src/core/git.js";
+import { stopDecision } from "../src/core/hook.js";
 import { resolveProjects } from "../src/core/registry.js";
 import type { CheckId, VerifyReport } from "../src/core/types.js";
 import { verifyFlag } from "../src/core/verify/index.js";
@@ -91,8 +93,43 @@ describe("verify on the realistic fixture", () => {
     expect(report.skipped).toEqual(["build", "tests"]);
     expect(fs.existsSync(path.join(tmp, ".flagrm", FLAG, "verify.json"))).toBe(true);
     expect(report.fingerprint).toMatch(/^[0-9a-f]{40}$/);
-    expect(report.fingerprint).toBe(treeFingerprint(tmp));
+    expect(report.fingerprint).toBe(treeFingerprint(tmp, changeFilterAt(tmp)));
     expect(report.changedFiles?.length).toBeGreaterThan(0);
+  });
+
+  it("leaves excluded generated files out of the changed files, and the Stop hook accepts the pass", async () => {
+    await takeBaseline();
+    applyAfter();
+    fs.appendFileSync(path.join(tmp, "flagrm.config.yaml"), "exclude: ['graphify-out/**']\n");
+    fs.mkdirSync(path.join(tmp, "graphify-out"));
+    fs.writeFileSync(path.join(tmp, "graphify-out", "graph.json"), "{}");
+    // A full run (the hook rejects --skip), with no commands to run.
+    const noCommands = (c: ToolConfig) => {
+      for (const p of c.projects) Object.assign(p, { build: false, test: false });
+    };
+    const report = await verify({ skip: [] }, noCommands);
+    expect(report.status).toBe("pass");
+    expect(report.skipped).toEqual([]);
+    expect(report.changedFiles?.filter((f) => f.startsWith("graphify-out/") || f === "flagrm.config.yaml")).toEqual([]);
+    fs.writeFileSync(path.join(tmp, "graphify-out", "graph.json"), '{"regenerated":true}');
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    fs.appendFileSync(path.join(tmp, "backend", "Shop.sln"), "\n");
+    expect(stopDecision(tmp, {}).block).toBe(true);
+  });
+
+  it("takes the fingerprint the Stop hook takes, even with --exclude on the command line", async () => {
+    await takeBaseline();
+    applyAfter();
+    fs.mkdirSync(path.join(tmp, "graphify-out"));
+    fs.writeFileSync(path.join(tmp, "graphify-out", "graph.json"), "{}");
+    const cliExclude = (c: ToolConfig) => {
+      for (const p of c.projects) Object.assign(p, { build: false, test: false });
+      c.exclude.push("graphify-out/**");
+    };
+    const report = await verify({ skip: [] }, cliExclude);
+    expect(report.status).toBe("pass");
+    expect(report.changedFiles?.filter((f) => f.startsWith("graphify-out/"))).toEqual([]);
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
   });
 
   it("fails on unused code the removal left in a changed TypeScript file", async () => {
@@ -332,7 +369,7 @@ describe("verify on the realistic fixture", () => {
       applyAfter();
       const report = await verify({ skip: ["build"] }, unignoredReport);
       expect(fs.existsSync(path.join(tmp, "frontend", "report.txt"))).toBe(true);
-      expect(report.fingerprint).toBe(treeFingerprint(tmp));
+      expect(report.fingerprint).toBe(treeFingerprint(tmp, changeFilterAt(tmp)));
     });
 
     it("warns about a changed test file none of whose tests ran", async () => {

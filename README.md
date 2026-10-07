@@ -100,9 +100,9 @@ of these reasons is a warning, for the agent to explain in its notes.
    the flag, and repeats `flagrm verify <flag>` until it passes.
 3. **The Stop hook** (Claude Code) keeps the agent from finishing while a
    removal is in progress and not verified. In progress means a file git
-   tracks changed on top of the baseline commit (changes to
-   `flagrm.config.yaml` and untracked files don't count, so a removal paused
-   on a question to the user doesn't block), or the last verify used `--skip`.
+   tracks changed on top of the baseline commit (untracked files and
+   flagrm's own setup files don't count, so a removal paused on a question to
+   the user doesn't block), or the last verify used `--skip`.
 4. **`/flagrm-verify <flag>`** runs `flagrm verify <flag> --md` and adds notes
    and a commit message.
 
@@ -186,6 +186,16 @@ already failed before the removal only warns. Only files written during the run 
 a test runner left in watch mode. `tools` lists the AI coding tools whose files
 `init` and `update` manage (`claude-code`, `copilot`, `codex`); dropping one
 leaves its files in place, and `init` names them so you can delete them.
+
+`exclude` also marks what isn't part of a removal: paths matching it (relative
+to the config file or to a project's path) are left out of verify's changed
+files, `baseline --force` and the Stop hook, so generated output such as
+`graphify-out/` that changes during a session doesn't invalidate a passing
+verify. flagrm's own setup files never count as part of a removal:
+`flagrm.config.yaml`, `.gitignore`, `.claude/settings.json`, the installed
+`flagrm-*` skills and prompt files, `AGENTS.md` and `flagrm.slnf`. An
+`--exclude` on the command line affects verify's changed files but not the
+Stop hook, which only reads the config file.
 
 ### When the machine can't build everything
 

@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Workspace } from "../adapter.js";
 import { flagDir, readBaseline, runChecks, verifyPath } from "../baseline.js";
+import { changeFilter, changeFilterAt } from "../change-filter.js";
 import { configChanges as configChangesSince, configSnapshot } from "../config-snapshot.js";
 import { changedFilesSince, gitState, treeFingerprint } from "../git.js";
 import {
@@ -43,13 +44,17 @@ export async function verifyFlag(
   // Take the git state before running commands: their output (bin/, test
   // results) is not part of the change under review.
   const git = gitState(root);
-  const changedFiles = baseline.git.sha ? changedFilesSince(root, baseline.git.sha) : undefined;
+  // flagrm's setup files and `exclude`d paths (the config's and --exclude) aren't part of the removal.
+  const ignore = changeFilter(projects[0]?.ctx.config);
+  const changedFiles = baseline.git.sha ? changedFilesSince(root, baseline.git.sha, ignore) : undefined;
 
   const only = [...(skip.has("build") ? [] : ["build" as const]), ...(skip.has("tests") ? [] : ["test" as const])];
   const runs = only.length ? await runChecks(projects, path.join(flagDir(root, flag), "verify"), only) : [];
   // The fingerprint, though, is the tree the Stop hook will see next, so take it
   // after the commands: a test report they write outside .gitignore is part of it.
-  const fingerprint = treeFingerprint(root);
+  // The Stop hook compares it with its own, so take it exactly as the hook does: from the config file
+  // alone, without --exclude, which the hook can't know.
+  const fingerprint = treeFingerprint(root, changeFilterAt(root));
 
   const configChanges = configChangesSince(baseline.config, configSnapshot(projects));
   const v: VerifyContext = { root, flag, projects, baseline, changedFiles, runs, configChanges };

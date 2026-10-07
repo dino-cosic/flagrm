@@ -17,6 +17,7 @@ import {
   validateAgentNames,
   writeBaseline,
 } from "./core/baseline.js";
+import { changeFilter } from "./core/change-filter.js";
 import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
 import { projectCommands } from "./core/config-snapshot.js";
 import { runDoctor } from "./core/doctor.js";
@@ -145,7 +146,7 @@ addCommonOptions(
         const exists = fs.existsSync(baselinePath(root, flag));
         if (exists && opts.force) {
           const testResults = projects.flatMap(({ adapter, ctx }) => projectCommands(adapter, ctx).testResults ?? []);
-          assertNoEditsSinceBaseline(root, flag, testResults);
+          assertNoEditsSinceBaseline(root, flag, testResults, changeFilter(projects[0]?.ctx.config));
         }
         if (exists && !opts.force) {
           if (added.length === 0) {

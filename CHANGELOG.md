@@ -17,6 +17,12 @@ contain breaking changes.
   compared by name and tests that already failed before the removal only
   warn. `flagrm scope --write` writes that `testResults` out along with the
   test command, and no longer folds long commands over two lines.
+- flagrm's own setup files (`flagrm.config.yaml`, `.gitignore`,
+  `.claude/settings.json`, the installed `flagrm-*` skills and prompt files,
+  `AGENTS.md`, `flagrm.slnf`) and paths matching `exclude` no longer count as
+  part of a removal: verify's changed files, `baseline --force` and the Stop
+  hook ignore them, so generated output such as `graphify-out/` no longer
+  invalidates a passing verify.
 
 ### Added
 

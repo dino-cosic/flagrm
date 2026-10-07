@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flagDir, verifyPath, writeBaseline } from "../src/core/baseline.js";
+import { changeFilterAt } from "../src/core/change-filter.js";
 import { gitState, treeFingerprint } from "../src/core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "../src/core/hook.js";
 
@@ -18,7 +19,10 @@ const edit = (text: string) => fs.writeFileSync(path.join(tmp, "a.txt"), text);
 const baseline = (flag = "NewCheckout") => writeBaseline(tmp, flag, [], gitState(tmp));
 const verified = (status: "pass" | "fail", flag = "NewCheckout", skipped: string[] = []) => {
   fs.mkdirSync(flagDir(tmp, flag), { recursive: true });
-  fs.writeFileSync(verifyPath(tmp, flag), JSON.stringify({ flag, status, fingerprint: treeFingerprint(tmp), skipped }));
+  fs.writeFileSync(
+    verifyPath(tmp, flag),
+    JSON.stringify({ flag, status, fingerprint: treeFingerprint(tmp, changeFilterAt(tmp)), skipped }),
+  );
 };
 
 beforeEach(() => {
@@ -52,6 +56,40 @@ describe("stopDecision", () => {
     fs.writeFileSync(path.join(tmp, "TestResults", "run.trx"), "<TestRun/>");
     fs.writeFileSync(path.join(tmp, "flagrm.slnf"), "{}");
     expect(stopDecision(tmp, {})).toEqual({ block: false });
+  });
+
+  it("allows when only flagrm's setup files changed since the baseline", () => {
+    fs.mkdirSync(path.join(tmp, ".claude"));
+    fs.writeFileSync(path.join(tmp, ".claude", "settings.json"), "{}\n");
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "x\n");
+    commit("setup");
+    baseline();
+    fs.writeFileSync(path.join(tmp, ".claude", "settings.json"), '{"hooks":{}}\n');
+    fs.writeFileSync(path.join(tmp, "AGENTS.md"), "y\n");
+    fs.appendFileSync(path.join(tmp, ".gitignore"), "bin/\n");
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
+  });
+
+  it("allows once verify passed while a generated file matching exclude changes", () => {
+    fs.writeFileSync(
+      path.join(tmp, "flagrm.config.yaml"),
+      "projects:\n  - {name: svc, adapter: generic, path: .}\nexclude: ['graphify-out/**']\n",
+    );
+    commit("config");
+    baseline();
+    edit("b\n");
+    verified("pass");
+    fs.mkdirSync(path.join(tmp, "graphify-out"));
+    fs.writeFileSync(path.join(tmp, "graphify-out", "graph.json"), "{}");
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
+  });
+
+  it("blocks a new file that exclude doesn't cover, written after a passing verify", () => {
+    baseline();
+    edit("b\n");
+    verified("pass");
+    fs.writeFileSync(path.join(tmp, "new.ts"), "x\n");
+    expect(stopDecision(tmp, {}).block).toBe(true);
   });
 
   it("blocks a deleted tracked file", () => {

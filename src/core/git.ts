@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { ChangeFilter } from "./change-filter.js";
 import type { GitState } from "./types.js";
 
 /** Excludes flagrm's own output from every diff. */
@@ -33,20 +34,27 @@ export function gitState(cwd: string): GitState {
   return { sha: head.stdout.trim(), dirty: dirtyFiles.length > 0, dirtyFiles };
 }
 
-/** Files added, modified or deleted in the working tree since `sha` (tracked diff plus untracked files). */
-export function changedFilesSince(cwd: string, sha: string): string[] | undefined {
+/**
+ * Files added, modified or deleted in the working tree since `sha` (tracked
+ * diff plus untracked files), without the ones `ignore` names.
+ */
+export function changedFilesSince(cwd: string, sha: string, ignore?: ChangeFilter): string[] | undefined {
   const diff = git(cwd, "diff", "-z", "--name-only", "--no-renames", "--relative", sha, ...PATHSPEC);
   if (!diff.ok) return undefined;
-  return [...new Set([...paths(diff.stdout), ...untracked(cwd)])].sort();
+  const all = [...new Set([...paths(diff.stdout), ...untracked(cwd)])].sort();
+  return ignore ? all.filter((rel) => !ignore(rel)) : all;
 }
 
 /**
  * Tracked files modified or deleted in the working tree since `sha` (staged
- * or not); untracked files don't count. Undefined when git can't tell.
+ * or not), without the ones `ignore` names; untracked files don't count.
+ * Undefined when git can't tell.
  */
-export function trackedChangesSince(cwd: string, sha: string): string[] | undefined {
+export function trackedChangesSince(cwd: string, sha: string, ignore?: ChangeFilter): string[] | undefined {
   const diff = git(cwd, "diff", "-z", "--name-only", "--no-renames", "--relative", sha, ...PATHSPEC);
-  return diff.ok ? paths(diff.stdout).sort() : undefined;
+  if (!diff.ok) return undefined;
+  const all = paths(diff.stdout).sort();
+  return ignore ? all.filter((rel) => !ignore(rel)) : all;
 }
 
 /** A file's content at `sha`, or undefined when it did not exist there. */
@@ -55,12 +63,14 @@ export function fileAt(cwd: string, sha: string, relativePath: string): string |
   return result.ok ? result.stdout : undefined;
 }
 
-function gitWithIndex(cwd: string, index: string, ...args: string[]): { ok: boolean; stdout: string } {
+function gitWithIndex(cwd: string, index: string, args: string[], input?: string): { ok: boolean; stdout: string } {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
-    env: { ...process.env, GIT_INDEX_FILE: index },
+    input,
+    // Literal: a file named `[ab].txt` must not match `a.txt` when its path is passed back to git.
+    env: { ...process.env, GIT_INDEX_FILE: index, GIT_LITERAL_PATHSPECS: input === undefined ? undefined : "1" },
   });
   return { ok: result.status === 0, stdout: result.stdout ?? "" };
 }
@@ -73,12 +83,13 @@ function repoPrefix(cwd: string): string | undefined {
 
 /**
  * The git tree id of the working tree under `cwd` as it would be committed:
- * tracked and untracked files, not ignored ones, without `.flagrm/`. Built in a
- * temporary copy of the index, so the user's index is untouched. Committing
- * the tree doesn't change it; any edit does. Before any edit it equals
- * {@link treeAt} of HEAD.
+ * tracked and untracked files, not ignored ones, without `.flagrm/` and the
+ * paths `ignore` names. Built in a temporary copy of the index, so the user's
+ * index is untouched. Committing the tree doesn't change it; any edit does.
+ * Before any edit it equals {@link treeAt} of HEAD, as long as the ignored
+ * paths are unchanged since.
  */
-export function treeFingerprint(cwd: string): string | undefined {
+export function treeFingerprint(cwd: string, ignore?: ChangeFilter): string | undefined {
   const prefix = repoPrefix(cwd);
   if (prefix === undefined) return undefined;
   const realIndex = git(cwd, "rev-parse", "--path-format=absolute", "--git-path", "index").stdout.trim();
@@ -88,14 +99,29 @@ export function treeFingerprint(cwd: string): string | undefined {
     // Keep the index's mtime: git compares it with entry mtimes to catch same-second ("racy") edits.
     if (realIndex && fs.existsSync(realIndex)) fs.cpSync(realIndex, index, { preserveTimestamps: true });
     // Not PATHSPEC: `git add` exits 1 when an exclude pathspec names an ignored path (`.flagrm/` usually is).
-    if (!gitWithIndex(cwd, index, "add", "-A", "--", ".").ok) return undefined;
-    if (!gitWithIndex(cwd, index, "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".flagrm").ok)
+    if (!gitWithIndex(cwd, index, ["add", "-A", "--", "."]).ok) return undefined;
+    if (!gitWithIndex(cwd, index, ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".flagrm"]).ok)
       return undefined;
-    const tree = gitWithIndex(cwd, index, "write-tree", ...(prefix ? [`--prefix=${prefix}`] : []));
+    if (ignore && !dropIgnored(cwd, index, ignore)) return undefined;
+    const tree = gitWithIndex(cwd, index, ["write-tree", ...(prefix ? [`--prefix=${prefix}`] : [])]);
     return tree.ok ? tree.stdout.trim() : undefined;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Put back each path `ignore` names as it is at HEAD (or drop it, if HEAD
+ * doesn't have it), so the fingerprint doesn't see changes to it.
+ */
+function dropIgnored(cwd: string, index: string, ignore: ChangeFilter): boolean {
+  const listed = paths(gitWithIndex(cwd, index, ["ls-files", "-z"]).stdout).filter(ignore);
+  if (listed.length === 0) return true;
+  const input = `${listed.join("\0")}\0`;
+  const fromFile = ["--pathspec-from-file=-", "--pathspec-file-nul"];
+  // `reset` also drops a path HEAD doesn't have; before the first commit there is no HEAD to reset to.
+  const args = headSha(cwd) ? ["reset", "-q", "HEAD", ...fromFile] : ["rm", "-q", "--cached", ...fromFile];
+  return gitWithIndex(cwd, index, args, input).ok;
 }
 
 /** The tree id of `cwd` at commit `sha`. */
