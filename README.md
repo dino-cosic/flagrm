@@ -18,7 +18,7 @@ into. flagrm decides when the work is done.
 Angular and .NET projects work out of the box. Any other stack works through the
 generic adapter.
 
-> **Status:** flagrm is at version 0.1. Until 1.0, a minor release may contain
+> **Status:** flagrm is at version 0.3. Until 1.0, a minor release may contain
 > breaking changes.
 
 ## Requirements
@@ -111,11 +111,11 @@ of these reasons is a warning, for the agent to explain in its notes.
 | Command | What it does | Exit codes |
 |---|---|---|
 | `init` | Set up the config and `.gitignore` entry, and each chosen AI tool's files (asks, or `--tool claude-code,copilot,codex`; saved as `tools:`). Never overwrites or deletes | 0, 2 usage error |
-| `doctor` | Check the config, build and test commands, marking adapter defaults and warning about a test command without `testResults` (`--run` runs them, fails when the test command writes no readable results, and only warns about tests that already fail), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
+| `doctor` | Check the config, the build and test commands (marking adapter defaults; `--run` runs them and fails when tests write no readable `testResults`), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
 | `scope` | For each .NET project, show what the machine lacks and which projects a solution filter would leave out; `--write` creates `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build and test at it | 0 nothing missing, 1 something missing |
 | `update` | Refresh the installed skills, prompt files, `AGENTS.md` block and hook from this flagrm version, for the config's `tools:` | 0 |
 | `list` | List every feature flag in the project: definitions, configured state per environment, reference counts | 0 |
-| `baseline <flag>` | Before any edit, record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET code the names include the locals, fields, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` limits `--name` entries to one file (and records them as wrappers). `--name X --kind alias\|wrapper` adds names to an existing baseline; `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit (changes to `flagrm.config.yaml` and `testResults` files are fine); `--no-checks` skips build and tests; `--accept config,failures` acknowledges, also mid-removal, a change to the flagrm config (verify stops warning about it, and tests it leaves out still count as excluded by config) or the baseline's failing tests (listed as info, so `--strict` can pass) | 0, 2 usage error |
+| `baseline <flag>` | Before any edit, record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET code the names include the locals, fields, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` limits `--name` entries to one file (and records them as wrappers). `--name X --kind alias\|wrapper` adds names to an existing baseline; `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit; `--accept config,failures` acknowledges, also mid-removal, a config change or the baseline's failing tests so verify stops warning about them; `--no-checks` skips build and tests | 0, 2 usage error |
 | `verify <flag>` | Gate the removal with `leftovers`, `dead-code`, `build` and `tests`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings | 0 pass, 1 fail, 2 usage error |
 | `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
 
@@ -127,7 +127,7 @@ of these reasons is a warning, for the agent to explain in its notes.
 | Check | Fails when |
 |---|---|
 | `leftovers` | A recorded name (the flag literal, its constants, wrappers the agent recorded) is still in code or config. A mention in a comment is a warning, and so is a test that checks text the removal deleted from the code (a test of the OFF path that never names the flag), or deleted text whose replacement on the same line no test checks (lost ON coverage) |
-| `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files. A warning, from a text-based check, for a method, property, field or type that lost references in the diff and is now named only on its declaration line, which compilers don't report for public members (strings, templates, Razor views and config files count as references; comments don't) |
+| `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files. A method, property, field or type the removal left named only where it is declared is a warning (compilers don't report public members) |
 | `build` | A project's build command fails |
 | `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. A test that no longer runs though the diff neither deletes nor renames it and the test config is unchanged, and a changed test file none of whose tests ran, are warnings for the agent to account for |
 
@@ -176,26 +176,20 @@ path. `build` and `test` are resolved one at a time:
 | a command | that command |
 | `false` | none, not even the default |
 
-The default .NET test command writes TRX to `.flagrm/test-results/<project>/`
-and sets `testResults` to read it. A `test` command of your own sets its own
-`testResults`; `flagrm doctor` shows which commands are defaults and warns
-about a test command without `testResults`. `testResults` (JUnit XML or TRX)
-lets `verify` compare individual tests against the baseline, so a test that
-already failed before the removal only warns. Only files written during the run are read, so result files left by earlier runs don't count, and projects whose patterns overlap don't count each other's files. `timeout`
-(seconds) fails a project's build or test command that runs longer, for example
+`testResults` (JUnit XML or TRX) lets `verify` compare individual tests
+against the baseline, so a test that already failed before the removal only
+warns. Only files written during the run are read. The default .NET test
+command writes TRX to `.flagrm/test-results/<project>/` and reads it; a `test`
+command of your own needs its own `testResults`. `timeout` (seconds) fails a project's build or test command that runs longer, for example
 a test runner left in watch mode. `tools` lists the AI coding tools whose files
 `init` and `update` manage (`claude-code`, `copilot`, `codex`); dropping one
 leaves its files in place, and `init` names them so you can delete them.
 
-`exclude` also marks what isn't part of a removal: paths matching it (relative
-to the config file or to a project's path) are left out of verify's changed
-files, `baseline --force` and the Stop hook, so generated output such as
-`graphify-out/` that changes during a session doesn't invalidate a passing
-verify. flagrm's own setup files never count as part of a removal:
-`flagrm.config.yaml`, `.gitignore`, `.claude/settings.json`, the installed
-`flagrm-*` skills and prompt files, `AGENTS.md` and `flagrm.slnf`. An
-`--exclude` on the command line affects verify's changed files but not the
-Stop hook, which only reads the config file.
+Paths matching `exclude` (relative to the config file or a project's path; a
+directory excludes everything under it) and flagrm's own setup files don't
+count as part of a removal, so generated output such as `graphify-out/` that
+changes during a session doesn't invalidate a passing verify or block the Stop
+hook. `--exclude` on the command line doesn't reach the Stop hook.
 
 ### When the machine can't build everything
 
@@ -206,7 +200,7 @@ Testcontainers. A missing SDK has to be installed. For `cargo` or Docker,
 `flagrm scope` shows which projects a solution filter would leave out: those
 projects and everything that references them. `flagrm scope --write` creates
 `flagrm.slnf` next to the solution, keeps it out of git, and points the
-project's `build` and `test` at it (writing out a default `testResults` too). The baseline and verify then run on what
+project's `build` and `test` at it. The baseline and verify then run on what
 the machine can build; edits to the left-out projects aren't checked by
 build or tests, so mention them in the PR.
 

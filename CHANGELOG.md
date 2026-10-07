@@ -7,6 +7,8 @@ contain breaking changes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-07
+
 ### Changed
 
 - **Breaking:** `build` and `test` each fall back to the adapter's default on
@@ -22,7 +24,8 @@ contain breaking changes.
   `AGENTS.md`, `flagrm.slnf`) and paths matching `exclude` no longer count as
   part of a removal: verify's changed files, `baseline --force` and the Stop
   hook ignore them, so generated output such as `graphify-out/` no longer
-  invalidates a passing verify.
+  invalidates a passing verify. An `exclude` entry that names a directory
+  covers everything under it, as it already did for scanning.
 - `flagrm doctor` and the `/flagrm-remove` precondition accept a tree whose
   only uncommitted files are flagrm's setup files or paths matching `exclude`,
   so a freshly run `flagrm init` no longer blocks the first removal.
@@ -186,6 +189,7 @@ removes the flag through the `flagrm-remove` skill, and flagrm checks the result
   `doctor` warns about an incremental `dotnet build`, which hides existing
   warnings from the dead-code comparison.
 
+[0.3.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.3.0
 [0.2.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.2.0
 [0.1.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.1.1

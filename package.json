@@ -1,6 +1,6 @@
 {
   "name": "flagrm",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Guardrails for removing feature flags with AI coding agents (Claude Code, Copilot, Codex): skills, a baseline, a verify gate and a Stop hook.",
   "type": "module",
   "license": "Apache-2.0",
