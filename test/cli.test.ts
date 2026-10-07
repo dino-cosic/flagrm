@@ -156,6 +156,28 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(stderr).toContain("already exists; pass --name to add names, or --force to start over");
   });
 
+  it("baseline --accept records the acknowledgement, and refuses to mix with other changes", () => {
+    const { status, stdout } = runCli(["baseline", "NewCheckout", "--accept", "config,failures", "--json"], dir);
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ flag: "NewCheckout", acceptedFailures: true });
+    const file = JSON.parse(fs.readFileSync(path.join(dir, ".flagrm", "NewCheckout", "baseline.json"), "utf8"));
+    expect(file.acceptedConfig.projects.map((p: { name: string }) => p.name)).toEqual(["web", "api"]);
+    expect(runCli(["baseline", "NewCheckout", "--accept", "config"], dir).stdout).toContain(
+      "accepted: the config as of now, the baseline's failing tests",
+    );
+    for (const extra of [["--force"], ["--name", "X"], ["--no-checks"]]) {
+      const r = runCli(["baseline", "NewCheckout", "--accept", "config", ...extra], dir);
+      expect(r.status, extra.join(" ")).toBe(2);
+      expect(r.stderr).toContain("--accept only records an acknowledgement");
+    }
+    const bad = runCli(["baseline", "NewCheckout", "--accept", "tests"], dir);
+    expect(bad.status).toBe(2);
+    expect(bad.stderr).toContain('--accept takes config, failures; not "tests"');
+    const none = runCli(["baseline", "Missing", "--accept", "config"], dir);
+    expect(none.status).toBe(2);
+    expect(none.stderr).toContain("No baseline for Missing");
+  });
+
   it("baseline --force refuses to start over once the code is edited", () => {
     const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ffr-force-")));
     try {

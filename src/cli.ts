@@ -6,6 +6,7 @@ import pc from "picocolors";
 import { realProbes } from "./adapters/dotnet/setup.js";
 import type { Workspace } from "./core/adapter.js";
 import {
+  acceptBaseline,
   addNames,
   assertNoEditsSinceBaseline,
   baselinePath,
@@ -13,6 +14,7 @@ import {
   discoverFlag,
   flagDir,
   mergeNames,
+  parseAccept,
   runChecks,
   validateAgentNames,
   writeBaseline,
@@ -119,12 +121,42 @@ addCommonOptions(
     "check the --name entries only in this file (a local, parameter or field; implies --kind wrapper)",
   )
   .option("--force", "start over: replace the baseline, only while the code is unedited since it")
+  .option(
+    "--accept <what>",
+    "acknowledge without starting over, also mid-removal: config (verify stops warning about changes to the flagrm " +
+      "config so far), failures (the baseline's failing tests); comma-separated",
+  )
   .action(
     async (
       flag: string,
-      opts: CommonOptions & { checks: boolean; name: string[]; kind?: string; file?: string; force?: boolean },
+      opts: CommonOptions & {
+        checks: boolean;
+        name: string[];
+        kind?: string;
+        file?: string;
+        force?: boolean;
+        accept?: string;
+      },
     ) => {
       const { root, projects } = loadWorkspace(opts);
+      if (opts.accept !== undefined) {
+        if (opts.force || opts.name.length || opts.file || opts.kind || !opts.checks) {
+          fail(
+            new Error(
+              "--accept only records an acknowledgement; run it without --force, --name, --file, --kind and --no-checks.",
+            ),
+          );
+        }
+        let accepted: ReturnType<typeof acceptBaseline>;
+        try {
+          accepted = acceptBaseline(root, flag, projects, parseAccept(opts.accept));
+        } catch (err) {
+          fail(err);
+        }
+        if (opts.json) console.log(JSON.stringify(baselineSummary(accepted.baseline, accepted.file), null, 2));
+        else printBaseline(accepted.baseline, accepted.file);
+        return;
+      }
       // Only wrappers are matched per file: a name scoped with --file is a local, parameter or field.
       const kind = opts.kind ?? (opts.file ? "wrapper" : "alias");
       if (kind !== "alias" && kind !== "wrapper") {

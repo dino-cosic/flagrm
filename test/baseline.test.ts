@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { dotnetAdapter } from "../src/adapters/dotnet/index.js";
 import { genericAdapter } from "../src/adapters/generic/index.js";
 import {
+  acceptBaseline,
   assertNoEditsSinceBaseline,
   baselinePath,
   baselineSummary,
   flagDir,
+  parseAccept,
   readBaseline,
   runCheck,
   runChecks,
@@ -69,6 +71,44 @@ describe("writeBaseline", () => {
       names: [],
     });
     expect(Date.parse(written.createdAt)).not.toBeNaN();
+  });
+});
+
+describe("acceptBaseline", () => {
+  it("parses --accept, refusing anything but config and failures", () => {
+    expect(parseAccept("config, failures,config")).toEqual(["config", "failures"]);
+    expect(() => parseAccept("config,tests")).toThrow(/--accept takes config, failures; not "tests"/);
+    expect(() => parseAccept(" , ")).toThrow(/--accept takes config, failures/);
+  });
+
+  it("records the current config and accepted failures, leaving git, checks and names as they were", () => {
+    const ctx = projectContext("generic", tmp, { name: "svc", build: "make" });
+    const checks = [{ project: "svc", check: "build" as const, command: "make", exitCode: 0, durationMs: 1 }];
+    const names = [{ name: "F", kind: "literal" as const, source: "discovery" as const }];
+    const { baseline: before } = writeBaseline(
+      tmp,
+      "F",
+      [{ adapter: genericAdapter, ctx }],
+      { sha: "abc", dirty: false },
+      checks,
+      names,
+    );
+    const changed = projectContext("generic", tmp, { name: "svc", build: "make all" });
+    const { baseline: after } = acceptBaseline(
+      tmp,
+      "F",
+      [{ adapter: genericAdapter, ctx: changed }],
+      ["config", "failures"],
+    );
+    expect(after).toMatchObject({ git: before.git, checks: before.checks, names: before.names, config: before.config });
+    expect(after.acceptedConfig?.projects[0].build?.command).toBe("make all");
+    expect(after.acceptedFailures).toBe(true);
+    expect(readBaseline(tmp, "F").baseline).toEqual(after);
+    expect(baselineSummary(after, "f")).not.toHaveProperty("acceptedConfig");
+  });
+
+  it("refuses without a baseline", () => {
+    expect(() => acceptBaseline(tmp, "None", [], ["config"])).toThrow(UsageError);
   });
 });
 

@@ -96,6 +96,14 @@ describe("configChanges", () => {
   });
 });
 
+describe("configChanges and tools:", () => {
+  it("ignores a change to tools:, which only says which agents init sets up", () => {
+    const before = snapshot();
+    const now = snapshot(`tools: [claude-code]\n${CONFIG}`);
+    expect(configChanges(before, now)).toEqual([]);
+  });
+});
+
 describe("lineDiff", () => {
   it("lists removed and added lines in order, capped", () => {
     expect(lineDiff("a\nb\nc", "a\nB\nc\nd")).toEqual(["- b", "+ B", "+ d"]);

@@ -243,6 +243,14 @@ export interface Baseline {
   names: RecordedName[];
   /** The configuration the baseline was taken with; `verify` warns about changes to it. */
   config?: ConfigSnapshot;
+  /**
+   * The configuration accepted with `baseline --accept config`: `verify` warns
+   * only about changes since, while tests the change excludes still count as
+   * excluded by config (compared with `config`).
+   */
+  acceptedConfig?: ConfigSnapshot;
+  /** `baseline --accept failures`: the baseline's failing tests are accepted, and `verify` lists them as info. */
+  acceptedFailures?: boolean;
   /** Names the flag's value travels through that are too generic to record; confirm them with `--name`. */
   suggestedNames?: FlagFlowName[];
   /** Tests that pass a `true`/`false` literal for a parameter the flag's value is passed as. */

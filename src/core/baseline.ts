@@ -53,7 +53,7 @@ const MAX_FAILED_NAMES = 20;
  * `baseline.json` keeps everything.
  */
 export function baselineSummary(baseline: Baseline, file: string): Record<string, unknown> {
-  const { config: _config, checks, ...rest } = baseline;
+  const { config: _config, acceptedConfig: _accepted, checks, ...rest } = baseline;
   return {
     ...rest,
     ...(checks
@@ -393,6 +393,42 @@ export function assertNoEditsSinceBaseline(
   throw new UsageError(
     `The code changed since the baseline of ${flag} (${shown}), so --force would record a half-done removal. ${fix}`,
   );
+}
+
+export type Acceptance = "config" | "failures";
+
+/** Parse `--accept config,failures`; throws on anything else, or nothing. */
+export function parseAccept(value: string): Acceptance[] {
+  const items = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (items.length === 0) throw new UsageError("--accept takes config, failures; got nothing.");
+  for (const item of items) {
+    if (item !== "config" && item !== "failures") {
+      throw new UsageError(`--accept takes config, failures; not "${item}".`);
+    }
+  }
+  return [...new Set(items)] as Acceptance[];
+}
+
+/**
+ * Record the user's acknowledgement: the current configuration (verify then
+ * warns only about later changes) and/or the baseline's failing tests (listed
+ * as info). The git state, checks and names stay as they are, so this is
+ * safe mid-removal, unlike `--force`.
+ */
+export function acceptBaseline(
+  root: string,
+  flag: string,
+  projects: Workspace,
+  what: Acceptance[],
+): { baseline: Baseline; file: string } {
+  const { baseline } = readBaseline(root, flag);
+  const next: Baseline = { ...baseline };
+  if (what.includes("config")) next.acceptedConfig = configSnapshot(projects);
+  if (what.includes("failures")) next.acceptedFailures = true;
+  return saveBaseline(root, next);
 }
 
 /** Append names to an existing baseline; its git state and checks stay as they are. */

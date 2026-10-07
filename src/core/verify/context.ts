@@ -13,8 +13,10 @@ export interface VerifyContext {
   changedFiles?: string[];
   /** Build/test commands this verify ran. */
   runs: CheckRun[];
-  /** How the configuration differs from the baseline's. */
+  /** How the configuration differs from the baseline's, or from the one accepted since (`--accept config`): what warns. */
   configChanges: ConfigChange[];
+  /** How it differs from the baseline's original configuration: what still explains tests that no longer run. */
+  originalConfigChanges: ConfigChange[];
 }
 
 /** Warnings about the configuration changes that affect check `id`. */

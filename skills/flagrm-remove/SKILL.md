@@ -30,7 +30,7 @@ Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx f
 
 `flagrm baseline <flag> --json` records the git commit, build and test results and the flag's `names[]`.
 A `checks[]` entry with a non-zero `exitCode` and a `failure`: a setup problem. Show the user `failure.message` (and `flagrm scope`); once fixed, rerun with `--force`.
-Without `failure`: a build, stop. Tests: stop if the failures (`results.failedTests`) could cover the flag's code; else ask the user to accept them as known.
+Without `failure`: a build, stop. Tests: stop if the failures (`results.failedTests`) could cover the flag's code; else ask the user to accept them as known, and on a yes run `flagrm baseline <flag> --accept failures`.
 
 ## 3. Find every usage
 
@@ -85,4 +85,4 @@ Suggest `/flagrm-verify <flag>` for the overview and commit message. Don't commi
 - Never lift code out of the OFF path into live code.
 - Match the file's formatting; don't refactor unrelated code.
 - Never edit `.flagrm/`. Rerun `flagrm baseline <flag>` only with `--name`, or with `--force` before your first edit (it refuses after).
-- Never `--skip` a failing check, and never change a test's expected value or the build/test commands to pass.
+- Never `--skip` a failing check, and never change a test's expected value or the build/test commands to pass. If the user changes the config mid-removal (say, to leave out tests that need services), run `flagrm baseline <flag> --accept config` once they confirm.

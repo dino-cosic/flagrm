@@ -56,8 +56,10 @@ export async function verifyFlag(
   // alone, without --exclude, which the hook can't know.
   const fingerprint = treeFingerprint(root, changeFilterAt(root));
 
-  const configChanges = configChangesSince(baseline.config, configSnapshot(projects));
-  const v: VerifyContext = { root, flag, projects, baseline, changedFiles, runs, configChanges };
+  const now = configSnapshot(projects);
+  const configChanges = configChangesSince(baseline.acceptedConfig ?? baseline.config, now);
+  const originalConfigChanges = baseline.acceptedConfig ? configChangesSince(baseline.config, now) : configChanges;
+  const v: VerifyContext = { root, flag, projects, baseline, changedFiles, runs, configChanges, originalConfigChanges };
   const tests = compareTests(v);
   const run: Record<Exclude<CheckId, "leftovers">, () => CheckResult> = {
     "dead-code": () => deadCodeCheck(v),

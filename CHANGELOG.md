@@ -35,6 +35,12 @@ contain breaking changes.
   `testResults`, so a broken setup shows up before a removal instead of
   halfway through, and only warns when tests already fail: the baseline
   records those as known failures.
+- `flagrm baseline <flag> --accept config,failures` acknowledges a change to
+  the flagrm config or the baseline's failing tests, also mid-removal, when
+  `--force` is no longer allowed. verify stops warning about the accepted
+  config (tests it leaves out still count as excluded by config) and lists
+  accepted known failures as info, so `--strict` can pass. A changed `tools:`
+  no longer warns at all.
 
 ## [0.2.1] - 2026-10-04
 

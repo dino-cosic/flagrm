@@ -102,6 +102,11 @@ export function printBaseline(baseline: Baseline, file: string): void {
     );
     console.log(`  names: ${pc.dim(names.join(", "))}`);
   }
+  const accepted = [
+    baseline.acceptedConfig && "the config as of now",
+    baseline.acceptedFailures && "the baseline's failing tests",
+  ].filter(Boolean);
+  if (accepted.length) console.log(`  accepted: ${pc.dim(accepted.join(", "))}`);
   for (const n of baseline.suggestedNames ?? []) {
     console.log(
       `  ${pc.yellow("suggested")} ${n.name} ${pc.dim(`(${n.kind})`)} ${pc.cyan(`${rel(n.file)}:${n.line}`)} ` +

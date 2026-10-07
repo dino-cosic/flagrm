@@ -99,7 +99,7 @@ export function compareTests(v: VerifyContext): TestComparison[] {
           sha: v.baseline.git.sha,
           changedFiles: v.changedFiles,
           names: v.baseline.names,
-          testConfigChanged: v.configChanges.some((c) => c.check === "tests" && c.project === run.project),
+          testConfigChanged: v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project),
         }),
       );
     }
@@ -122,9 +122,14 @@ function splitBaselineFailures(v: VerifyContext, run: CheckRun): { known: string
 
 /**
  * A failed test run fails the check, unless every failed test already failed
- * at the baseline: those are known failures, and only warn.
+ * at the baseline: those are known failures, and only warn, or are only
+ * listed once the user accepted them (`baseline --accept failures`).
  */
-function failedTestFindings(run: CheckRun, failures: { known: string[]; new: string[] } | undefined): CheckFinding[] {
+function failedTestFindings(
+  run: CheckRun,
+  failures: { known: string[]; new: string[] } | undefined,
+  accepted = false,
+): CheckFinding[] {
   const list = (names: string[], prefix: string): CheckFinding[] =>
     shortTestNames(names)
       .slice(0, 20)
@@ -135,8 +140,8 @@ function failedTestFindings(run: CheckRun, failures: { known: string[]; new: str
   if (failures.new.length === 0) {
     return [
       {
-        severity: "warn",
-        message: `${plural(failures.known.length, "test fails", "tests fail")}, as at the baseline (known failures; log: ${run.log})`,
+        severity: accepted ? "info" : "warn",
+        message: `${plural(failures.known.length, "test fails", "tests fail")}, as at the baseline (known failures${accepted ? ", accepted" : ""}; log: ${run.log})`,
         project: run.project,
         file: run.log,
       },
@@ -174,7 +179,7 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
       const failures = splitBaselineFailures(v, run);
       if (failures?.new.length !== 0) failed++;
       known += failures?.known.length ?? 0;
-      findings.push(...failedTestFindings(run, failures));
+      findings.push(...failedTestFindings(run, failures, v.baseline.acceptedFailures));
       if (run.failure) findings.push(setupFinding(run));
     }
     const entry = v.projects.find(({ ctx }) => ctx.name === run.project);

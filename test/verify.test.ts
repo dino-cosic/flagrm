@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { addNames, discoverNames, runChecks, UsageError, writeBaseline } from "../src/core/baseline.js";
+import { acceptBaseline, addNames, discoverNames, runChecks, UsageError, writeBaseline } from "../src/core/baseline.js";
 import { changeFilterAt } from "../src/core/change-filter.js";
 import { loadConfig, type ToolConfig } from "../src/core/config.js";
 import { gitState, treeFingerprint } from "../src/core/git.js";
@@ -308,6 +308,39 @@ describe("verify on the realistic fixture", () => {
       ]);
     });
 
+    it("stops warning about a config change once it is accepted, and still explains the tests it excludes", async () => {
+      results(junit(ON, OFF, OTHER));
+      await takeBaseline(withTests, true);
+      applyAfter();
+      results(junit(ON, OFF));
+      const narrower = (config: ToolConfig) => {
+        withTests(config);
+        const web = config.projects.find((p) => p.name === "web");
+        if (web) web.test = `${web.test} checkout`;
+      };
+      const before = await verify({ skip: ["build"] }, narrower);
+      expect(findings(before, "tests")).toEqual([
+        expect.stringMatching(/^warn test command changed since the baseline/),
+      ]);
+      expect(before.tests[0].excludedByConfig).toEqual([expect.stringContaining(OTHER)]);
+
+      acceptBaseline(tmp, FLAG, workspace(narrower), ["config"]);
+      const after = await verify({ skip: ["build"] }, narrower);
+      expect(findings(after, "tests")).toEqual([]);
+      expect(status(after).tests).toBe("pass");
+      expect(after.tests[0]).toMatchObject({ excludedByConfig: [expect.stringContaining(OTHER)], unexplained: [] });
+
+      // A change after the accepted one warns again.
+      const narrowest = (config: ToolConfig) => {
+        narrower(config);
+        const web = config.projects.find((p) => p.name === "web");
+        if (web) web.test = `${web.test} again`;
+      };
+      expect(findings(await verify({ skip: ["build"] }, narrowest), "tests")).toEqual([
+        expect.stringMatching(/^warn test command changed since the baseline: `node .* checkout` → `node .* again`$/),
+      ]);
+    });
+
     describe("failing tests", () => {
       // Like withTests, but the command exits 1 when the results it copies contain a failure.
       const failing = (config: ToolConfig) => {
@@ -318,6 +351,31 @@ describe("verify on the realistic fixture", () => {
       };
       const fail = (name: string) => testcase(name, `<failure message="boom"/>`);
       const KNOWN = "formats prices in the user's locale";
+
+      it("lists accepted known failures as info, so --strict can pass", async () => {
+        results(junit(fail(KNOWN), ON, OFF, OTHER));
+        await takeBaseline(failing, true);
+        applyAfter();
+        acceptBaseline(tmp, FLAG, workspace(failing), ["failures"]);
+        const report = await verify({ skip: ["build"], strict: true }, failing);
+        expect(status(report).tests).toBe("pass");
+        expect(findings(report, "tests")).toEqual([]);
+        const tests = report.checks.find((c) => c.id === "tests");
+        expect(tests?.findings.map((f) => f.message)).toContainEqual(
+          expect.stringContaining("known failures, accepted"),
+        );
+        expect(report.status).toBe("pass");
+      });
+
+      it("still fails a new failure after known failures were accepted", async () => {
+        results(junit(fail(KNOWN), ON, OFF, OTHER));
+        await takeBaseline(failing, true);
+        applyAfter();
+        acceptBaseline(tmp, FLAG, workspace(failing), ["failures"]);
+        results(junit(fail(KNOWN), fail(ON), OFF, OTHER));
+        const report = await verify({ skip: ["build"] }, failing);
+        expect(status(report).tests).toBe("fail");
+      });
 
       it("passes with a warning when every failure already failed at the baseline", async () => {
         results(junit(fail(KNOWN), ON, OFF, OTHER));
