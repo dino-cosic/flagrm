@@ -103,8 +103,8 @@ export function readBaseline(root: string, flag: string): { baseline: Baseline; 
  * Run one shell command inside a project, streaming its output to `logFile`
  * (no buffer limit, stdout and stderr interleaved as printed). A command that
  * can't start, is killed or outlives the project's `timeout` fails with the
- * reason at the end of the log. A test run also reads the project's
- * `testResults` files written during it.
+ * reason at the end of the log. A test run also reads the `testResults`
+ * files (absolute path or glob) written during it.
  */
 export async function runCheck(
   ctx: ProjectContext,
@@ -112,6 +112,7 @@ export async function runCheck(
   command: string,
   logFile: string,
   claimed?: ClaimedResults,
+  testResults?: string,
 ): Promise<CheckRun> {
   const started = Date.now();
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
@@ -137,10 +138,7 @@ export async function runCheck(
     const problem = environmentProblem(fs.readFileSync(logFile, "utf8"), ctx.root);
     if (problem) run.failure = { kind: "environment", message: problem };
   }
-  const results =
-    check === "test" && ctx.project.testResults
-      ? collectTestResults(ctx.project.testResults, started, claimed)
-      : undefined;
+  const results = check === "test" && testResults ? collectTestResults(testResults, started, claimed) : undefined;
   if (results) run.results = results;
   return run;
 }
@@ -218,9 +216,9 @@ export function incrementalBuildGap(adapter: Adapter, build: string | undefined)
 }
 
 /**
- * Build then test every project. A project that configures `build` and/or
- * `test` runs exactly those; one that configures neither gets the adapter's
- * defaults (`dotnet build --no-incremental`, `npx ng test`, ...).
+ * Build then test every project, each command resolved on its own (see
+ * `projectCommands`): the configured one, none for `false`, else the
+ * adapter's default (`dotnet build --no-incremental`, `npx ng test`, ...).
  */
 export async function runChecks(
   projects: Workspace,
@@ -235,7 +233,8 @@ export async function runChecks(
     for (const check of only) {
       const command = commands[check];
       if (!command) continue;
-      runs.push(await runCheck(ctx, check, command, path.join(logDir, `${ctx.name}.${check}.log`), claimed));
+      const log = path.join(logDir, `${ctx.name}.${check}.log`);
+      runs.push(await runCheck(ctx, check, command, log, claimed, commands.testResults));
     }
   }
   return runs;

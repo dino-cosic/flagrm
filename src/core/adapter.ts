@@ -30,8 +30,8 @@ export interface Adapter {
    * with a `true`/`false` literal.
    */
   flow?(ctx: ProjectContext, flags: FlagRef[]): FlagFlow;
-  /** Build/test commands to use when the project doesn't configure its own. */
-  defaultCommands?(ctx: ProjectContext): { build?: string; test?: string };
+  /** Build/test commands (and where the default test writes results) for keys the project doesn't configure. */
+  defaultCommands?(ctx: ProjectContext): { build?: string; test?: string; testResults?: string };
   /**
    * Compiler "unused" diagnostics (unused locals, imports, private members)
    * in the changed files that the baseline did not already have. Undefined

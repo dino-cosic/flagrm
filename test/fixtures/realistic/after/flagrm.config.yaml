@@ -7,6 +7,7 @@ projects:
     # `watch` is this app's signal-returning flag accessor (FeatureFlagService.watch).
     methods: [isEnabled, watch]
     build: npm run typecheck
+    test: false   # no browser in CI
   - name: api
     adapter: dotnet
     path: ./backend

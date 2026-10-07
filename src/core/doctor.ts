@@ -140,7 +140,8 @@ async function configChecks(
         add("ok", `${ctx.name}: ${check} command \`${command}\``);
         continue;
       }
-      const run = await runCheck(ctx, check, command, path.join(root, ".flagrm", "doctor", `${ctx.name}.${check}.log`));
+      const log = path.join(root, ".flagrm", "doctor", `${ctx.name}.${check}.log`);
+      const run = await runCheck(ctx, check, command, log, undefined, commands.testResults);
       if (run.exitCode === 0) {
         add("ok", `${ctx.name}: \`${command}\` passed`);
         continue;

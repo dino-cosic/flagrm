@@ -104,8 +104,21 @@ describe("runChecks", () => {
     expect(fs.readFileSync(runs[1].log!, "utf8")).toContain("boom");
   });
 
-  it("runs only the configured command when a project configures one of the two", async () => {
+  it("keeps the adapter's default for the command a project doesn't configure", async () => {
     const ctx = projectContext("dotnet", tmp, { name: "api", build: `node -e ""` });
+    const adapter = {
+      ...dotnetAdapter,
+      defaultCommands: () => ({ build: "exit 9", test: `node -e "process.exit(3)"` }),
+    };
+    const runs = await runChecks([{ adapter, ctx }], path.join(tmp, ".flagrm", "F"));
+    expect(runs.map((r) => [r.check, r.command, r.exitCode])).toEqual([
+      ["build", `node -e ""`, 0],
+      ["test", `node -e "process.exit(3)"`, 3],
+    ]);
+  });
+
+  it("runs no command, not even the default, for one configured as false", async () => {
+    const ctx = projectContext("dotnet", tmp, { name: "api", build: `node -e ""`, test: false });
     const runs = await runChecks([{ adapter: dotnetAdapter, ctx }], path.join(tmp, ".flagrm", "F"));
     expect(runs.map((r) => r.check)).toEqual(["build"]);
   });
@@ -188,6 +201,7 @@ describe("runCheck", () => {
     const junit = `<testsuite><testcase classname="A" name="one"/><testcase classname="A" name="two"><failure/></testcase></testsuite>`;
     const ctx = projectContext("angular", path.join(tmp, "web"), {
       name: "web",
+      build: false,
       test: `node -e "require('fs').writeFileSync('junit.xml', '${junit.replace(/"/g, '\\"')}')"`,
       testResults: path.join(tmp, "web", "*.xml"),
     });

@@ -5,6 +5,19 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** `build` and `test` each fall back to the adapter's default on
+  their own. Setting only `test` no longer drops the default build, so the
+  dead-code check has a build log to read. `build: false` / `test: false`
+  turn one off. The default .NET test command writes TRX to
+  `.flagrm/test-results/<project>/` and sets `testResults`, so tests are
+  compared by name and tests that already failed before the removal only
+  warn. `flagrm scope --write` writes that `testResults` out along with the
+  test command, and no longer folds long commands over two lines.
+
 ## [0.2.1] - 2026-10-04
 
 ### Fixed

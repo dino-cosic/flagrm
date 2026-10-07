@@ -119,7 +119,7 @@ export function writeScope(
   configFile: string | undefined,
 ): ScopeStep[] {
   const steps: ScopeStep[] = [];
-  const commandUpdates: Array<{ project: string; build?: string; test?: string }> = [];
+  const commandUpdates: CommandUpdate[] = [];
   for (const s of setups) {
     if (!s.setup?.leaveOut.length) continue;
     const { solution, leaveOut, projects: all } = s.setup;
@@ -149,6 +149,11 @@ export function writeScope(
         // The resolved commands: the configured ones, or the adapter's defaults when none are.
         build: commands.build && pointAt(commands.build, rel),
         test: commands.test && pointAt(commands.test, rel),
+        // Written out, the test command is no longer the default, so its default results location must be too.
+        testResults:
+          commands.testResults && commands.defaults.includes("testResults")
+            ? `./${relativePath(root, commands.testResults)}`
+            : undefined,
       });
     }
   }
@@ -197,13 +202,22 @@ function excludeFromGit(root: string, file: string): ScopeStep {
   return { path: shown, status: "updated", note: line };
 }
 
+interface CommandUpdate {
+  project: string;
+  build?: string;
+  test?: string;
+  /** Relative to the config root. */
+  testResults?: string;
+}
+
 /** Set the build and test commands of `projects:` entries in place, keeping the file's comments and layout. */
-function updateConfig(
-  configFile: string | undefined,
-  root: string,
-  updates: Array<{ project: string; build?: string; test?: string }>,
-): ScopeStep {
-  const paste = updates.map((u) => `${u.project}: build: ${u.build}; test: ${u.test}`).join("; ");
+function updateConfig(configFile: string | undefined, root: string, updates: CommandUpdate[]): ScopeStep {
+  const paste = updates
+    .map(
+      (u) =>
+        `${u.project}: build: ${u.build}; test: ${u.test}${u.testResults ? `; testResults: ${u.testResults}` : ""}`,
+    )
+    .join("; ");
   if (!configFile || configFile.endsWith(".json")) {
     return {
       path: configFile ? relativePath(root, configFile) : "flagrm.config.yaml",
@@ -225,8 +239,10 @@ function updateConfig(
     }
     if (u.build) doc.setIn(["projects", index, "build"], u.build);
     if (u.test) doc.setIn(["projects", index, "test"], u.test);
+    if (u.testResults) doc.setIn(["projects", index, "testResults"], u.testResults);
   }
-  const next = doc.toString();
+  // lineWidth 0: never fold a long command over two lines.
+  const next = doc.toString({ lineWidth: 0 });
   if (next !== text) fs.writeFileSync(configFile, next, "utf8");
   const note = missing.length
     ? `not in projects: (${missing.join(", ")}): set ${paste}`

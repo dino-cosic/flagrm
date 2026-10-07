@@ -168,9 +168,20 @@ exclude: ['**/Migrations/**']
 ```
 
 Paths are relative to the config file, and commands run inside each project's
-path. Without `build` or `test`, the adapter's defaults are used (`dotnet build
---no-incremental`, `npx ng build`, and so on). `testResults` (JUnit XML or TRX)
-lets `verify` compare individual tests against the baseline. Only files written during the run are read, so result files left by earlier runs don't count, and projects whose patterns overlap don't count each other's files. `timeout`
+path. `build` and `test` are resolved one at a time:
+
+| In the config | Command that runs |
+|---|---|
+| absent | the adapter's default (`dotnet build --no-incremental`, `npx ng build`, and so on) |
+| a command | that command |
+| `false` | none, not even the default |
+
+The default .NET test command writes TRX to `.flagrm/test-results/<project>/`
+and sets `testResults` to read it. A `test` command of your own sets its own
+`testResults`; `flagrm doctor` shows which commands are defaults and warns
+about a test command without `testResults`. `testResults` (JUnit XML or TRX)
+lets `verify` compare individual tests against the baseline, so a test that
+already failed before the removal only warns. Only files written during the run are read, so result files left by earlier runs don't count, and projects whose patterns overlap don't count each other's files. `timeout`
 (seconds) fails a project's build or test command that runs longer, for example
 a test runner left in watch mode. `tools` lists the AI coding tools whose files
 `init` and `update` manage (`claude-code`, `copilot`, `codex`); dropping one
@@ -185,7 +196,7 @@ Testcontainers. A missing SDK has to be installed. For `cargo` or Docker,
 `flagrm scope` shows which projects a solution filter would leave out: those
 projects and everything that references them. `flagrm scope --write` creates
 `flagrm.slnf` next to the solution, keeps it out of git, and points the
-project's `build` and `test` at it. The baseline and verify then run on what
+project's `build` and `test` at it (writing out a default `testResults` too). The baseline and verify then run on what
 the machine can build; edits to the left-out projects aren't checked by
 build or tests, so mention them in the PR.
 

@@ -12,10 +12,40 @@ import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
 import type { CheckId, CommandSnapshot, ConfigSnapshot } from "./types.js";
 import { relativePath } from "./util.js";
 
-/** A project's build/test commands: the configured ones, or the adapter's defaults when it configures neither. */
-export function projectCommands(adapter: Adapter, ctx: ProjectContext): { build?: string; test?: string } {
-  const configured = ctx.project.build !== undefined || ctx.project.test !== undefined;
-  return configured ? { build: ctx.project.build, test: ctx.project.test } : (adapter.defaultCommands?.(ctx) ?? {});
+export type CommandKey = "build" | "test" | "testResults";
+
+export interface ResolvedCommands {
+  build?: string;
+  test?: string;
+  /** Absolute path or glob of the result files the test command writes. */
+  testResults?: string;
+  /** Keys that came from the adapter's defaults rather than the config. */
+  defaults: CommandKey[];
+}
+
+/**
+ * A project's build/test commands, each resolved on its own: the configured
+ * one, none for `false`, else the adapter's default. `testResults` defaults
+ * only along with the default test command, whose output location it names.
+ */
+export function projectCommands(adapter: Adapter, ctx: ProjectContext): ResolvedCommands {
+  const fallback = adapter.defaultCommands?.(ctx) ?? {};
+  const out: ResolvedCommands = { defaults: [] };
+  for (const key of ["build", "test"] as const) {
+    const configured = ctx.project[key];
+    if (configured === false) continue;
+    if (configured !== undefined) out[key] = configured;
+    else if (fallback[key]) {
+      out[key] = fallback[key];
+      out.defaults.push(key);
+    }
+  }
+  if (ctx.project.testResults) out.testResults = ctx.project.testResults;
+  else if (out.defaults.includes("test") && fallback.testResults) {
+    out.testResults = fallback.testResults;
+    out.defaults.push("testResults");
+  }
+  return out;
 }
 
 /** Solution and project files: a removal may edit them, so they don't count as a command's configuration. */
@@ -39,7 +69,7 @@ export function configSnapshot(projects: Workspace): ConfigSnapshot {
     const entry: ConfigSnapshot["projects"][number] = { name: ctx.name };
     if (commands.build) entry.build = command(commands.build);
     if (commands.test) entry.test = command(commands.test);
-    if (ctx.project.testResults) entry.testResults = relativePath(root, ctx.project.testResults);
+    if (commands.testResults) entry.testResults = relativePath(root, commands.testResults);
     snapshot.projects.push(entry);
   }
   return snapshot;

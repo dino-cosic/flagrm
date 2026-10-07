@@ -218,3 +218,19 @@ describe("loadConfig — top-level value types", () => {
     expect(() => loadConfig({}, tmp)).toThrow("projects[0].timeout must be a positive number of seconds.");
   });
 });
+
+describe("loadConfig — commands", () => {
+  const project = "projects:\n  - name: api\n    adapter: dotnet\n    path: ./backend\n";
+
+  it("accepts false for build and test", () => {
+    writeConfig(`${project}    build: false\n    test: false\n`);
+    expect(loadConfig({}, tmp).projects[0]).toMatchObject({ build: false, test: false });
+  });
+
+  it("rejects true and empty commands", () => {
+    writeConfig(`${project}    build: true\n`);
+    expect(() => loadConfig({}, tmp)).toThrow(/projects\[0\]\.build must be a non-empty string or false/);
+    writeConfig(`${project}    test: ""\n`);
+    expect(() => loadConfig({}, tmp)).toThrow(/projects\[0\]\.test must be a non-empty string or false/);
+  });
+});

@@ -32,10 +32,10 @@ export interface ProjectConfig {
   adapter: AdapterId;
   /** Absolute path to the project root. */
   path: string;
-  /** Build command, run inside `path` by `verify`. */
-  build?: string;
-  /** Test command, run inside `path` by `verify`. */
-  test?: string;
+  /** Build command, run inside `path` by `verify`; `false` runs none. Absent: the adapter's default. */
+  build?: string | false;
+  /** Test command, run inside `path` by `verify`; `false` runs none. Absent: the adapter's default. */
+  test?: string | false;
   /** Seconds each build/test command may run before it is killed and fails; unlimited when absent. */
   timeout?: number;
   /** Absolute path or glob of the JUnit/TRX files `test` writes, so `verify` can count tests. */
@@ -222,6 +222,14 @@ function optionalString(value: unknown, where: string): string | undefined {
   return value;
 }
 
+/** A build/test command: a non-empty string, or `false` to run none (not even the adapter's default). */
+function optionalCommand(value: unknown, where: string): string | false | undefined {
+  if (value === false) return false;
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${where} must be a non-empty string or false.`);
+  return value;
+}
+
 function optionalPositiveNumber(value: unknown, where: string): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -274,8 +282,8 @@ function parseProject(raw: unknown, index: number, file: ConfigFileShape, fileDi
     name,
     adapter,
     path: resolveProjectDir(fileDir, p.path, `Project "${name}"`),
-    build: optionalString(p.build, `${where}.build`),
-    test: optionalString(p.test, `${where}.test`),
+    build: optionalCommand(p.build, `${where}.build`),
+    test: optionalCommand(p.test, `${where}.test`),
     testResults: testResults && path.resolve(fileDir, testResults),
     timeout: optionalPositiveNumber(p.timeout, `${where}.timeout`),
     globs: optionalStringList(p.globs, `${where}.globs`),

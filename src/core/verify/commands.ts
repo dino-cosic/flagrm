@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { errorExcerpt, templateCheckGap } from "../baseline.js";
+import { projectCommands } from "../config-snapshot.js";
 import { escapeRegExp, isTestPath } from "../scan.js";
 import type { CheckFinding, CheckResult, CheckRun, TestComparison } from "../types.js";
 import { relativePath } from "../util.js";
@@ -176,13 +177,14 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
       findings.push(...failedTestFindings(run, failures));
       if (run.failure) findings.push(setupFinding(run));
     }
-    const ctx = v.projects.find(({ ctx }) => ctx.name === run.project)?.ctx;
-    const project = ctx?.project;
+    const entry = v.projects.find(({ ctx }) => ctx.name === run.project);
+    const ctx = entry?.ctx;
+    const testResults = entry && projectCommands(entry.adapter, entry.ctx).testResults;
     const comparison = comparisons.find((c) => c.project === run.project);
-    if (project?.testResults && !run.results) {
+    if (testResults && !run.results) {
       findings.push({
         severity: "warn",
-        message: `no test results found at ${project.testResults}, so the test count was not compared`,
+        message: `no test results found at ${testResults}, so the test count was not compared`,
         project: run.project,
       });
     } else if (run.results && comparison?.before === undefined) {

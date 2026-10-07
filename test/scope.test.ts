@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type SetupProbes, satisfiesSdk, sdkProblem } from "../src/adapters/dotnet/setup.js";
 import { loadConfig } from "../src/core/config.js";
+import { projectCommands } from "../src/core/config-snapshot.js";
 import { runDoctor } from "../src/core/doctor.js";
 import { resolveProjects } from "../src/core/registry.js";
 import { pointAt, setupReport, writeScope } from "../src/core/scope.js";
@@ -153,6 +154,20 @@ describe("writeScope", () => {
     const again = workspace();
     expect(setupReport(again, tmp, probes())[0].setup?.leaveOut).toEqual([]);
     expect(writeScope(setupReport(again, tmp, probes()), again, tmp, path.join(tmp, "flagrm.config.yaml"))).toEqual([]);
+  });
+
+  it("writes the default test command's testResults along with it, so its results are still read", () => {
+    write("flagrm.config.yaml", "projects:\n  - name: api\n    adapter: dotnet\n    path: .\n");
+    const projects = workspace();
+    writeScope(setupReport(projects, tmp, probes()), projects, tmp, path.join(tmp, "flagrm.config.yaml"));
+    const config = fs.readFileSync(path.join(tmp, "flagrm.config.yaml"), "utf8");
+    expect(config).toContain("build: dotnet build flagrm.slnf --no-incremental");
+    expect(config).toContain(
+      'test: dotnet test flagrm.slnf --logger trx --results-directory ".flagrm/test-results/api"',
+    );
+    expect(config).toContain("testResults: ./.flagrm/test-results/api/*.trx");
+    const [{ adapter, ctx }] = workspace();
+    expect(projectCommands(adapter, ctx).testResults).toBe(path.join(tmp, ".flagrm", "test-results", "api", "*.trx"));
   });
 
   it("narrows a solution filter the commands already name, never widening it", () => {

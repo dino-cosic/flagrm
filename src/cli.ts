@@ -18,6 +18,7 @@ import {
   writeBaseline,
 } from "./core/baseline.js";
 import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
+import { projectCommands } from "./core/config-snapshot.js";
 import { runDoctor } from "./core/doctor.js";
 import { gitState } from "./core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
@@ -143,7 +144,7 @@ addCommonOptions(
         validateAgentNames(projects, added);
         const exists = fs.existsSync(baselinePath(root, flag));
         if (exists && opts.force) {
-          const testResults = projects.flatMap(({ ctx }) => (ctx.project.testResults ? [ctx.project.testResults] : []));
+          const testResults = projects.flatMap(({ adapter, ctx }) => projectCommands(adapter, ctx).testResults ?? []);
           assertNoEditsSinceBaseline(root, flag, testResults);
         }
         if (exists && !opts.force) {

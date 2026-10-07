@@ -112,7 +112,7 @@ describe("verify on the realistic fixture", () => {
     const failingBuild = (config: ToolConfig) => {
       for (const p of config.projects) {
         p.build = `node -e "console.error('error TS2304: Cannot find name'); process.exit(2)"`;
-        p.test = undefined;
+        p.test = false;
       }
     };
     await takeBaseline(failingBuild);
@@ -169,9 +169,9 @@ describe("verify on the realistic fixture", () => {
     const OTHER = "shows the express shipping option";
     const withTests = (config: ToolConfig) => {
       for (const p of config.projects) {
-        // A project with neither command falls back to the adapter's (dotnet build/test): give api a no-op build.
-        p.build = p.name === "api" ? `node -e ""` : undefined;
-        p.test = p.name === "web" ? `node -e "require('fs').copyFileSync('results.src.xml', 'junit.xml')"` : undefined;
+        // `false`: no command, not even the adapter's default. api gets a no-op build.
+        p.build = p.name === "api" ? `node -e ""` : false;
+        p.test = p.name === "web" ? `node -e "require('fs').copyFileSync('results.src.xml', 'junit.xml')"` : false;
         p.testResults = p.name === "web" ? path.join(tmp, "frontend", "junit.xml") : undefined;
       }
     };

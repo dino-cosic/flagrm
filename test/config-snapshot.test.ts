@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/config.js";
-import { configChanges, configSnapshot, lineDiff } from "../src/core/config-snapshot.js";
+import { configChanges, configSnapshot, lineDiff, projectCommands } from "../src/core/config-snapshot.js";
 import { resolveProjects } from "../src/core/registry.js";
 
 let tmp: string;
@@ -100,5 +100,35 @@ describe("lineDiff", () => {
   it("lists removed and added lines in order, capped", () => {
     expect(lineDiff("a\nb\nc", "a\nB\nc\nd")).toEqual(["- b", "+ B", "+ d"]);
     expect(lineDiff("x\n", "1\n2\n3\n", 2)).toEqual(["- x", "+ 1", "… 2 more changed lines"]);
+  });
+});
+
+describe("projectCommands", () => {
+  const resolve = (text: string) => {
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), text);
+    const [{ adapter, ctx }] = resolveProjects(loadConfig({}, tmp));
+    return projectCommands(adapter, ctx);
+  };
+  const project = "projects:\n  - name: api\n    adapter: dotnet\n    path: ./api\n";
+
+  it("uses every adapter default when nothing is configured, TRX into .flagrm/test-results", () => {
+    const c = resolve(project);
+    expect(c.build).toBe("dotnet build --no-incremental");
+    expect(c.test).toBe('dotnet test --logger trx --results-directory "../.flagrm/test-results/api"');
+    expect(c.testResults).toBe(path.join(tmp, ".flagrm", "test-results", "api", "*.trx"));
+    expect(c.defaults).toEqual(["build", "test", "testResults"]);
+  });
+
+  it("keeps the default build when only test is configured, and drops the default testResults", () => {
+    const c = resolve(`${project}    test: dotnet test Api.sln\n`);
+    expect(c.build).toBe("dotnet build --no-incremental");
+    expect(c.test).toBe("dotnet test Api.sln");
+    expect(c.testResults).toBeUndefined();
+    expect(c.defaults).toEqual(["build"]);
+  });
+
+  it("turns a command off with false", () => {
+    const c = resolve(`${project}    build: false\n    test: false\n`);
+    expect(c).toEqual({ defaults: [] });
   });
 });
