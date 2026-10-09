@@ -11,7 +11,7 @@ import { flagDir, readBaseline, runChecks, verifyPath } from "../baseline.js";
 import { changeFilter, changeFilterAt } from "../change-filter.js";
 import { configChanges as configChangesSince, configSnapshot } from "../config-snapshot.js";
 import { changedFilesSince, gitState, treeFingerprint } from "../git.js";
-import { clearRuns, findRuns, plannedRuns, reuseRuns, runsKey, saveRuns } from "../run-cache.js";
+import { dropRuns, findRuns, plannedRuns, reuseRuns, runsKey, saveRuns } from "../run-cache.js";
 import {
   CHECK_IDS,
   type CheckId,
@@ -55,7 +55,6 @@ export async function verifyFlag(
   // Before the commands: the key is the tree they run on.
   const key = only.length ? runsKey(root, projects) : undefined;
   const found = key && options.reuse !== false ? findRuns(root, projects, key, plannedRuns(projects, only)) : undefined;
-  if (only.length) clearRuns(root, flag);
   const logDir = path.join(flagDir(root, flag), "verify");
   const runs = found ? reuseRuns(found, logDir) : only.length ? await runChecks(projects, logDir, only) : [];
   // The fingerprint, though, is the tree the Stop hook will see next, so take it
@@ -99,6 +98,10 @@ export async function verifyFlag(
   };
   // Only a full pass is worth reusing: a failure may be flaky or a stopped service.
   if (key && report.status === "pass" && report.skipped.length === 0) saveRuns(root, flag, projects, key, runs);
+  // A fresh run that fails on this tree outweighs a saved pass for it (`--no-reuse` after a machine change).
+  else if (key && !found && checks.some((c) => (c.id === "build" || c.id === "tests") && c.status === "fail")) {
+    dropRuns(root, key);
+  }
   const file = verifyPath(root, flag);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`, "utf8");

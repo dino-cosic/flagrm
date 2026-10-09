@@ -10,7 +10,7 @@ import path from "node:path";
 import fg from "fast-glob";
 import type { Workspace } from "./adapter.js";
 import { flagDir, matchingFiles, runChecks } from "./baseline.js";
-import { changeFilterAt } from "./change-filter.js";
+import { changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { treeFingerprint } from "./git.js";
 import { packageVersion } from "./package.js";
@@ -32,12 +32,13 @@ export function runsPath(root: string, flag: string): string {
 
 /**
  * The tree the commands will run on: its fingerprint before they run, without
- * flagrm's setup files and `exclude`d paths (as the Stop hook sees it) and
- * without the test result files the runs themselves rewrite. Commands are
- * compared on their own, so leaving out the config file is safe.
+ * flagrm's setup files and the test result files the runs themselves rewrite.
+ * Commands are compared on their own, so leaving out the config file is safe.
+ * Unlike the Stop hook's fingerprint, `exclude`d paths count: a build or test
+ * may read them (a lockfile, generated sources), so a change there must rerun.
  */
 export function runsKey(root: string, projects: Workspace): string | undefined {
-  const ignore = changeFilterAt(root);
+  const ignore = changeFilter();
   const patterns = projects.flatMap(({ adapter, ctx }) => projectCommands(adapter, ctx).testResults ?? []);
   const results = matchingFiles(root, patterns);
   return treeFingerprint(root, (rel) => ignore(rel) || results.has(rel));
@@ -51,7 +52,11 @@ export function plannedRuns(projects: Workspace, only: ReadonlyArray<CheckRun["c
   });
 }
 
-/** Save a passing full verify's runs; never a set with a setup problem, which would come back on every rerun. */
+/**
+ * Save a passing full verify's runs; never a set with a setup problem, which would come back on every rerun,
+ * nor runs that were themselves reused: the set they came from keeps its own flag and time.
+ * The logs are copied next to `runs.json`, so a later verify overwriting its own logs leaves the saved set whole.
+ */
 export function saveRuns(
   root: string,
   flag: string,
@@ -60,7 +65,16 @@ export function saveRuns(
   runs: CheckRun[],
   createdAt = new Date().toISOString(),
 ): void {
-  if (runs.some((r) => r.failure)) return;
+  if (runs.some((r) => r.failure || r.reused)) return;
+  const file = runsPath(root, flag);
+  const logDir = path.join(path.dirname(file), "saved");
+  fs.mkdirSync(logDir, { recursive: true });
+  const kept = runs.map(({ reused: _reused, ...run }) => {
+    if (!run.log) return run;
+    const log = path.join(logDir, `${run.project}.${run.check}.log`);
+    fs.copyFileSync(run.log, log);
+    return { ...run, log };
+  });
   const saved: SavedRuns = {
     schemaVersion: JSON_SCHEMA_VERSION,
     flagrmVersion: packageVersion(),
@@ -68,28 +82,29 @@ export function saveRuns(
     createdAt,
     key,
     commands: configSnapshot(projects).projects,
-    runs: runs.map(({ reused: _reused, ...run }) => run),
+    runs: kept,
   };
-  const file = runsPath(root, flag);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(saved, null, 2)}\n`, "utf8");
 }
 
-/** Forget the flag's saved runs: its verify logs are about to be overwritten. */
-export function clearRuns(root: string, flag: string): void {
-  fs.rmSync(runsPath(root, flag), { force: true });
+/** Forget every saved set, of any flag, for this tree: a fresh run on it failed, so they may hide a flaky test or a changed machine. */
+export function dropRuns(root: string, key: string): void {
+  for (const file of fg.sync(".flagrm/*/verify/runs.json", { cwd: root, absolute: true, dot: true })) {
+    if (readJson<SavedRuns>(file)?.key === key) fs.rmSync(file, { force: true });
+  }
 }
 
 /** The newest saved set, of any flag, for this tree and these commands that has every `needed` run and its log. */
 export function findRuns(root: string, projects: Workspace, key: string, needed: Planned[]): FoundRuns | undefined {
   if (needed.length === 0) return undefined;
   const commands = JSON.stringify(configSnapshot(projects).projects);
+  const version = packageVersion();
   let best: FoundRuns | undefined;
   for (const file of fg.sync(".flagrm/*/verify/runs.json", { cwd: root, absolute: true, dot: true })) {
     const saved = readJson<SavedRuns>(file);
     if (!saved || !Array.isArray(saved.runs) || typeof saved.createdAt !== "string") continue;
     if (saved.key !== key || saved.schemaVersion !== JSON_SCHEMA_VERSION) continue;
-    if (saved.flagrmVersion !== packageVersion() || JSON.stringify(saved.commands) !== commands) continue;
+    if (saved.flagrmVersion !== version || JSON.stringify(saved.commands) !== commands) continue;
     const runs = needed.map((n) => saved.runs.find((r) => r.project === n.project && r.check === n.check));
     if (runs.some((r) => !r || (r.log !== undefined && !fs.existsSync(r.log)))) continue;
     if (!best || saved.createdAt > best.saved.createdAt) best = { saved, runs: runs as CheckRun[] };

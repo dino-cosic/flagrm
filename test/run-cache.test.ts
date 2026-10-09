@@ -48,6 +48,7 @@ const CONFIG = [
 const RUN = [
   'const fs = require("node:fs");',
   'fs.appendFileSync(process.env.FLAGRM_TEST_COUNTER, process.argv[2] + "\\n");',
+  "if (process.env.FLAGRM_TEST_FAIL === process.argv[2]) process.exit(1);",
   'if (process.argv[2] === "test") fs.writeFileSync("junit.xml", \'<testsuite><testcase classname="A" name="works"/></testsuite>\');',
   "",
 ].join("\n");
@@ -65,6 +66,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete process.env.FLAGRM_TEST_FAIL;
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(path.dirname(counter), { recursive: true, force: true });
 });
@@ -93,11 +95,12 @@ describe("run cache", () => {
     expect(runs[1].results?.names.length).toBe(1);
   });
 
-  it("ignores changes under exclude and to the test results file", async () => {
+  it("ignores changes to the test results file, but not under exclude, which a build may read", async () => {
     const key = await savedVerify("FlagA");
-    write("gen/graph.json", "{}");
     write("junit.xml", "<testsuite/>");
     expect(runsKey(tmp, workspace())).toBe(key);
+    write("gen/graph.json", "{}");
+    expect(runsKey(tmp, workspace())).not.toBe(key);
   });
 
   it("doesn't reuse after an edit, a command change or with reuse off", async () => {
@@ -184,7 +187,7 @@ describe("verify with saved runs", () => {
     const failed = await verify("FlagA");
     expect(ran()).toHaveLength(4);
     expect(failed.checks.find((c) => c.id === "leftovers")?.status).toBe("fail");
-    expect(fs.existsSync(runsPath(tmp, "FlagA"))).toBe(false);
+    expect(fs.existsSync(runsPath(tmp, "FlagA"))).toBe(true);
   });
 
   it("chains flags: the next baseline reuses the previous flag's verify after the commit", async () => {
@@ -194,6 +197,42 @@ describe("verify with saved runs", () => {
     commit("remove FlagA");
     await baseline("FlagB");
     expect(ran()).toHaveLength(4);
+  });
+
+  it("does not save reused runs again, so they keep their origin and time", async () => {
+    await baseline("FlagA");
+    write("app.txt", "removed\n");
+    await verify("FlagA");
+    commit("remove FlagA");
+    await baseline("FlagB");
+    expect(fs.existsSync(runsPath(tmp, "FlagB"))).toBe(false);
+    const report = await verify("FlagB");
+    expect(report.runs.map((r) => r.reused?.flag)).toEqual(["FlagA", "FlagA"]);
+    expect(fs.existsSync(runsPath(tmp, "FlagB"))).toBe(false);
+  });
+
+  it("forgets every saved pass for the tree once a fresh run on it fails build", async () => {
+    await baseline("FlagA");
+    write("app.txt", "removed\n");
+    await verify("FlagA");
+    commit("remove FlagA");
+    await baseline("FlagB");
+    await verify("FlagB");
+    expect(fs.existsSync(runsPath(tmp, "FlagA"))).toBe(true);
+    process.env.FLAGRM_TEST_FAIL = "build";
+    expect((await verify("FlagB", { reuse: false })).status).toBe("fail");
+    expect(fs.existsSync(runsPath(tmp, "FlagA"))).toBe(false);
+    expect((await verify("FlagB")).status).toBe("fail");
+  });
+
+  it("keeps the saved runs, with their logs, when a later verify of the flag runs them again", async () => {
+    await baseline("FlagA");
+    write("app.txt", "removed\n");
+    await verify("FlagA");
+    const saved = JSON.parse(fs.readFileSync(runsPath(tmp, "FlagA"), "utf8")) as { runs: { log?: string }[] };
+    await verify("FlagA", { reuse: false, skip: ["dead-code"] });
+    expect(fs.existsSync(runsPath(tmp, "FlagA"))).toBe(true);
+    for (const run of saved.runs) if (run.log) expect(fs.existsSync(run.log)).toBe(true);
   });
 
   it("saves nothing for a failing verify or one with --skip, and runs again with reuse off", async () => {

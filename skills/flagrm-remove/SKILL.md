@@ -78,7 +78,7 @@ in between; only a full run counts, and the Stop hook won't let you finish on on
 
 ## 6. Hand back
 
-1. `flagrm verify <flag> --md`: show its output exactly as printed; don't reword it or change its numbers.
+1. `flagrm verify <flag> --md` on the final tree (it reuses the passing build and test runs; edit nothing after it): show its output exactly as printed; don't reword it or change its numbers. It must pass: the Stop hook checks it.
 2. **Notes**, 3–5 lines: what you kept on purpose, each remaining warning with its reason, follow-ups in
    the flag service. If `state` wasn't `on` and nobody confirmed ON, start with "Assumed ON everywhere".
 3. The commit message:

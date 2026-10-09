@@ -1,7 +1,7 @@
 # Remove several flags
 
 Run SKILL.md's workflow once per flag, in the order given, one commit per flag.
-Each baseline reuses the previous flag's passing verify, so it takes seconds.
+Each baseline reuses the previous flag's passing verify (seconds) only if the commit leaves the tree as verified.
 
 ## Once, before the first flag
 
@@ -29,10 +29,10 @@ Copy this checklist for each flag and tick it as you go:
   stop, and continue once the user says it's committed. The next baseline needs the previous removal committed.
 - A flag that needs the user (three failed attempts on one check, an unclear case) pauses the batch.
   Never start a flag while the previous one is uncommitted.
+- Optional: if you can start subagents, run each flag in its own, one at a time. A subagent sees no
+  conversation history: give it the flag, that it is confirmed ON everywhere, the commit answer, and
+  "follow flagrm-remove's SKILL.md steps 2–6".
 
 ## At the end
 
 One table: flag, commit, remaining warnings, kept on purpose.
-Subagents (optional): if you can start subagents, run each flag in its own, one at a time, after the questions above. A subagent
-sees no conversation history: give it the flag, that it is confirmed ON everywhere, the commit answer, and
-"follow flagrm-remove's SKILL.md steps 2–6".

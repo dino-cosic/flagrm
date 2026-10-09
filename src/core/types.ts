@@ -216,7 +216,7 @@ export interface SavedRuns {
   flagrmVersion: string;
   flag: string;
   createdAt: string;
-  /** Tree fingerprint before the commands ran, without setup files, `exclude`d paths and test result files. */
+  /** Tree fingerprint before the commands ran, without setup files and test result files (`exclude`d paths count). */
   key: string;
   /** The resolved commands of every project, with hashes of the files they name. */
   commands: ConfigSnapshot["projects"];

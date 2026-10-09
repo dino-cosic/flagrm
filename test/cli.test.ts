@@ -160,6 +160,12 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     const r = runCli(["baseline", "NewCheckout", "--no-checks", "--no-reuse"], dir);
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("--no-reuse has nothing to reuse");
+    // Harmless when adding names (no build or tests run), so an agent adding it everywhere isn't stopped.
+    const named = runCli(
+      ["baseline", "NewCheckout", "--name", "UseNewCheckout", "--kind", "wrapper", "--no-reuse"],
+      dir,
+    );
+    expect(named.status).toBe(0);
     expect(runCli(["baseline", "--help"], dir).stdout).toContain("--no-reuse");
     expect(runCli(["verify", "--help"], dir).stdout).toContain("--no-reuse");
   });
