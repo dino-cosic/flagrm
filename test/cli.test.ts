@@ -156,6 +156,14 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(stderr).toContain("already exists; pass --name to add names, or --force to start over");
   });
 
+  it("baseline rejects --no-reuse where there is nothing to reuse", () => {
+    const r = runCli(["baseline", "NewCheckout", "--no-checks", "--no-reuse"], dir);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("--no-reuse has nothing to reuse");
+    expect(runCli(["baseline", "--help"], dir).stdout).toContain("--no-reuse");
+    expect(runCli(["verify", "--help"], dir).stdout).toContain("--no-reuse");
+  });
+
   it("baseline --accept records the acknowledgement, and refuses to mix with other changes", () => {
     const { status, stdout } = runCli(["baseline", "NewCheckout", "--accept", "config,failures", "--json"], dir);
     expect(status).toBe(0);
@@ -165,7 +173,7 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(runCli(["baseline", "NewCheckout", "--accept", "config"], dir).stdout).toContain(
       "accepted: the config as of now, the baseline's failing tests",
     );
-    for (const extra of [["--force"], ["--name", "X"], ["--no-checks"]]) {
+    for (const extra of [["--force"], ["--name", "X"], ["--no-checks"], ["--no-reuse"]]) {
       const r = runCli(["baseline", "NewCheckout", "--accept", "config", ...extra], dir);
       expect(r.status, extra.join(" ")).toBe(2);
       expect(r.stderr).toContain("--accept only records an acknowledgement");

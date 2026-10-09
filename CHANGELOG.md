@@ -7,6 +7,20 @@ contain breaking changes.
 
 ## Unreleased
 
+### Added
+
+- `/flagrm-remove` takes several flags (`/flagrm-remove A B C`): it asks
+  once whether they are all ON and whether to commit each one, then removes
+  them one after another, one commit per flag.
+- `/flagrm-remove` ends with the verify overview and a proposed commit
+  message, so `/flagrm-verify` is only needed to check a removal later. The
+  commit message takes the ticket from the branch name and wraps its body.
+- A passing full verify saves its build and test results; `baseline` and
+  `verify` on the same tree with the same commands reuse them instead of
+  running them again, and say so. Removing flags one after another, each
+  next baseline takes seconds, and so does `/flagrm-verify` after a
+  removal. `--no-reuse` runs them anyway.
+
 ### Fixed
 
 - Deleting a committed file that matches `exclude` (say, a generator removing

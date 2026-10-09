@@ -105,3 +105,4 @@ Commit only when the user asked (in a batch: their answer at the start).
 - Match the file's formatting; don't refactor unrelated code.
 - Never edit `.flagrm/`. Rerun `flagrm baseline <flag>` only with `--name`, or with `--force` before your first edit (it refuses after).
 - Never `--skip` a failing check, and never change a test's expected value or the build/test commands to pass. If the user changes the config mid-removal (say, to leave out tests that need services), run `flagrm baseline <flag> --accept config` once they confirm.
+- `baseline` and `verify` reuse a passing verify's build and test results on the same tree and commands. If the user changed the machine (SDK, Docker, services) since, add `--no-reuse`.

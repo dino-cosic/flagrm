@@ -12,10 +12,8 @@ import {
   baselinePath,
   baselineSummary,
   discoverFlag,
-  flagDir,
   mergeNames,
   parseAccept,
-  runChecks,
   validateAgentNames,
   writeBaseline,
 } from "./core/baseline.js";
@@ -38,6 +36,7 @@ import {
   printSteps,
   printVerifyReport,
 } from "./core/report.js";
+import { baselineRuns } from "./core/run-cache.js";
 import { setupReport, writeScope } from "./core/scope.js";
 import { askTools, detectTools, savedTools, TOOL_LABELS } from "./core/tools.js";
 import { CHECK_IDS, type RecordedName } from "./core/types.js";
@@ -111,6 +110,10 @@ addCommonOptions(
     ),
 )
   .option("--no-checks", "record only the git state, without running build and test commands")
+  .option(
+    "--no-reuse",
+    "run build and tests even when a passing verify on the same tree and commands saved their results",
+  )
   .option("--name <name>", "add a name the flag is read through (repeatable)", collect, [])
   .option(
     "--kind <kind>",
@@ -131,6 +134,7 @@ addCommonOptions(
       flag: string,
       opts: CommonOptions & {
         checks: boolean;
+        reuse: boolean;
         name: string[];
         kind?: string;
         file?: string;
@@ -140,10 +144,10 @@ addCommonOptions(
     ) => {
       const { root, projects } = loadWorkspace(opts);
       if (opts.accept !== undefined) {
-        if (opts.force || opts.name.length || opts.file || opts.kind || !opts.checks) {
+        if (opts.force || opts.name.length || opts.file || opts.kind || !opts.checks || !opts.reuse) {
           fail(
             new Error(
-              "--accept only records an acknowledgement; run it without --force, --name, --file, --kind and --no-checks.",
+              "--accept only records an acknowledgement; run it without --force, --name, --file, --kind, --no-checks and --no-reuse.",
             ),
           );
         }
@@ -162,6 +166,7 @@ addCommonOptions(
       if (kind !== "alias" && kind !== "wrapper") {
         fail(new Error(`--kind must be alias or wrapper, not "${kind}".`));
       }
+      if (!opts.checks && !opts.reuse) fail(new Error("--no-reuse has nothing to reuse with --no-checks."));
       if (opts.file && opts.name.length === 0) fail(new Error("--file scopes --name entries; pass --name too."));
       if (opts.file && kind !== "wrapper") fail(new Error("--file scopes wrapper names; drop --kind alias."));
       const scope = opts.file && relativePath(root, path.resolve(opts.file));
@@ -187,7 +192,7 @@ addCommonOptions(
           result = addNames(root, flag, added);
         } else {
           const git = gitState(root);
-          const checks = opts.checks ? await runChecks(projects, flagDir(root, flag)) : undefined;
+          const checks = opts.checks ? await baselineRuns(root, flag, projects, opts.reuse) : undefined;
           const { names, ...flow } = await discoverFlag(projects, flag);
           result = writeBaseline(root, flag, projects, git, checks, mergeNames(names, added), flow);
         }
@@ -215,25 +220,35 @@ addCommonOptions(
   .option("--skip <checks>", `comma-separated checks to skip (${CHECK_IDS.join(", ")})`)
   .option("--strict", "treat warnings as failures")
   .option("--md", "print a markdown overview (for the user or a PR) instead of text")
-  .action(async (flag: string, opts: CommonOptions & { skip?: string; strict?: boolean; md?: boolean }) => {
-    if (opts.md && opts.json) fail(new Error("--md and --json can't be combined."));
-    const { root, projects } = loadWorkspace(opts);
-    let result: Awaited<ReturnType<typeof verifyFlag>>;
-    try {
-      result = await verifyFlag(root, projects, flag, { skip: parseSkip(opts.skip), strict: opts.strict });
-    } catch (err) {
-      fail(err);
-    }
-    if (opts.json) {
-      console.log(JSON.stringify({ ...result.report, verifyFile: result.file }, null, 2));
-    } else if (opts.md) {
-      process.stdout.write(verifyMarkdown(result.report, root));
-    } else {
-      printVerifyReport(result.report, result.file);
-    }
-    // exitCode, not exit(): exit() can cut off stdout still being flushed to a pipe.
-    process.exitCode = result.report.status === "pass" ? 0 : 1;
-  });
+  .option(
+    "--no-reuse",
+    "run build and tests even when a passing verify on the same tree and commands saved their results",
+  )
+  .action(
+    async (flag: string, opts: CommonOptions & { skip?: string; strict?: boolean; md?: boolean; reuse: boolean }) => {
+      if (opts.md && opts.json) fail(new Error("--md and --json can't be combined."));
+      const { root, projects } = loadWorkspace(opts);
+      let result: Awaited<ReturnType<typeof verifyFlag>>;
+      try {
+        result = await verifyFlag(root, projects, flag, {
+          skip: parseSkip(opts.skip),
+          strict: opts.strict,
+          reuse: opts.reuse,
+        });
+      } catch (err) {
+        fail(err);
+      }
+      if (opts.json) {
+        console.log(JSON.stringify({ ...result.report, verifyFile: result.file }, null, 2));
+      } else if (opts.md) {
+        process.stdout.write(verifyMarkdown(result.report, root));
+      } else {
+        printVerifyReport(result.report, result.file);
+      }
+      // exitCode, not exit(): exit() can cut off stdout still being flushed to a pipe.
+      process.exitCode = result.report.status === "pass" ? 0 : 1;
+    },
+  );
 
 // --- list ----------------------------------------------------------------
 
