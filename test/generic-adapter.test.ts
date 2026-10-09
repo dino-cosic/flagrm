@@ -93,8 +93,12 @@ describe("verify on the Go fixture", () => {
     fs.cpSync(after, tmp, { recursive: true });
   }
 
-  async function verify(adjust?: (config: ToolConfig) => void, skip: CheckId[] = []): Promise<VerifyReport> {
-    return (await verifyFlag(tmp, workspace(tmp, adjust), FLAG, { skip })).report;
+  async function verify(
+    adjust?: (config: ToolConfig) => void,
+    skip: CheckId[] = [],
+    reuse = true,
+  ): Promise<VerifyReport> {
+    return (await verifyFlag(tmp, workspace(tmp, adjust), FLAG, { skip, reuse })).report;
   }
 
   const status = (report: VerifyReport) => Object.fromEntries(report.checks.map((c) => [c.id, c.status]));
@@ -131,7 +135,8 @@ describe("verify on the Go fixture", () => {
       const ok = await verify(commands);
       expect(status(ok)).toMatchObject({ build: "pass", tests: "pass" });
       exits(1, 2);
-      const broken = await verify(commands);
+      // The exit codes come from the environment, outside the tree: don't reuse the passing run.
+      const broken = await verify(commands, [], false);
       expect(status(broken)).toMatchObject({ build: "fail", tests: "fail" });
       expect(broken.status).toBe("fail");
     } finally {

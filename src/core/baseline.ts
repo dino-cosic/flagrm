@@ -352,14 +352,19 @@ export function editsSince(
   testResults: readonly string[] = [],
   ignore: ChangeFilter = changeFilter(),
 ): string[] | undefined {
-  const results = new Set(
-    testResults.flatMap((pattern) =>
+  const results = matchingFiles(root, testResults);
+  return changedFilesSince(root, sha, ignore)?.filter((rel) => !results.has(rel));
+}
+
+/** The files (relative to `root`) matching absolute paths or globs, such as `testResults` patterns. */
+export function matchingFiles(root: string, patterns: readonly string[]): Set<string> {
+  return new Set(
+    patterns.flatMap((pattern) =>
       fg
         .sync(path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern, { absolute: true, dot: true })
         .map((file) => relativePath(root, file)),
     ),
   );
-  return changedFilesSince(root, sha, ignore)?.filter((rel) => !results.has(rel));
 }
 
 /**

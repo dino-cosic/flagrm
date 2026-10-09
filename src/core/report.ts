@@ -1,6 +1,7 @@
 import pc from "picocolors";
 import type { DoctorReport, DoctorStatus } from "./doctor.js";
 import type { StepResult, StepStatus } from "./install.js";
+import { reusedNote } from "./run-cache.js";
 import type { ProjectSetup } from "./scope.js";
 import type { Baseline, CheckStatus, ConfigState, FlagInventoryEntry, ListReport, VerifyReport } from "./types.js";
 import { plural, relativePath } from "./util.js";
@@ -96,6 +97,8 @@ export function printBaseline(baseline: Baseline, file: string): void {
     );
     if (c.failure) console.log(`    ${pc.yellow("setup problem:")} ${c.failure.message}`);
   }
+  const note = reusedNote(checks ?? [], baseline.createdAt);
+  if (note) console.log(`  ${pc.dim(note)}`);
   if (baseline.names.length) {
     const names = baseline.names.map((n) =>
       n.kind === "literal" ? n.name : `${n.name} (${n.kind}${n.file ? ` in ${n.file}` : ""})`,
@@ -159,6 +162,8 @@ export function printVerifyReport(report: VerifyReport, file: string): void {
     }
   }
   if (report.strict && warned) console.log(pc.dim("\n  --strict: warnings count as failures."));
+  const note = reusedNote(report.runs, report.createdAt);
+  if (note) console.log(pc.dim(`\n  ${note}`));
   console.log(pc.dim(`\nResult written to ${rel(file)}.`));
 }
 

@@ -193,6 +193,8 @@ export interface CheckRun {
   results?: TestRunResults;
   /** Why a failed run failed, when the log shows a machine setup problem rather than broken code. */
   failure?: CheckFailure;
+  /** Copied from a passing verify on the same tree and commands instead of run (see `run-cache.ts`). */
+  reused?: RunReuse;
 }
 
 /** `environment`: the machine isn't set up to run the command (missing SDK or tool, Docker not running). */
@@ -200,6 +202,26 @@ export interface CheckFailure {
   kind: "environment";
   /** One line: what is missing and how to fix it. */
   message: string;
+}
+
+/** Where a reused run came from: the flag whose passing verify saved it, and when. */
+export interface RunReuse {
+  flag: string;
+  createdAt: string;
+}
+
+/** `.flagrm/<flag>/verify/runs.json`: the complete runs of a passing full verify, for reuse. */
+export interface SavedRuns {
+  schemaVersion: number;
+  flagrmVersion: string;
+  flag: string;
+  createdAt: string;
+  /** Tree fingerprint before the commands ran, without setup files, `exclude`d paths and test result files. */
+  key: string;
+  /** The resolved commands of every project, with hashes of the files they name. */
+  commands: ConfigSnapshot["projects"];
+  /** Complete, test names included. */
+  runs: CheckRun[];
 }
 
 export interface GitState {
