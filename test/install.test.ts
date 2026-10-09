@@ -10,6 +10,7 @@ import {
   initProject,
   installedSkillVersion,
   installRoot,
+  PROMPT_FILES,
   SKILLS,
   stampSkill,
   stopHookState,
@@ -212,6 +213,13 @@ describe("updateProject", () => {
     const steps = updateProject(tmp);
     expect(steps.every((s) => s.status === "skipped")).toBe(true);
     expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+});
+
+describe("prompt files", () => {
+  it("lets /flagrm-remove take several flags", () => {
+    expect(PROMPT_FILES["flagrm-remove"]).toContain("argument-hint: <flag> [flag...]");
+    expect(PROMPT_FILES["flagrm-remove"]).toContain("the feature flags named after this command");
   });
 });
 

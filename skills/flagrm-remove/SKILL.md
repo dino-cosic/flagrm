@@ -16,6 +16,8 @@ You find and edit the code. `flagrm` records the state before you start and
 decides when you are done: **done means `flagrm verify <flag> --json` exited 0.**
 Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx flagrm` is another package).
 
+Several flags (`/flagrm-remove A B C`): read [batch.md](batch.md) first; it runs this workflow once per flag.
+
 ## 1. Preconditions
 
 - `flagrm doctor` must not warn about uncommitted files (flagrm's own setup files and `exclude`d paths don't count). Otherwise ask the user to commit or stash.
@@ -74,11 +76,28 @@ Read `patterns.md` in this skill's directory when a case is unclear.
 Exit 2 is a usage or config error: read the message. `--skip build,tests` is fine for a quick check
 in between; only a full run counts, and the Stop hook won't let you finish on one with `--skip`. After three failed attempts on one check, show the user the findings. Don't run code generators or formatters after the passing verify; if you must, verify again.
 
-## 6. Report
+## 6. Hand back
 
-In 3–5 lines: what was removed, what you kept on purpose, and each remaining warning with its
-reason. If `state` wasn't `on` and nobody confirmed ON, start with "Assumed ON everywhere".
-Suggest `/flagrm-verify <flag>` for the overview and commit message. Don't commit.
+1. `flagrm verify <flag> --md`: show its output exactly as printed; don't reword it or change its numbers.
+2. **Notes**, 3–5 lines: what you kept on purpose, each remaining warning with its reason, follow-ups in
+   the flag service. If `state` wasn't `on` and nobody confirmed ON, start with "Assumed ON everywhere".
+3. The commit message:
+
+<!-- commit-message:start -->
+**Proposed commit message**, in a code block:
+
+```
+chore: remove <flag> feature flag
+
+<one or two sentences: which path stays and what was deleted>
+```
+
+- Follow the repository's convention instead when `git log --oneline -10` shows a different one.
+- A ticket in the branch name (`feature/feat-24586`): add it the way the log does (`#24586`, `FEAT-24586`), else `(#24586)` after the subject.
+- Wrap the body at 72 columns.
+<!-- commit-message:end -->
+
+Commit only when the user asked (in a batch: their answer at the start).
 
 ## Rules
 

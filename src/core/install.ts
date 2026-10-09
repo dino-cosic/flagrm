@@ -41,11 +41,11 @@ export const PROMPT_FILES: Record<(typeof SKILLS)[number], string> = {
   "flagrm-remove": [
     "---",
     "description: Remove a feature flag with flagrm's guardrails (keep the ON path, verify until it passes)",
-    "argument-hint: <flag>",
+    "argument-hint: <flag> [flag...]",
     "agent: agent",
     "---",
     "",
-    "Follow `.github/skills/flagrm-remove/SKILL.md` to remove the feature flag named after this command.",
+    "Follow `.github/skills/flagrm-remove/SKILL.md` to remove the feature flags named after this command.",
     "",
   ].join("\n"),
   "flagrm-verify": [
@@ -79,8 +79,8 @@ export const AGENTS_BLOCK = [
   AGENTS_START,
   "## Feature flag removal (flagrm)",
   "",
-  "To remove a feature flag, follow `.agents/skills/flagrm-remove/SKILL.md`. To check a removal and get its",
-  "commit message, follow `.agents/skills/flagrm-verify/SKILL.md`.",
+  "To remove one or more feature flags, follow `.agents/skills/flagrm-remove/SKILL.md`. To check a removal",
+  "later, follow `.agents/skills/flagrm-verify/SKILL.md`.",
   AGENTS_END,
 ].join("\n");
 
