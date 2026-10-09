@@ -115,12 +115,19 @@ export function treeFingerprint(cwd: string, ignore?: ChangeFilter): string | un
  * doesn't have it), so the fingerprint doesn't see changes to it.
  */
 function dropIgnored(cwd: string, index: string, ignore: ChangeFilter): boolean {
-  const listed = paths(gitWithIndex(cwd, index, ["ls-files", "-z"]).stdout).filter(ignore);
+  const head = headSha(cwd);
+  // The paths that differ from HEAD, deleted ones included: `ls-files` no longer lists a deleted file.
+  // Before the first commit there is no HEAD to compare with, so every path in the index.
+  const listing = head
+    ? gitWithIndex(cwd, index, ["diff-index", "--cached", "--name-only", "--no-renames", "--relative", "-z", "HEAD"])
+    : gitWithIndex(cwd, index, ["ls-files", "-z"]);
+  if (!listing.ok) return false;
+  const listed = paths(listing.stdout).filter(ignore);
   if (listed.length === 0) return true;
   const input = `${listed.join("\0")}\0`;
   const fromFile = ["--pathspec-from-file=-", "--pathspec-file-nul"];
   // `reset` also drops a path HEAD doesn't have; before the first commit there is no HEAD to reset to.
-  const args = headSha(cwd) ? ["reset", "-q", "HEAD", ...fromFile] : ["rm", "-q", "--cached", ...fromFile];
+  const args = head ? ["reset", "-q", "HEAD", ...fromFile] : ["rm", "-q", "--cached", ...fromFile];
   return gitWithIndex(cwd, index, args, input).ok;
 }
 

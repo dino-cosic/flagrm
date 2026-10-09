@@ -127,6 +127,24 @@ describe("treeFingerprint", () => {
     expect(treeFingerprint(tmp, ignore)).not.toBe(treeAt(tmp, head));
     expect(changedFilesSince(tmp, head, ignore)).toEqual(["a.txt"]);
   });
+
+  it("leaves out the deletion of a committed file a filter ignores, but not of one it doesn't", () => {
+    write("gen/graph.html", "<html/>");
+    const sha = commit("init");
+    const ignore = (rel: string) => rel.startsWith("gen/");
+    fs.rmSync(path.join(tmp, "gen"), { recursive: true });
+    expect(treeFingerprint(tmp, ignore)).toBe(treeAt(tmp, sha));
+    fs.rmSync(path.join(tmp, "a.txt"));
+    expect(treeFingerprint(tmp, ignore)).not.toBe(treeAt(tmp, sha));
+  });
+
+  it("matches ignored deletions relative to a subdirectory config root", () => {
+    write("sub/gen/graph.html", "<html/>");
+    const sha = commit("init");
+    const sub = path.join(tmp, "sub");
+    fs.rmSync(path.join(sub, "gen"), { recursive: true });
+    expect(treeFingerprint(sub, (rel) => rel.startsWith("gen/"))).toBe(treeAt(sub, sha));
+  });
 });
 
 describe("headSha / isAncestor", () => {

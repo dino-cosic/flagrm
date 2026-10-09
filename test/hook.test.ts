@@ -84,6 +84,21 @@ describe("stopDecision", () => {
     expect(stopDecision(tmp, {})).toEqual({ block: false });
   });
 
+  it("allows once verify passed while a committed file matching exclude is deleted", () => {
+    fs.writeFileSync(
+      path.join(tmp, "flagrm.config.yaml"),
+      "projects:\n  - {name: svc, adapter: generic, path: .}\nexclude: ['graphify-out/**']\n",
+    );
+    fs.mkdirSync(path.join(tmp, "graphify-out"));
+    fs.writeFileSync(path.join(tmp, "graphify-out", "graph.html"), "<html/>");
+    commit("config");
+    baseline();
+    edit("b\n");
+    verified("pass");
+    fs.rmSync(path.join(tmp, "graphify-out", "graph.html"));
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
+  });
+
   it("blocks a new file that exclude doesn't cover, written after a passing verify", () => {
     baseline();
     edit("b\n");

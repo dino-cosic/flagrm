@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
+## Unreleased
+
+### Fixed
+
+- Deleting a committed file that matches `exclude` (say, a generator removing
+  `graphify-out/graph.html`) no longer invalidates a passing verify: the
+  Stop hook's tree fingerprint now leaves out deletions under `exclude`, as
+  it already did for edits and new files.
+- `/flagrm-remove` tells the agent not to run code generators or formatters
+  after the passing verify, or to verify again if it must.
+
 ## [0.3.0] - 2026-10-07
 
 ### Changed
