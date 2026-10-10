@@ -9,6 +9,10 @@ contain breaking changes.
 
 ### Added
 
+- Without `testResults`, `verify` reads failing test names and counts from
+  the test command's log (Karma, Jest, Vitest, `dotnet test`; Go and pytest
+  names), so a test that already failed at the baseline is a known failure
+  there too.
 - `doctor`'s warning about a test command without `testResults` says how
   to get results for the detected runner (Vitest, Jest, Karma, `dotnet test`).
 - An optional per-project `lint` command (lint or type-check), run by
@@ -64,6 +68,8 @@ contain breaking changes.
 
 ### Fixed
 
+- A failed test run without test results showed only "exited with 1":
+  `verify` now lists the log's error lines, as for a failed build.
 - A lint, build or test command that fails because its package script
   (`npm run lint` without a `lint` script) or ESLint config is missing is a
   setup problem: `verify` and `doctor --run` fail on it instead of treating

@@ -138,6 +138,15 @@ describe("runDoctor", () => {
     );
   });
 
+  it("still fails --run when testResults is set but only the log has test output", async () => {
+    fs.writeFileSync(path.join(tmp, "out.txt"), "Tests:       2 passed, 2 total\n");
+    config('node -e ""', `node -e "process.stdout.write(require('fs').readFileSync('out.txt','utf8'))"`, "./out/*.xml");
+    commitAll();
+    expect(await problems(tmp, { run: true })).toContainEqual(
+      expect.stringMatching(/wrote no test results matching out\/\*\.xml/),
+    );
+  });
+
   it("only warns with --run when tests already fail: the baseline records them as known failures", async () => {
     const test = testWriting('<testsuite><testcase classname="A" name="b"><failure/></testcase></testsuite>', 1);
     config('node -e ""', test, "./.flagrm/r.xml");

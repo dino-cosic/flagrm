@@ -21,6 +21,7 @@ import { detectTestRunner, testResultsHint } from "./test-runner.js";
 import { savedTools } from "./tools.js";
 import type { Baseline } from "./types.js";
 import { onPath, readJson, relativePath } from "./util.js";
+import { hasTestNames } from "./verify/test-results.js";
 
 export type DoctorStatus = "ok" | "warn" | "fail";
 
@@ -176,7 +177,7 @@ async function configChecks(
       const log = path.join(root, ".flagrm", "doctor", `${ctx.name}.${check}.log`);
       const run = await runCheck(ctx, check, command, log, undefined, commands.testResults);
       // Proven here rather than halfway through a removal: without readable results, verify can't compare tests.
-      if (check === "test" && commands.testResults && !run.results) {
+      if (check === "test" && commands.testResults && !hasTestNames(run.results)) {
         add(
           "fail",
           `${ctx.name}: \`${command}\` wrote no test results matching ${relativePath(cwd, commands.testResults)}`,
