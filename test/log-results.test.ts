@@ -91,4 +91,15 @@ describe("parseTestLog", () => {
   it("is undefined for a log without test output", () => {
     expect(parseTestLog("error TS2304: Cannot find name 'x'.\nnpm ERR! Test failed.")).toBeUndefined();
   });
+
+  it.each([
+    "× Build failed in 12ms",
+    "✗ Build failed in 1.2s",
+    "Failed to load config [foo]",
+    "Step 3 (docker) build FAILED",
+    "● Validation Warning:",
+    "● Deprecation Warning:",
+  ])("does not take %j for a failing test", (line) => {
+    expect(parseTestLog(line)).toBeUndefined();
+  });
 });

@@ -20,14 +20,14 @@ const vitestName = (name: string) => name.split(" > ").join(JUNIT_SEPARATOR);
 /** A failing test's name in one log line, per runner. */
 const FAILED: Array<[RegExp, (m: RegExpExecArray) => string | undefined]> = [
   // Karma: `Chrome Headless 120.0.0.0 (Mac OS 10.15.7) CheckoutComponent places the order FAILED`
-  [/^\S.*? \d[\d.]* \([^)]*\) (.+?) FAILED$/, (m) => m[1]],
+  [/^\S.*? \d[\d.]* \((?:Mac OS|Linux|Windows|Ubuntu)[^)]*\) (.+?) FAILED$/, (m) => m[1]],
   // Jest: `● CheckoutComponent › places the order`
-  [/^● (.+)$/, (m) => (/^(?:Test suite failed to run|Console)$/.test(m[1]) ? undefined : m[1])],
+  [/^● (.+)$/, (m) => (/^(?:Test suite failed to run|Console)$|Warning:?$/.test(m[1]) ? undefined : m[1])],
   // Vitest: `FAIL  src/a.spec.ts > Suite > title` (optionally after a `|project|` tag) and `× Suite > title 12ms`
   [/^FAIL\s+(?:\|[^|]+\|\s+)?\S+ > (.+)$/, (m) => vitestName(m[1])],
-  [/^[×✗] (.+?)(?: \d+ms)?$/, (m) => vitestName(m[1])],
+  [/^[×✗] (.+ > .+?)(?: \d+ms)?$/, (m) => vitestName(m[1])],
   // dotnet test: `Failed Shop.Tests.CheckoutTests.Quote(express: False) [12 ms]`
-  [/^Failed (\S.*?) \[[^\]]*\]$/, (m) => m[1]],
+  [/^Failed (\S.*?) \[(?:< ?)?[\d.,]+ (?:ms|s|m)\]$/, (m) => m[1]],
   // go test: `--- FAIL: TestX (0.00s)`
   [/^--- FAIL: (\S+)/, (m) => m[1]],
   // pytest: `FAILED tests/test_a.py::test_x - AssertionError`
