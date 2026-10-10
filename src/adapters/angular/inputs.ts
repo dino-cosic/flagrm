@@ -31,20 +31,34 @@ const PROPERTY_BINDING = /\[([\w$]+)\]\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 const HOLDER_READ = /^!?\s*([A-Za-z_$][\w$]*)(?:\s*\(\s*\))?$/;
 const SIGNAL_INPUT = /^(?:input|model)(?:\.required)?$/;
 
-/** The inputs of child components that parents' templates bind one of `holders` to. */
+/** Every binding of one child input, across all templates. */
+interface InputBindings {
+  child: ComponentInfo;
+  input: { name: string; line: number };
+  /** The tag maps to several components. */
+  shared: boolean;
+  /** Per binding, the flags its expression holds (undefined: not a holder read). */
+  reads: Array<Set<string> | undefined>;
+}
+
+/**
+ * The inputs of child components that parents' templates bind one of
+ * `holders` to. An input is `ambiguous` (suggested, never recorded) when its
+ * tag maps to several components, or when another binding passes it
+ * something else: a reusable component keeps that input after the removal.
+ */
 export function childInputs(files: TsFile[], holders: Holder[]): Holder[] {
   const all = components(files);
   const bySelector = new Map<string, ComponentInfo[]>();
   for (const c of all) for (const s of c.selectors) bySelector.set(s, [...(bySelector.get(s) ?? []), c]);
 
-  const out: Holder[] = [];
+  const inputs = new Map<string, InputBindings>();
   for (const parent of all) {
     const bound = new Map<string, Set<string>>();
     for (const h of holders) {
       if (h.cls !== parent.cls || h.kind === "local" || h.ternary || h.ambiguous) continue;
       bound.set(h.name, (bound.get(h.name) ?? new Set<string>()).add(h.flag));
     }
-    if (bound.size === 0) continue;
     const template = templateOf(parent)?.replace(/<!--[\s\S]*?-->/g, "");
     if (!template) continue;
     for (const tag of template.matchAll(START_TAG)) {
@@ -53,23 +67,33 @@ export function childInputs(files: TsFile[], holders: Holder[]): Holder[] {
       for (const binding of tag[2].matchAll(PROPERTY_BINDING)) {
         const read = HOLDER_READ.exec((binding[2] ?? binding[3]).trim());
         const flags = read ? bound.get(read[1]) : undefined;
-        if (!flags) continue;
         for (const child of children) {
           const input = findInput(child, binding[1]);
           if (!input) continue;
-          for (const flag of flags) {
-            out.push({
-              flag,
-              name: input.name,
-              kind: "field",
-              file: child.file.file,
-              line: input.line,
-              cls: child.cls,
-              ...(children.length > 1 ? { ambiguous: true } : {}),
-            });
-          }
+          const key = `${child.file.file}\0${child.cls.pos}\0${input.name}`;
+          const entry = inputs.get(key) ?? { child, input, shared: false, reads: [] };
+          inputs.set(key, entry);
+          entry.shared ||= children.length > 1;
+          entry.reads.push(flags);
         }
       }
+    }
+  }
+
+  const out: Holder[] = [];
+  for (const { child, input, shared, reads } of inputs.values()) {
+    const flags = new Set(reads.flatMap((r) => [...(r ?? [])]));
+    for (const flag of flags) {
+      const ambiguous = shared || reads.some((r) => !r?.has(flag));
+      out.push({
+        flag,
+        name: input.name,
+        kind: "field",
+        file: child.file.file,
+        line: input.line,
+        cls: child.cls,
+        ...(ambiguous ? { ambiguous: true } : {}),
+      });
     }
   }
   return out;

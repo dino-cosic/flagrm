@@ -187,6 +187,53 @@ describe("Angular holders", () => {
 });
 
 describe("Angular child inputs", () => {
+  it("only suggests an input another template binds to something other than the flag", async () => {
+    const parent = (name: string, binding: string, member = "") =>
+      lines(
+        "import { Component } from '@angular/core';",
+        "@Component({",
+        `  selector: 'app-${name}',`,
+        `  template: '<app-table [paginationEnabled]="${binding}"></app-table>',`,
+        "})",
+        `export class ${name}Component {`,
+        member,
+        "}",
+      );
+    write(
+      "src/app/p.component.ts",
+      parent("p", "isPaginationEnabled", "  isPaginationEnabled = this.ff.isFeatureFlagEnabled('Pagination');"),
+    );
+    write("src/app/q.component.ts", parent("q", "rows.length > 50"));
+    write(
+      "src/app/table.component.ts",
+      lines(
+        "import { Component, Input } from '@angular/core';",
+        "@Component({ selector: 'app-table', template: '' })",
+        "export class TableComponent {",
+        "  @Input() paginationEnabled = false;",
+        "}",
+      ),
+    );
+    expect(await flowOf()).toEqual(
+      [
+        "field isPaginationEnabled src/app/p.component.ts:7",
+        "field paginationEnabled src/app/table.component.ts:4 ambiguous",
+      ].sort(),
+    );
+    // With only flag bindings, the same input is recorded.
+    write(
+      "src/app/q.component.ts",
+      parent("q", "!isPaginationEnabled", "  isPaginationEnabled = this.ff.isFeatureFlagEnabled('Pagination');"),
+    );
+    expect(await flowOf()).toEqual(
+      [
+        "field isPaginationEnabled src/app/p.component.ts:7",
+        "field isPaginationEnabled src/app/q.component.ts:7",
+        "field paginationEnabled src/app/table.component.ts:4",
+      ].sort(),
+    );
+  });
+
   it("follows a holder bound in a parent's templateUrl to every kind of input, one hop only", async () => {
     write(
       "src/app/parent.component.ts",
