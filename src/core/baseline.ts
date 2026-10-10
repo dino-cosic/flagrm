@@ -481,6 +481,11 @@ export function logLines(log: string | undefined): string[] | undefined {
   );
 }
 
+/** A log line that reports an error: not a compiler warning, nor a summary such as `0 Error(s)`. */
+export function looksLikeError(line: string): boolean {
+  return /\berror\b|\bfailed\b|✗|×/i.test(line) && !/:\s*warning\b/i.test(line) && !/^\d+ Error\(s\)$/i.test(line);
+}
+
 /**
  * Up to `max` distinct lines of a log that look like errors, so the reader sees
  * why a command failed without opening the log. Compiler warnings and summary
@@ -490,9 +495,7 @@ export function logLines(log: string | undefined): string[] | undefined {
 export function errorExcerpt(log: string | undefined, max = 10): string[] {
   const all = logLines(log);
   if (!all) return [];
-  const lines = all
-    .filter((line) => /\berror\b|\bfailed\b|✗|×/i.test(line))
-    .filter((line) => !/:\s*warning\b/i.test(line) && !/^\d+ Error\(s\)$/i.test(line));
+  const lines = all.filter(looksLikeError);
   // No line says error (e.g. "A compatible .NET SDK was not found"): the end of the log usually does.
   if (!lines.length) return all.slice(-max);
   return [...new Set(lines)].slice(0, max);

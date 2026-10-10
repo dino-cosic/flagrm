@@ -11,8 +11,10 @@ export interface VerifyContext {
   baseline: Baseline;
   /** Files (relative to `root`) changed since the baseline commit; undefined without git. */
   changedFiles?: string[];
-  /** Build/test commands this verify ran. */
+  /** Build/test/lint commands this verify ran. */
   runs: CheckRun[];
+  /** Checks `--skip` left out. */
+  skip?: ReadonlySet<CheckId>;
   /** How the configuration differs from the baseline's, or from the one accepted since (`--accept config`): what warns. */
   configChanges: ConfigChange[];
   /** How it differs from the baseline's original configuration: what still explains tests that no longer run. */

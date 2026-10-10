@@ -118,15 +118,48 @@ describe("lint check", () => {
     lintSays("a.ts:1:1 error old problem");
     await baseline();
     // The old line, colored this time, is not new.
-    lintSays("\u001b[31ma.ts:1:1 error old problem\u001b[0m", "b.ts:2:2 error new problem");
+    lintSays("\u001b[31ma.ts:1:1 error old problem\u001b[0m", "b.ts:2:2 warning new problem");
     const report = await verify();
     expect(lint(report)).toMatchObject({ status: "warn", summary: "1 lint run fails as at the baseline" });
     expect(messages(lint(report), "warn")).toEqual([
-      expect.stringContaining("lint already failed at the baseline: 1 new line in the log"),
+      expect.stringContaining("lint already failed at the baseline: 1 new line in the log, none an error"),
     ]);
-    expect(messages(lint(report), "info")).toEqual(["new: b.ts:2:2 error new problem"]);
+    expect(messages(lint(report), "info")).toEqual(["new: b.ts:2:2 warning new problem"]);
     expect(report.status).toBe("pass");
     expect((await verify({ strict: true })).status).toBe("fail");
+  });
+
+  it("fails on a new error line even when lint already failed at the baseline, listing errors first", async () => {
+    lintSays("a.ts:1:1 error old problem");
+    await baseline();
+    lintSays("a.ts:1:1 error old problem", "b.ts", "b.ts:2:2 error new problem");
+    const report = await verify();
+    expect(lint(report)).toMatchObject({ status: "fail", summary: "1 lint run failed" });
+    expect(messages(lint(report), "fail")).toEqual([
+      expect.stringContaining("lint already failed at the baseline, but 1 error line is new: fix it"),
+    ]);
+    expect(messages(lint(report), "info")).toEqual(["new: b.ts:2:2 error new problem", "new: b.ts"]);
+    expect(report.status).toBe("fail");
+  });
+
+  it("doesn't count an old error whose line moved, or a changed problem count, as new", async () => {
+    lintSays("/r/a.ts", "40:5  error  'x' is defined but never used", "✖ 37 problems (37 errors, 0 warnings)");
+    await baseline();
+    lintSays("/r/a.ts", "30:5  error  'x' is defined but never used", "✖ 36 problems (36 errors, 0 warnings)");
+    const check = lint(await verify());
+    expect(check.status).toBe("warn");
+    expect(messages(check, "warn")).toEqual([expect.stringContaining("no new lines in the log")]);
+  });
+
+  it("fails on a missing package script even when it failed the same way at the baseline", async () => {
+    write("lint.cjs", "console.error('npm error Missing script: \"lint\"');\nprocess.exit(1);\n");
+    commit("broken lint");
+    await baseline();
+    const check = lint(await verify());
+    expect(check.status).toBe("fail");
+    expect(messages(check, "info")).toContain(
+      'setup problem: package.json has no "lint" script: add it or change the command in the config',
+    );
   });
 
   it("says when no line is new, or when the baseline log is gone", async () => {
@@ -136,7 +169,7 @@ describe("lint check", () => {
     fs.rmSync(path.join(flagDir(tmp, FLAG), "app.lint.log"));
     const check = lint(await verify());
     expect(check.status).toBe("warn");
-    expect(messages(check, "warn")).toEqual([expect.stringContaining("baseline log not found")]);
+    expect(messages(check, "warn")).toEqual([expect.stringContaining("its log wasn't found")]);
     expect(messages(check, "info")).toEqual([]);
   });
 
@@ -169,7 +202,9 @@ describe("lint check", () => {
     lintSays("/r/a.ts", unused, "✖ 1 problem");
     await baseline();
     lintSays("/r/a.ts", unused, "/r/b.ts", unused, "✖ 2 problems");
-    expect(messages(lint(await verify()), "info")).toEqual(["new: /r/b.ts", `new: ${unused}`, "new: ✖ 2 problems"]);
+    const check = lint(await verify());
+    expect(check.status).toBe("fail");
+    expect(messages(check, "info")).toEqual([`new: ${unused}`, "new: /r/b.ts", "new: ✖ 2 problems"]);
   });
 
   it("fails when lint was cut short, even when it failed at the baseline", async () => {

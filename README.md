@@ -130,8 +130,8 @@ of these reasons is a warning, for the agent to explain in its notes.
 | `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files. A method, property, field or type the removal left named only where it is declared is a warning (compilers don't report public members) |
 | `build` | A project's build command fails |
 | `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. A test that no longer runs though the diff neither deletes nor renames it and the test config is unchanged, and a changed test file none of whose tests ran, are warnings for the agent to account for |
-| `lint` | The project's `lint` command fails where it passed at the baseline. A lint that already failed at the baseline only warns, listing the log lines new since |
-| `coverage` | Never fails: a changed file that no project's build, test or lint command checks (outside every project with a command, or outside its `covers` globs) is a warning |
+| `lint` | The project's `lint` command fails where it passed at the baseline. A lint that already failed at the baseline only warns, unless its log has error lines the baseline's didn't (line and column numbers ignored); a missing package script or ESLint config is a setup problem and fails |
+| `coverage` | A changed file that no project's build, test or lint command checks (outside every project with a command, or outside its `covers` globs) is a warning, so it fails only with `--strict`. Files already dirty at the baseline and unchanged since don't count, nor do projects whose commands `--skip` left out |
 
 The baseline also records the configuration it was taken with: each project's
 resolved build, test and lint commands, the files they name (a `.slnf`, a
@@ -192,7 +192,7 @@ leaves its files in place, and `init` names them so you can delete them.
 `lint` is an optional lint or type-check command (no adapter default) that
 `baseline` and `verify` run like `build` and `test`; use it for code the build
 and tests don't reach, such as end-to-end specs. A lint that already fails at
-the baseline only warns. flagrm doesn't check formatting: put a formatter's
+the baseline only warns, unless the removal adds error lines. flagrm doesn't check formatting: put a formatter's
 check (`npx prettier --check .`) in `lint` if you want it. `covers` lists the
 files (globs relative to `path`) the project's commands check; the `coverage`
 check warns about a changed file no project with a command covers. Without

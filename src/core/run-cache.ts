@@ -14,7 +14,7 @@ import { changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { treeFingerprint } from "./git.js";
 import { packageVersion } from "./package.js";
-import { type CheckRun, JSON_SCHEMA_VERSION, type SavedRuns } from "./types.js";
+import { type CheckRun, JSON_SCHEMA_VERSION, RUN_CHECK_ID, type SavedRuns } from "./types.js";
 import { readJson } from "./util.js";
 
 type Planned = { project: string; check: CheckRun["check"] };
@@ -132,13 +132,11 @@ export async function baselineRuns(root: string, flag: string, projects: Workspa
   return found ? reuseRuns(found, logDir) : runChecks(projects, logDir);
 }
 
-const CHECK_LABEL: Record<CheckRun["check"], string> = { build: "build", test: "tests", lint: "lint" };
-
 /** One line saying which runs were reused and from where, or undefined when none were. `at`: when they were reused. */
 export function reusedNote(runs: ReadonlyArray<Pick<CheckRun, "check" | "reused">>, at: string): string | undefined {
   const reused = runs.find((r) => r.reused)?.reused;
   if (!reused) return undefined;
-  const checks = [...new Set(runs.filter((r) => r.reused).map((r) => CHECK_LABEL[r.check]))];
+  const checks = [...new Set(runs.filter((r) => r.reused).map((r) => RUN_CHECK_ID[r.check]))];
   const what = checks.length > 1 ? `${checks.slice(0, -1).join(", ")} and ${checks.at(-1)}` : checks[0];
   return `${what} reused from ${reused.flag}'s verify (same tree and commands, ${age(Date.parse(at) - Date.parse(reused.createdAt))} ago; --no-reuse to run them)`;
 }

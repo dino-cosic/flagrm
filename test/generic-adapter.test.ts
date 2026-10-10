@@ -113,7 +113,7 @@ describe("verify on the Go fixture", () => {
       build: "skipped",
       tests: "skipped",
       lint: "skipped",
-      coverage: "warn",
+      coverage: "pass",
     });
     expect(report.status).toBe("pass");
   });

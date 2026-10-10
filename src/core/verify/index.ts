@@ -18,6 +18,7 @@ import {
   type CheckResult,
   type CheckRun,
   JSON_SCHEMA_VERSION,
+  RUN_CHECK_ID,
   type VerifyReport,
   type VerifyRun,
 } from "../types.js";
@@ -52,7 +53,7 @@ export async function verifyFlag(
   const ignore = changeFilter(projects[0]?.ctx.config);
   const changedFiles = baseline.git.sha ? changedFilesSince(root, baseline.git.sha, ignore) : undefined;
 
-  const only = (["build", "test", "lint"] as const).filter((check) => !skip.has(check === "test" ? "tests" : check));
+  const only = (["build", "test", "lint"] as const).filter((check) => !skip.has(RUN_CHECK_ID[check]));
   // Before the commands: the key is the tree they run on.
   const key = only.length ? runsKey(root, projects) : undefined;
   const found = key && options.reuse !== false ? findRuns(root, projects, key, plannedRuns(projects, only)) : undefined;
@@ -67,7 +68,17 @@ export async function verifyFlag(
   const now = configSnapshot(projects);
   const configChanges = configChangesSince(baseline.acceptedConfig ?? baseline.config, now);
   const originalConfigChanges = baseline.acceptedConfig ? configChangesSince(baseline.config, now) : configChanges;
-  const v: VerifyContext = { root, flag, projects, baseline, changedFiles, runs, configChanges, originalConfigChanges };
+  const v: VerifyContext = {
+    root,
+    flag,
+    projects,
+    baseline,
+    changedFiles,
+    runs,
+    skip,
+    configChanges,
+    originalConfigChanges,
+  };
   const tests = compareTests(v);
   const run: Record<Exclude<CheckId, "leftovers">, () => CheckResult> = {
     "dead-code": () => deadCodeCheck(v),

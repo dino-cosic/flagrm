@@ -21,7 +21,7 @@ import { changeFilter } from "./core/change-filter.js";
 import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
 import { projectCommands } from "./core/config-snapshot.js";
 import { runDoctor } from "./core/doctor.js";
-import { gitState } from "./core/git.js";
+import { blobIds, gitState } from "./core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
 import { buildInventory } from "./core/inventory.js";
@@ -209,6 +209,7 @@ addCommonOptions(
           result = addNames(root, flag, added);
         } else {
           const git = gitState(root);
+          if (git.dirtyFiles?.length) git.dirtyHashes = blobIds(root, git.dirtyFiles);
           const checks = opts.checks ? await baselineRuns(root, flag, projects, opts.reuse) : undefined;
           const { names, ...flow } = await discoverFlag(projects, flag);
           result = writeBaseline(root, flag, projects, git, checks, mergeNames(names, added), flow);
@@ -230,7 +231,7 @@ addCommonOptions(
   program
     .command("verify <flag>")
     .description(
-      "gate a flag removal against its baseline (`flagrm baseline <flag>`): build, tests, lint and new unused code; " +
+      "gate a flag removal against its baseline (`flagrm baseline <flag>`): leftovers, new unused code, build, tests, lint and coverage; " +
         "writes .flagrm/<flag>/verify.json; exit 0 pass, 1 fail, 2 usage error",
     ),
 )

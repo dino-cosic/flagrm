@@ -3,8 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/config.js";
+import { blobIds } from "../src/core/git.js";
 import { resolveProjects } from "../src/core/registry.js";
-import type { Baseline, CheckResult, CheckRun } from "../src/core/types.js";
+import type { Baseline, CheckId, CheckResult, CheckRun, GitState } from "../src/core/types.js";
 import { coverageCheck } from "../src/core/verify/coverage.js";
 
 let tmp: string;
@@ -35,7 +36,12 @@ const CONFIG = `projects:
 `;
 
 /** The coverage check for these changed files, when the projects in `ran` ran a command. */
-function coverage(changedFiles: string[] | undefined, ran: string[], config = CONFIG): CheckResult {
+function coverage(
+  changedFiles: string[] | undefined,
+  ran: string[],
+  config = CONFIG,
+  { skip, git }: { skip?: CheckId[]; git?: GitState } = {},
+): CheckResult {
   fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), config);
   const runs = ran.map(
     (project): CheckRun => ({ project, check: "build", command: "true", exitCode: 0, durationMs: 0 }),
@@ -44,9 +50,10 @@ function coverage(changedFiles: string[] | undefined, ran: string[], config = CO
     root: tmp,
     flag: "F",
     projects: resolveProjects(loadConfig({ quiet: true }, tmp)),
-    baseline: {} as Baseline,
+    baseline: { git } as Baseline,
     changedFiles,
     runs,
+    skip: new Set(skip),
     configChanges: [],
     originalConfigChanges: [],
   });
@@ -102,7 +109,32 @@ describe("coverage check", () => {
     expect(coverage(["web/playwright/x.ts"], ["web"], CONFIG.replace('["src/**"]', '["./"]')).status).toBe("pass");
   });
 
-  it("counts deleted files, and every file when no command ran (--skip)", () => {
+  it("lets a project whose command --skip left out cover its files, and is skipped when all were", () => {
+    const config = CONFIG.replace("    covers:", "    build: make\n    covers:");
+    expect(coverage(["web/src/a.ts"], [], config, { skip: ["build"] }).status).toBe("pass");
+    expect(coverage(["web/src/a.ts"], [], config, { skip: ["tests"] }).status).toBe("warn");
+    expect(coverage(["docs/a.md"], [], config, { skip: ["build"] }).status).toBe("warn");
+    expect(coverage(["docs/a.md"], [], config, { skip: ["build", "tests", "lint"] })).toMatchObject({
+      status: "skipped",
+      summary: "build, tests and lint skipped (--skip), so no command ran",
+    });
+  });
+
+  it("ignores files dirty at the baseline and unchanged since", () => {
+    fs.writeFileSync(path.join(tmp, "notes.txt"), "mine\n");
+    const git: GitState = { sha: "abc", dirty: true, dirtyFiles: ["notes.txt", "gone.txt"] };
+    git.dirtyHashes = blobIds(tmp, git.dirtyFiles ?? []);
+    expect(git.dirtyHashes["gone.txt"]).toBeNull();
+    expect(coverage(["notes.txt", "gone.txt"], [], CONFIG, { git }).status).toBe("pass");
+    fs.writeFileSync(path.join(tmp, "notes.txt"), "edited by the removal\n");
+    expect(warnings(coverage(["notes.txt", "gone.txt"], [], CONFIG, { git }))).toEqual([
+      "- notes.txt: no build, test or lint command checks it",
+    ]);
+    // A baseline from before dirtyHashes: its dirty files can't be told apart, so none count.
+    expect(coverage(["notes.txt"], [], CONFIG, { git: { ...git, dirtyHashes: undefined } }).status).toBe("pass");
+  });
+
+  it("counts deleted files", () => {
     // Nothing on disk: changed files come from git, deleted ones included.
     expect(warnings(coverage(["web/src/gone.ts"], []))).toEqual([
       "web web/src/gone.ts: no build, test or lint command checks it",

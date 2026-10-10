@@ -1,8 +1,8 @@
 /**
  * Tell a machine setup problem apart from broken code in a failed build or
  * test log: a missing .NET SDK, a tool a build step calls that isn't
- * installed, Docker not running for Testcontainers. Each becomes one line
- * that says what to fix.
+ * installed, Docker not running for Testcontainers, a package script or
+ * ESLint config that doesn't exist. Each becomes one line that says what to fix.
  */
 
 import fs from "node:fs";
@@ -14,7 +14,13 @@ import { relativePath } from "./util.js";
  * it shows none. `root` is the project root: paths are reported relative to it.
  */
 export function environmentProblem(log: string, root: string): string | undefined {
-  const problems = [missingSdk(log, root), ...missingCommands(log, root), dockerUnavailable(log)].filter(Boolean);
+  const problems = [
+    missingSdk(log, root),
+    ...missingCommands(log, root),
+    dockerUnavailable(log),
+    missingScript(log),
+    eslintBroken(log),
+  ].filter(Boolean);
   return problems.length ? problems.join("; ") : undefined;
 }
 
@@ -80,4 +86,22 @@ function dockerUnavailable(log: string): string | undefined {
     /DockerUnavailableException|Docker is either not running or misconfigured|Cannot connect to the Docker daemon/i;
   if (!docker.test(log)) return undefined;
   return "Docker is not running (Testcontainers tests need it): start Docker or leave those tests out of `test`";
+}
+
+/** npm and pnpm print `Missing script: "lint"`, Yarn 1 `Command "lint" not found`, Yarn 2+ `Couldn't find a script named "lint"`. */
+function missingScript(log: string): string | undefined {
+  const name =
+    /\bMissing script: "?([^"\s]+)"?/.exec(log)?.[1] ??
+    /\berror Command "([^"]+)" not found/.exec(log)?.[1] ??
+    /Couldn't find a script named "([^"]+)"/.exec(log)?.[1];
+  if (!name) return undefined;
+  return `package.json has no "${name}" script: add it or change the command in the config`;
+}
+
+/** ESLint that can't find its config or crashes exits 2 before it lints anything. */
+function eslintBroken(log: string): string | undefined {
+  if (!/ESLint couldn't find (?:a configuration file|an eslint\.config)|Oops! Something went wrong! :\(/.test(log)) {
+    return undefined;
+  }
+  return "ESLint could not run (no config found, or it crashed): fix its setup or change the command in the config";
 }

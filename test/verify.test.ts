@@ -91,7 +91,7 @@ describe("verify on the realistic fixture", () => {
       build: "skipped",
       tests: "skipped",
       lint: "skipped",
-      coverage: "warn",
+      coverage: "pass",
     });
     expect(report.checks.find((c) => c.id === "dead-code")?.summary).toBe(
       "compiler diagnostics skipped for api: no build output",
