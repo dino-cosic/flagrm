@@ -49,6 +49,8 @@ describe("Angular import aliases", () => {
     const entry = (await buildInventory(workspace())).flags.find((f) => f.flag === "Pagination");
     expect(entry?.flow).toEqual([
       expect.objectContaining({ name: "AppFeatureFlags.Pagination", kind: "alias", record: true, line: 2 }),
+      // `paged` holds the flag but doesn't mention it: suggested, not recorded.
+      expect.objectContaining({ name: "paged", kind: "field", record: false, line: 4 }),
     ]);
     const other = (await buildInventory(workspace())).flags.find((f) => f.flag === "Other");
     expect(other?.flow.map((n) => n.name)).toEqual(["AppFeatureFlags.Other"]);
