@@ -75,7 +75,12 @@ function isSite(text: string, mask: Uint8Array, start: number, after: number): b
   const before = text.slice(Math.max(0, start - 40), start);
   if (/\?\s*$/.test(before) || /\bcase\s+$/.test(before)) return false;
   let i = after;
-  while (i < text.length && /[ \t?!]/.test(text[i])) i++;
+  while (i < text.length && /[ \t]/.test(text[i])) i++;
+  // `x?:` / `x!:` (optional, definite) and `x ??= y` declare or assign; `x != y`, `x ? a : b` and `x!.y` don't.
+  if (text[i] === "?" || text[i] === "!") {
+    const op = text.slice(i, i + 3);
+    return op[1] === ":" || op === "??=";
+  }
   const rest = text.slice(i, i + 3);
   if (rest.startsWith("=>")) return true;
   if (rest.startsWith("=")) return !rest.startsWith("==");
@@ -150,7 +155,11 @@ export async function assertOwnNames(
 ): Promise<void> {
   if (names.length === 0) return;
   const inventory = (await buildInventory(projects)).flags;
-  const refs: FlagRef[] = inventory.map((e) => ({ flag: e.flag, aliases: e.definitions.map((d) => d.name) }));
+  // A renamed import of the flag's registry (`AppFeatureFlags.X`) reads it as much as the definition does.
+  const refs: FlagRef[] = inventory.map((e) => ({
+    flag: e.flag,
+    aliases: [...e.definitions.map((d) => d.name), ...e.flow.filter((n) => n.kind === "alias").map((n) => n.name)],
+  }));
   if (!refs.some((r) => r.flag === flag)) refs.push({ flag, aliases: [] });
   for (const name of [...new Set(names.map((n) => n.name))]) {
     const entries = names.filter((n) => n.name === name);

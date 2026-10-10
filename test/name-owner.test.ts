@@ -78,6 +78,22 @@ describe("nameReads", () => {
     expect(reads("pagedComment")).toEqual([]);
   });
 
+  it("doesn't take an inequality or a ternary condition for an assignment", () => {
+    write(
+      "web/guard.ts",
+      [
+        "export class Guard {",
+        "  pagedBanner = false;",
+        "  m(pagedOpts) { if (pagedOpts != null && this.flags.isEnabled(FeatureFlags.PagingV2)) {} }",
+        "  o = this.pagedBanner ? { e: this.flags.isEnabled(FeatureFlags.PagingV2) } : {};",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    expect(reads("pagedOpts")).toEqual([]);
+    expect(reads("pagedBanner")).toEqual([[]]);
+  });
+
   it("looks only in the given files", () => {
     expect(nameReads(workspace(), "PagedProp", [path.join(tmp, "web/list.ts")], FLAGS)).toEqual([]);
   });
@@ -90,6 +106,14 @@ describe("assertOwnNames", () => {
     await expect(assertOwnNames(tmp, workspace(), "Paging", [agent("pagedV2Eval")])).rejects.toThrow(
       '"pagedV2Eval" reads PagingV2, not Paging (web/list.ts:2); not recorded.',
     );
+  });
+
+  it("counts a renamed import of the registry as reading this flag", async () => {
+    write(
+      "web/aliased.ts",
+      "import { FeatureFlags as AppFlags } from './flags';\nexport const pagedAliased = AppFlags.Paging && FeatureFlags.PagingV2;\n",
+    );
+    await expect(assertOwnNames(tmp, workspace(), "Paging", [agent("pagedAliased")])).resolves.toBeUndefined();
   });
 
   it("accepts a name reading this flag (with others or not), no flag, or a mix of sites", async () => {
