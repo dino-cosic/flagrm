@@ -2,9 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { discoverFlag, writeBaseline } from "../src/core/baseline.js";
 import { loadConfig } from "../src/core/config.js";
+import { gitState } from "../src/core/git.js";
 import { buildInventory } from "../src/core/inventory.js";
 import { resolveProjects } from "../src/core/registry.js";
+import { verifyFlag } from "../src/core/verify/index.js";
 
 let tmp: string;
 
@@ -350,5 +353,77 @@ describe("Angular child inputs", () => {
     );
     const entry = (await buildInventory(workspace())).flags.find((f) => f.flag === "Pagination");
     expect(entry?.flow.filter((n) => n.name === "paginationShown").map((n) => n.record)).toEqual([false, false]);
+  });
+});
+
+describe("Angular value flow end to end", () => {
+  const parent = (member: string) =>
+    lines(
+      "import { Component } from '@angular/core';",
+      "import { FeatureFlags } from './feature-flags';",
+      "@Component({ selector: 'app-parent', templateUrl: './parent.component.html' })",
+      "export class ParentComponent {",
+      member,
+      "}",
+    );
+
+  beforeEach(() => {
+    write(
+      "src/app/parent.component.ts",
+      parent("  isPaginationEnabled = this.ff.isFeatureFlagEnabled(FeatureFlags.Pagination);"),
+    );
+    write("src/app/parent.component.html", '<app-row [enabled]="isPaginationEnabled"></app-row>\n');
+    write(
+      "src/app/row.component.ts",
+      lines(
+        "import { Component, Input } from '@angular/core';",
+        "@Component({ selector: 'app-row', template: '' })",
+        "export class RowComponent {",
+        "  @Input() enabled = false;",
+        "}",
+      ),
+    );
+  });
+
+  it("records a field holding the flag for its .ts and template, and suggests a generic input", async () => {
+    const { names, suggestedNames } = await discoverFlag(workspace(), "Pagination");
+    expect(names).toContainEqual({
+      name: "isPaginationEnabled",
+      kind: "wrapper",
+      source: "discovery",
+      file: "src/app/parent.component.ts",
+    });
+    expect(names).toContainEqual({
+      name: "isPaginationEnabled",
+      kind: "wrapper",
+      source: "discovery",
+      file: "src/app/parent.component.html",
+    });
+    expect(names.map((n) => n.name)).not.toContain("enabled");
+    expect(suggestedNames.map((n) => `${n.kind} ${n.name}`)).toContain("field enabled");
+  });
+
+  it("only suggests a getter that names a one-word flag, as it would be checked everywhere", async () => {
+    write(
+      "src/app/parent.component.ts",
+      parent("  get isPaginationEnabled() { return this.ff.isFeatureFlagEnabled(FeatureFlags.Pagination); }"),
+    );
+    const { names, suggestedNames } = await discoverFlag(workspace(), "Pagination");
+    expect(names.map((n) => n.name)).not.toContain("isPaginationEnabled");
+    expect(suggestedNames.map((n) => `${n.kind} ${n.name}`)).toContain("property isPaginationEnabled");
+  });
+
+  it("fails leftovers on the field left in the template", async () => {
+    const projects = workspace();
+    const { names } = await discoverFlag(projects, "Pagination");
+    writeBaseline(tmp, "Pagination", projects, gitState(tmp), undefined, names);
+    write("src/app/parent.component.ts", parent(""));
+    write("src/app/feature-flags.ts", "export enum FeatureFlags {\n  Other = 'Other',\n}\n");
+    const { report } = await verifyFlag(tmp, workspace(), "Pagination", { skip: ["build", "tests", "dead-code"] });
+    const leftovers = report.checks.find((c) => c.id === "leftovers");
+    expect(leftovers?.status).toBe("fail");
+    expect(leftovers?.findings.map((f) => `${rel(f.file ?? "")} ${f.message}`)).toContain(
+      "src/app/parent.component.html still references isPaginationEnabled",
+    );
   });
 });

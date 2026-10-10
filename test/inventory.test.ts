@@ -80,4 +80,19 @@ describe("list on the realistic fixture", () => {
     expect(express.config).toHaveLength(4);
     expect(express.references).toEqual({ total: 7, files: 5, tests: 5, byProject: { web: 5, api: 2 } });
   });
+
+  it("follows NewCheckout and ExpressShipping through Angular fields and a child's signal input", () => {
+    const web = (name: string) =>
+      flag(before, name)
+        .flow.filter((n) => n.project === "web" && n.kind !== "alias")
+        .map((n) => `${n.kind} ${n.name} ${rel(n.file)}:${n.line} ${n.record ? "record" : "suggest"}`)
+        .sort();
+    expect(web("NewCheckout")).toEqual(["field newCheckout frontend/src/app/checkout/checkout.component.ts:23 record"]);
+    // Not followed: header's toObservable(watch(…)) and checkout's computed(…) wrap the evaluation;
+    // feature-flag.service.spec.ts's `const express = service.watch(…)` is in a test file.
+    expect(web("ExpressShipping")).toEqual([
+      "field express frontend/src/app/checkout/checkout-steps.component.ts:16 record",
+      "field expressShipping frontend/src/app/checkout/checkout.component.ts:24 record",
+    ]);
+  });
 });
