@@ -384,14 +384,14 @@ function printInstallRoot(root: string): void {
 program
   .command("doctor")
   .description(
-    "check that this repository is ready for flag removal: config, build/test commands, git, .gitignore, " +
+    "check that this repository is ready for flag removal: config, build/test/lint commands, git, .gitignore, " +
       "installed skills and Stop hook, abandoned baselines; exit 0 ok, 1 problems",
   )
   .option(
     "--config <path>",
     "path to a config file (default: the nearest flagrm.config.yaml up to the git repository root)",
   )
-  .option("--run", "also run each build and test command")
+  .option("--run", "also run each build, test and lint command")
   .option("--json", "machine-readable JSON output")
   .action(async (opts: { config?: string; run?: boolean; json?: boolean }) => {
     const report = await runDoctor(process.cwd(), { config: opts.config, run: opts.run });

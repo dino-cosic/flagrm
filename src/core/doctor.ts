@@ -1,6 +1,6 @@
 /**
  * `flagrm doctor`: is this repository ready for an agent to remove a flag?
- * Config, build/test commands, git, .gitignore, the installed skills and
+ * Config, build/test/lint commands, git, .gitignore, the installed skills and
  * hook, and baselines left behind by abandoned removals.
  */
 
@@ -38,7 +38,7 @@ export interface DoctorReport {
 
 export interface DoctorOptions {
   config?: string;
-  /** Also run each build and test command. */
+  /** Also run each build, test and lint command. */
   run?: boolean;
   /** What the machine has (SDKs, `cargo`, Docker); the real machine by default. */
   probes?: SetupProbes;
@@ -127,13 +127,16 @@ async function configChecks(
   setupChecks(projects, root, options.probes ?? realProbes((exe) => onPath(exe, root)), add);
   for (const { adapter, ctx } of projects) {
     const commands = projectCommands(adapter, ctx);
-    for (const check of ["build", "test"] as const) {
+    for (const check of ["build", "test", "lint"] as const) {
       const command = commands[check];
       if (!command) {
-        add(
-          "warn",
-          `${ctx.name}: no ${check} command — verify can't ${check === "build" ? "check the build" : "compare tests"}`,
-        );
+        // Lint is optional: verify skips it without a command, which is no problem.
+        if (check !== "lint") {
+          add(
+            "warn",
+            `${ctx.name}: no ${check} command — verify can't ${check === "build" ? "check the build" : "compare tests"}`,
+          );
+        }
         continue;
       }
       const missing = simpleCommandProgram(command);
@@ -174,6 +177,15 @@ async function configChecks(
         add(
           "warn",
           `${ctx.name}: \`${command}\`: ${failed === 1 ? "1 test fails already — the baseline records it as a known failure" : `${failed} tests fail already — the baseline records them as known failures`}, which verify only warns about`,
+        );
+        continue;
+      }
+      // Lint debt is no setup problem: verify only warns about a lint run that already failed at the baseline.
+      if (check === "lint" && run.exitCode !== 0 && !run.failure) {
+        add(
+          "warn",
+          `${ctx.name}: \`${command}\` fails already (exit ${run.exitCode}) — verify only warns about lint errors the baseline had`,
+          errorExcerpt(run.log, 3),
         );
         continue;
       }
