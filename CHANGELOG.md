@@ -25,6 +25,12 @@ contain breaking changes.
   `AppFeatureFlags.X` is recorded and checked like `FeatureFlags.X`.
 - Angular: a name checked only in a component's `.ts` file is checked in
   its `templateUrl` template too, whether discovery or `--file` scoped it.
+- Angular: `list` and `baseline` follow a flag's value through the fields,
+  getters, parameterless methods and locals holding an evaluation of it
+  (`isPaginationEnabled = this.ff.isFeatureFlagEnabled(…)`), names derived
+  from those, and one hop into the child component input a template binds
+  one of them to. Names that mention the flag are recorded; generic ones are
+  listed as `suggestedNames`.
 - `baseline --file` repeats: `--name x --file a.ts --file b.ts` records the
   name for every file in one call.
 - `baseline --name` refuses a name whose code reads only other flags (a
