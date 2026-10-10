@@ -35,14 +35,20 @@ Output, in this order:
    - follow-ups outside the repo: archive the flag in the flag service
      (LaunchDarkly, Azure App Configuration, ...), remove keys from deployment
      settings and secret stores.
-3. **Proposed commit message**, in a code block:
+3. The commit message:
 
-   ```
-   chore: remove <flag> feature flag
+<!-- commit-message:start -->
+**Proposed commit message**, in a code block:
 
-   <one or two sentences: which path stays and what was deleted>
-   ```
+```
+chore: remove <flag> feature flag
 
-   Follow the repository's convention instead when `git log --oneline -10` shows a different one.
+<one or two sentences: which path stays and what was deleted>
+```
+
+- Follow the repository's convention instead when `git log --oneline -10` shows a different one.
+- A ticket in the branch name (`feature/feat-24586`): add it the way the log does (`#24586`, `FEAT-24586`), else `(#24586)` after the subject.
+- Wrap the body at 72 columns.
+<!-- commit-message:end -->
 
 Never commit, push or open a PR unless asked. Write a PR description only on request, from the same output.

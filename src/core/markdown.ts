@@ -4,6 +4,7 @@
  * notes and the commit message around it.
  */
 
+import { reusedNote } from "./run-cache.js";
 import type { CheckFinding, CheckStatus, VerifyReport } from "./types.js";
 import { relativePath } from "./util.js";
 import { shortTestName, shortTestNames } from "./verify/test-results.js";
@@ -36,6 +37,8 @@ export function verifyMarkdown(report: VerifyReport, root: string): string {
     "|---|---|---|",
     ...report.checks.map((c) => `| ${c.id} | ${ICON[c.status]} ${c.status} | ${c.summary.replace(/\|/g, "\\|")} |`),
   ];
+  const note = reusedNote(report.runs, report.createdAt);
+  if (note) out.push("", `_${note}_`);
   const changed = report.changedFiles ?? [];
   if (changed.length) out.push("", `**Files changed since baseline (${changed.length}):** ${codeList(changed)}`);
   const all = <K extends "deleted" | "excludedByConfig" | "unexplained">(key: K) => report.tests.flatMap((t) => t[key]);

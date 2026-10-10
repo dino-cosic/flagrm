@@ -11,6 +11,7 @@ import { flagDir, readBaseline, runChecks, verifyPath } from "../baseline.js";
 import { changeFilter, changeFilterAt } from "../change-filter.js";
 import { configChanges as configChangesSince, configSnapshot } from "../config-snapshot.js";
 import { changedFilesSince, gitState, treeFingerprint } from "../git.js";
+import { dropRuns, findRuns, plannedRuns, reuseRuns, runsKey, saveRuns } from "../run-cache.js";
 import {
   CHECK_IDS,
   type CheckId,
@@ -30,6 +31,8 @@ export interface VerifyOptions {
   skip?: CheckId[];
   /** Treat warnings as failures. */
   strict?: boolean;
+  /** Reuse a passing verify's runs on the same tree and commands instead of running them (default true). */
+  reuse?: boolean;
 }
 
 export async function verifyFlag(
@@ -49,7 +52,11 @@ export async function verifyFlag(
   const changedFiles = baseline.git.sha ? changedFilesSince(root, baseline.git.sha, ignore) : undefined;
 
   const only = [...(skip.has("build") ? [] : ["build" as const]), ...(skip.has("tests") ? [] : ["test" as const])];
-  const runs = only.length ? await runChecks(projects, path.join(flagDir(root, flag), "verify"), only) : [];
+  // Before the commands: the key is the tree they run on.
+  const key = only.length ? runsKey(root, projects) : undefined;
+  const found = key && options.reuse !== false ? findRuns(root, projects, key, plannedRuns(projects, only)) : undefined;
+  const logDir = path.join(flagDir(root, flag), "verify");
+  const runs = found ? reuseRuns(found, logDir) : only.length ? await runChecks(projects, logDir, only) : [];
   // The fingerprint, though, is the tree the Stop hook will see next, so take it
   // after the commands: a test report they write outside .gitignore is part of it.
   // The Stop hook compares it with its own, so take it exactly as the hook does: from the config file
@@ -89,6 +96,12 @@ export async function verifyFlag(
     runs: runs.map(countsOnly),
     tests,
   };
+  // Only a full pass is worth reusing: a failure may be flaky or a stopped service.
+  if (key && report.status === "pass" && report.skipped.length === 0) saveRuns(root, flag, projects, key, runs);
+  // A fresh run that fails on this tree outweighs a saved pass for it (`--no-reuse` after a machine change).
+  else if (key && !found && checks.some((c) => (c.id === "build" || c.id === "tests") && c.status === "fail")) {
+    dropRuns(root, key);
+  }
   const file = verifyPath(root, flag);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`, "utf8");

@@ -9,6 +9,7 @@ import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { environmentProblem } from "./environment.js";
 import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
+import { withScopeFiles } from "./scope-files.js";
 import {
   type Baseline,
   type CheckRun,
@@ -297,25 +298,27 @@ export async function discoverFlag(projects: Workspace, flag: string): Promise<F
     [{ name: flag, kind: "literal", source: "discovery" }],
     [
       ...(entry?.definitions ?? []).map((d): RecordedName => ({ name: d.name, kind: "alias", source: "discovery" })),
-      ...flow.filter((n) => n.record).map((n) => flowName(projects, n)),
+      ...flow.filter((n) => n.record).flatMap((n) => flowNames(projects, n)),
     ],
   );
   const key = (n: RecordedName) => `${n.name}\0${n.file ?? ""}`;
   const recorded = new Set(names.map(key));
   const suggestedNames = flow
-    .filter((n) => !n.record && !recorded.has(key(flowName(projects, n))))
+    .filter((n) => !n.record && !recorded.has(key(flowNames(projects, n)[0])))
     .map(({ record: _record, ...name }) => name)
     .filter((n, i, all) => all.findIndex((m) => m.name === n.name && m.file === n.file) === i);
   return { names, suggestedNames, parameterizedTests: entry?.parameterizedTests ?? [] };
 }
 
-/** A flow name as a wrapper; a local, parameter or field only in its own file. */
-function flowName(projects: Workspace, n: FlagFlowName): RecordedName {
+/** A flow name as recorded: an alias everywhere; a wrapper, a local, parameter or field only in its own file. */
+function flowNames(projects: Workspace, n: FlagFlowName): RecordedName[] {
+  if (n.kind === "alias") return [{ name: n.name, kind: "alias", source: "discovery" }];
   const name: RecordedName = { name: n.name, kind: "wrapper", source: "discovery" };
   const root = projects[0]?.ctx.config.root;
-  if (root && (n.kind === "local" || n.kind === "parameter" || n.kind === "field"))
-    name.file = relativePath(root, n.file);
-  return name;
+  if (root && (n.kind === "local" || n.kind === "parameter" || n.kind === "field")) {
+    return withScopeFiles(projects, root, relativePath(root, n.file)).map((file) => ({ ...name, file }));
+  }
+  return [name];
 }
 
 /** The names {@link discoverFlag} records. */
@@ -352,14 +355,19 @@ export function editsSince(
   testResults: readonly string[] = [],
   ignore: ChangeFilter = changeFilter(),
 ): string[] | undefined {
-  const results = new Set(
-    testResults.flatMap((pattern) =>
+  const results = matchingFiles(root, testResults);
+  return changedFilesSince(root, sha, ignore)?.filter((rel) => !results.has(rel));
+}
+
+/** The files (relative to `root`) matching absolute paths or globs, such as `testResults` patterns. */
+export function matchingFiles(root: string, patterns: readonly string[]): Set<string> {
+  return new Set(
+    patterns.flatMap((pattern) =>
       fg
         .sync(path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern, { absolute: true, dot: true })
         .map((file) => relativePath(root, file)),
     ),
   );
-  return changedFilesSince(root, sha, ignore)?.filter((rel) => !results.has(rel));
 }
 
 /**

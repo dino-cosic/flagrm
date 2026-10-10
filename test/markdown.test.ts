@@ -143,4 +143,20 @@ describe("verifyMarkdown", () => {
     expect(md).toContain("`f19.ts` and 5 more");
     expect(md).not.toContain("`f20.ts`");
   });
+
+  it("notes runs reused from an earlier verify", () => {
+    const reused = { flag: "NewCheckout", createdAt: "2026-09-26T23:58:00.000Z" };
+    const md = verifyMarkdown(
+      report({
+        runs: [
+          { project: "api", check: "build", command: "b", exitCode: 0, durationMs: 1, reused },
+          { project: "api", check: "test", command: "t", exitCode: 0, durationMs: 1, reused },
+        ],
+      }),
+      "/r",
+    );
+    expect(md).toContain(
+      "_build and tests reused from NewCheckout's verify (same tree and commands, 2 min ago; --no-reuse to run them)_",
+    );
+  });
 });

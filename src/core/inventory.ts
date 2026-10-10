@@ -156,7 +156,9 @@ function followFlow(projects: Workspace, entries: FlagInventoryEntry[]): void {
       if (!entry) continue;
       const words = flagWords([{ name: entry.flag }, ...entry.definitions]);
       const flagNames = [entry.flag, ...entry.definitions.map((d) => d.name.split(".").pop() ?? d.name)];
-      entry.flow.push({ ...name, record: !name.ambiguous && recordable(name, flagNames, words) });
+      // A renamed import of one of the flag's definitions is as specific as the definition.
+      const record = name.kind === "alias" || (!name.ambiguous && recordable(name, flagNames, words));
+      entry.flow.push({ ...name, record });
     }
     for (const test of tests) byFlag.get(test.flag)?.parameterizedTests.push(test);
   }

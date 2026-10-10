@@ -150,10 +150,63 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(alias.stderr).toContain("--file scopes wrapper names");
   });
 
+  it("baseline --file repeats, and adds a component's template once", () => {
+    const ts = "frontend/src/app/checkout/checkout.component.ts";
+    const html = "frontend/src/app/checkout/checkout.component.html";
+    const steps = "frontend/src/app/checkout/checkout-steps.component.ts";
+    const r = runCli(
+      ["baseline", "NewCheckout", "--name", "promoCode", "--file", ts, "--file", html, "--file", steps, "--json"],
+      dir,
+    );
+    expect(r.status).toBe(0);
+    const recorded = JSON.parse(fs.readFileSync(path.join(dir, ".flagrm", "NewCheckout", "baseline.json"), "utf8"))
+      .names.filter((n: { name: string }) => n.name === "promoCode")
+      .map((n: { file?: string }) => n.file);
+    expect(recorded).toEqual([ts, html, steps]);
+    const outside = runCli(["baseline", "NewCheckout", "--name", "x", "--file", ts, "--file", "../elsewhere.ts"], dir);
+    expect(outside.status).toBe(2);
+    expect(outside.stderr).toContain("--file ../elsewhere.ts is outside");
+  });
+
+  it("baseline --name refuses a name whose code reads only another flag", () => {
+    const file = path.join(dir, ".flagrm", "NewCheckout", "baseline.json");
+    const before = fs.readFileSync(file, "utf8");
+    const r = runCli(
+      [
+        "baseline",
+        "NewCheckout",
+        "--name",
+        "expressShipping",
+        "--file",
+        "frontend/src/app/checkout/checkout.component.ts",
+      ],
+      dir,
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain(
+      '"expressShipping" reads ExpressShipping, not NewCheckout (frontend/src/app/checkout/checkout.component.ts:24); not recorded.',
+    );
+    expect(fs.readFileSync(file, "utf8")).toBe(before);
+  });
+
   it("baseline refuses to overwrite an existing baseline without --force", () => {
     const { status, stderr } = runCli(["baseline", "NewCheckout", "--no-checks"], dir);
     expect(status).toBe(2);
     expect(stderr).toContain("already exists; pass --name to add names, or --force to start over");
+  });
+
+  it("baseline rejects --no-reuse where there is nothing to reuse", () => {
+    const r = runCli(["baseline", "NewCheckout", "--no-checks", "--no-reuse"], dir);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("--no-reuse has nothing to reuse");
+    // Harmless when adding names (no build or tests run), so an agent adding it everywhere isn't stopped.
+    const named = runCli(
+      ["baseline", "NewCheckout", "--name", "UseNewCheckout", "--kind", "wrapper", "--no-reuse"],
+      dir,
+    );
+    expect(named.status).toBe(0);
+    expect(runCli(["baseline", "--help"], dir).stdout).toContain("--no-reuse");
+    expect(runCli(["verify", "--help"], dir).stdout).toContain("--no-reuse");
   });
 
   it("baseline --accept records the acknowledgement, and refuses to mix with other changes", () => {
@@ -165,7 +218,7 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(runCli(["baseline", "NewCheckout", "--accept", "config"], dir).stdout).toContain(
       "accepted: the config as of now, the baseline's failing tests",
     );
-    for (const extra of [["--force"], ["--name", "X"], ["--no-checks"]]) {
+    for (const extra of [["--force"], ["--name", "X"], ["--no-checks"], ["--no-reuse"]]) {
       const r = runCli(["baseline", "NewCheckout", "--accept", "config", ...extra], dir);
       expect(r.status, extra.join(" ")).toBe(2);
       expect(r.stderr).toContain("--accept only records an acknowledgement");

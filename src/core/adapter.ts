@@ -30,6 +30,11 @@ export interface Adapter {
    * with a `true`/`false` literal.
    */
   flow?(ctx: ProjectContext, flags: FlagRef[]): FlagFlow;
+  /**
+   * Other files that share `file`'s scope (absolute paths): an Angular
+   * component's template, where a field of its class is used too.
+   */
+  scopeFiles?(ctx: ProjectContext, file: string): string[];
   /** Build/test commands (and where the default test writes results) for keys the project doesn't configure. */
   defaultCommands?(ctx: ProjectContext): { build?: string; test?: string; testResults?: string };
   /**

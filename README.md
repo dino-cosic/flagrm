@@ -48,14 +48,11 @@ agent:
 /flagrm-remove NewCheckout
 ```
 
-When the agent reports back, review the result:
-
-```
-/flagrm-verify NewCheckout
-```
-
-You get a short overview (checks, changed files, tests deleted or renamed) and
-a proposed commit message. The agent never commits for you. The overview looks
+The agent ends with a short overview (checks, changed files, tests deleted or
+renamed) and a proposed commit message; it commits only when you ask. Several
+flags at once: `/flagrm-remove NewCheckout DarkMode` asks the ON question and
+whether to commit each flag once, then removes them one after another. To
+check a removal later, run `/flagrm-verify NewCheckout`. The overview looks
 like this (abridged):
 
 ```md
@@ -97,14 +94,17 @@ of these reasons is a warning, for the agent to explain in its notes.
    `flagrm baseline <flag>`, which records the git commit, the build and test
    results, and the flag's names. It finds every usage with its own search,
    records wrappers and aliases with `flagrm baseline <flag> --name`, removes
-   the flag, and repeats `flagrm verify <flag>` until it passes.
+   the flag, and repeats `flagrm verify <flag>` until it passes. It ends with
+   the overview and a commit message. With several flags it asks once whether
+   they are all ON and whether to commit each, then removes them in order,
+   one commit each.
 3. **The Stop hook** (Claude Code) keeps the agent from finishing while a
    removal is in progress and not verified. In progress means a file git
    tracks changed on top of the baseline commit (untracked files and
    flagrm's own setup files don't count, so a removal paused on a question to
    the user doesn't block), or the last verify used `--skip`.
-4. **`/flagrm-verify <flag>`** runs `flagrm verify <flag> --md` and adds notes
-   and a commit message.
+4. **`/flagrm-verify <flag>`** checks a removal later: runs
+   `flagrm verify <flag> --md` and adds notes and a commit message.
 
 ## Commands
 
@@ -114,9 +114,9 @@ of these reasons is a warning, for the agent to explain in its notes.
 | `doctor` | Check the config, the build and test commands (marking adapter defaults; `--run` runs them and fails when tests write no readable `testResults`), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
 | `scope` | For each .NET project, show what the machine lacks and which projects a solution filter would leave out; `--write` creates `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build and test at it | 0 nothing missing, 1 something missing |
 | `update` | Refresh the installed skills, prompt files, `AGENTS.md` block and hook from this flagrm version, for the config's `tools:` | 0 |
-| `list` | List every feature flag in the project: definitions, configured state per environment, reference counts | 0 |
-| `baseline <flag>` | Before any edit, record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET code the names include the locals, fields, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` limits `--name` entries to one file (and records them as wrappers). `--name X --kind alias\|wrapper` adds names to an existing baseline; `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit; `--accept config,failures` acknowledges, also mid-removal, a config change or the baseline's failing tests so verify stops warning about them; `--no-checks` skips build and tests | 0, 2 usage error |
-| `verify <flag>` | Gate the removal with `leftovers`, `dead-code`, `build` and `tests`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings | 0 pass, 1 fail, 2 usage error |
+| `list` | List every feature flag in the project: definitions, configured state per environment, reference counts; flow names include renamed imports of a flag registry (`import { FeatureFlags as AppFeatureFlags }`) | 0 |
+| `baseline <flag>` | Before any edit, record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET code the names include the locals, fields, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file, and an Angular component's template); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` (repeatable) limits `--name` entries to those files (and records them as wrappers). `--name X --kind alias\|wrapper` adds names to an existing baseline (a name whose declaration reads only other flags is refused); `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit; `--accept config,failures` acknowledges, also mid-removal, a config change or the baseline's failing tests so verify stops warning about them; `--no-checks` skips build and tests; build and test results of a passing verify on the same tree and commands are reused (`--no-reuse` runs them) | 0, 2 usage error |
+| `verify <flag>` | Gate the removal with `leftovers`, `dead-code`, `build` and `tests`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings; reuses its own or another flag's passing runs on the same tree and commands (`--no-reuse` runs them) | 0 pass, 1 fail, 2 usage error |
 | `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
 
 `list`, `baseline` and `verify` accept `--json`, `--config <path>`, and

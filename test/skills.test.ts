@@ -64,7 +64,36 @@ describe("skills reference only real flagrm commands and options", () => {
 
   it("keeps the skills short", () => {
     const lines = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8").split("\n").length;
-    expect(lines("skills/flagrm-remove/SKILL.md")).toBeLessThan(90);
-    expect(lines("skills/flagrm-verify/SKILL.md")).toBeLessThan(50);
+    expect(lines("skills/flagrm-remove/SKILL.md")).toBeLessThan(110);
+    expect(lines("skills/flagrm-verify/SKILL.md")).toBeLessThan(60);
+  });
+
+  it("gives both skills the same commit message rules", () => {
+    const block = (f: string) =>
+      /<!-- commit-message:start -->([\s\S]*?)<!-- commit-message:end -->/.exec(
+        fs.readFileSync(path.join(ROOT, f), "utf8"),
+      )?.[1];
+    const remove = block("skills/flagrm-remove/SKILL.md");
+    expect(remove).toBeDefined();
+    expect(block("skills/flagrm-verify/SKILL.md")).toBe(remove);
+  });
+
+  it("links batch.md from the remove skill, and keeps it short", () => {
+    const skill = fs.readFileSync(path.join(ROOT, "skills/flagrm-remove/SKILL.md"), "utf8");
+    expect(skill).toContain("[batch.md](batch.md)");
+    const batch = fs.readFileSync(path.join(ROOT, "skills/flagrm-remove/batch.md"), "utf8");
+    expect(batch.split("\n").length).toBeLessThan(40);
+  });
+
+  it("keeps each skill self-contained: no references into the other skill's directory", () => {
+    const problems: string[] = [];
+    for (const file of files) {
+      const text = fs.readFileSync(path.join(ROOT, file), "utf8");
+      const own = file.split("/")[1];
+      for (const other of ["flagrm-remove", "flagrm-verify"].filter((s) => s !== own)) {
+        if (text.includes(`${other}/`)) problems.push(`${file} references ${other}/`);
+      }
+    }
+    expect(problems).toEqual([]);
   });
 });

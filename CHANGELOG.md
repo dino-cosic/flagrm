@@ -5,6 +5,41 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
+## Unreleased
+
+### Added
+
+- `/flagrm-remove` takes several flags (`/flagrm-remove A B C`): it asks
+  once whether they are all ON and whether to commit each one, then removes
+  them one after another, one commit per flag.
+- `/flagrm-remove` ends with the verify overview and a proposed commit
+  message, so `/flagrm-verify` is only needed to check a removal later. The
+  commit message takes the ticket from the branch name and wraps its body.
+- A passing full verify saves its build and test results; `baseline` and
+  `verify` on the same tree with the same commands reuse them instead of
+  running them again, and say so. Removing flags one after another, each
+  next baseline takes seconds, and so does `/flagrm-verify` after a
+  removal. `--no-reuse` runs them anyway.
+- Angular: a renamed import of a flag registry
+  (`import { FeatureFlags as AppFeatureFlags }`) is followed, so
+  `AppFeatureFlags.X` is recorded and checked like `FeatureFlags.X`.
+- Angular: a name checked only in a component's `.ts` file is checked in
+  its `templateUrl` template too, whether discovery or `--file` scoped it.
+- `baseline --file` repeats: `--name x --file a.ts --file b.ts` records the
+  name for every file in one call.
+- `baseline --name` refuses a name whose code reads only other flags (a
+  helper named like this flag that evaluates a different one), since
+  `verify` would then ask to delete the other flag's code.
+
+### Fixed
+
+- Deleting a committed file that matches `exclude` (say, a generator removing
+  `graphify-out/graph.html`) no longer invalidates a passing verify: the
+  Stop hook's tree fingerprint now leaves out deletions under `exclude`, as
+  it already did for edits and new files.
+- `/flagrm-remove` tells the agent not to run code generators or formatters
+  after the passing verify, or to verify again if it must.
+
 ## [0.3.0] - 2026-10-07
 
 ### Changed
