@@ -2,8 +2,9 @@
  * Where a flag's value goes in TypeScript code: renamed imports of a flag
  * registry (`import { FeatureFlags as AppFeatureFlags }`), so `AppFeatureFlags.X`
  * is checked like `FeatureFlags.X`, and the fields, getters, methods and
- * locals holding an evaluation of the flag (`holders.ts`). Each file is parsed
- * at most once, never type-checked.
+ * locals holding an evaluation of the flag (`holders.ts`), and a child
+ * component's input a template binds one of them to (`inputs.ts`). Each file
+ * is parsed at most once, never type-checked.
  */
 
 import fs from "node:fs";
@@ -13,6 +14,7 @@ import type { FlagFlow, FlagRef, ProjectContext } from "../../core/adapter.js";
 import { isTestPath } from "../../core/scan.js";
 import type { FlagFlowName } from "../../core/types.js";
 import { collectSites, deriveHolders, evaluationMatcher, skipParens, type TsFile } from "./holders.js";
+import { childInputs } from "./inputs.js";
 
 /** A renamed named import: `import { A as B }`, `import type { A as B }`, `import X, { A as B }`. */
 const RENAMED_IMPORT = /\bimport\s*(?:type\s+)?(?:[\w$]+\s*,\s*)?\{[^}]*\bas\s/;
@@ -24,7 +26,11 @@ export function angularFlow(ctx: ProjectContext, flags: FlagRef[], evalMethods: 
 
   const code = files.filter((f) => !f.isTest);
   const evaluates = evaluationMatcher(evalMethods, flagOfArgument(flags, names));
-  const holders = deriveHolders(collectSites(code), evaluates);
+  const sites = collectSites(code);
+  let holders = deriveHolders(sites, evaluates);
+  // One hop: a child's inputs bound to a holder, then what the child derives from them.
+  const inputs = childInputs(code, holders);
+  if (inputs.length > 0) holders = deriveHolders(sites, evaluates, inputs);
   for (const h of holders) {
     if (evalMethods.includes(h.name)) continue;
     const same = (n: FlagFlowName) => n.flag === h.flag && n.name === h.name && n.kind === h.kind && n.file === h.file;

@@ -182,3 +182,173 @@ describe("Angular holders", () => {
     expect(entry?.flow.map((n) => n.name)).toContain("Flags.Pagination");
   });
 });
+
+describe("Angular child inputs", () => {
+  it("follows a holder bound in a parent's templateUrl to every kind of input, one hop only", async () => {
+    write(
+      "src/app/parent.component.ts",
+      lines(
+        "import { Component } from '@angular/core';",
+        "import { FeatureFlags } from './feature-flags';",
+        "@Component({ selector: 'app-parent', templateUrl: './parent.component.html' })",
+        "export class ParentComponent {",
+        "  isPaginationEnabled = this.ff.isFeatureFlagEnabled(FeatureFlags.Pagination);",
+        "  get pagingLabel() { return this.ff.isFeatureFlagEnabled(FeatureFlags.Pagination) ? 'Pages' : 'All'; }",
+        "  run() { const pagingLocal = this.ff.isFeatureFlagEnabled(FeatureFlags.Pagination); }",
+        "}",
+      ),
+    );
+    write(
+      "src/app/parent.component.html",
+      lines(
+        "<app-list",
+        '  [paged]="isPaginationEnabled"',
+        '  [required]="isPaginationEnabled"',
+        '  [aliased]="!isPaginationEnabled"',
+        '  [aliasedObj]="isPaginationEnabled"',
+        '  [viaSetter]="isPaginationEnabled"',
+        "  [signalPaged]='isPaginationEnabled'",
+        '  [signalRequired]="isPaginationEnabled"',
+        '  [signalAlias]="isPaginationEnabled"',
+        '  [modelPaged]="isPaginationEnabled"',
+        '  [hello]="isPaginationEnabled"',
+        '  [label]="pagingLabel"',
+        '  [local]="pagingLocal"',
+        '  [mixed]="isPaginationEnabled && rows"',
+        "/>",
+      ),
+    );
+    write(
+      "src/app/list.component.ts",
+      lines(
+        "import { Component, Input, input, model } from '@angular/core';",
+        "@Component({ selector: 'app-list', template: '<app-row [paged]=\"paged\"></app-row>' })",
+        "export class ListComponent {",
+        "  @Input() paged = false;",
+        "  @Input({ required: true }) required!: boolean;",
+        "  @Input('aliased') renamed = false;",
+        "  @Input({ alias: 'aliasedObj' }) renamedObj = false;",
+        "  @Input() set viaSetter(v: boolean) {}",
+        "  signalPaged = input(false);",
+        "  signalRequired = input.required<boolean>();",
+        "  signalAliased = input(false, { alias: 'signalAlias' });",
+        "  modelPaged = model(false);",
+        "  greeting = input('hello');",
+        "  label = input('');",
+        "  local = input(false);",
+        "  mixed = input(false);",
+        "  get showPaging() { return this.signalPaged(); }",
+        "}",
+      ),
+    );
+    write(
+      "src/app/row.component.ts",
+      lines(
+        "import { Component, Input } from '@angular/core';",
+        "@Component({ selector: 'app-row', template: '' })",
+        "export class RowComponent {",
+        "  @Input() paged = false;",
+        "}",
+      ),
+    );
+    expect(await flowOf()).toEqual(
+      [
+        "field isPaginationEnabled src/app/parent.component.ts:5",
+        "property pagingLabel src/app/parent.component.ts:6",
+        "local pagingLocal src/app/parent.component.ts:7",
+        "field paged src/app/list.component.ts:4",
+        "field required src/app/list.component.ts:5",
+        "field renamed src/app/list.component.ts:6",
+        "field renamedObj src/app/list.component.ts:7",
+        "field viaSetter src/app/list.component.ts:8",
+        "field signalPaged src/app/list.component.ts:9",
+        "field signalRequired src/app/list.component.ts:10",
+        "field signalAliased src/app/list.component.ts:11",
+        "field modelPaged src/app/list.component.ts:12",
+        "property showPaging src/app/list.component.ts:17",
+      ].sort(),
+    );
+  });
+
+  it("reads an inline template, each selector of a comma list, and ignores comments and attribute selectors", async () => {
+    write(
+      "src/app/inline.component.ts",
+      lines(
+        "import { Component } from '@angular/core';",
+        "import { FeatureFlags } from './feature-flags';",
+        "@Component({",
+        "  selector: 'app-inline',",
+        "  template: `",
+        '    <!-- <app-alt [commented]="isPaginationEnabled"></app-alt> -->',
+        '    <app-alt [paged]="isPaginationEnabled()"></app-alt>',
+        '    <div appPaging [paged]="isPaginationEnabled"></div>',
+        "  `,",
+        "})",
+        "export class InlineComponent {",
+        "  isPaginationEnabled = this.ff.isFeatureFlagEnabled(FeatureFlags.Pagination);",
+        "}",
+      ),
+    );
+    write(
+      "src/app/alt.component.ts",
+      lines(
+        "import { Component, Input } from '@angular/core';",
+        "@Component({ selector: 'app-main, app-alt', template: '' })",
+        "export class AltComponent {",
+        "  @Input() paged = false;",
+        "  @Input() commented = false;",
+        "}",
+      ),
+    );
+    write(
+      "src/app/paging.directive.ts",
+      lines(
+        "import { Component, Input } from '@angular/core';",
+        "@Component({ selector: '[appPaging]', template: '' })",
+        "export class PagingAttrComponent {",
+        "  @Input() paged = false;",
+        "}",
+      ),
+    );
+    expect(await flowOf()).toEqual(
+      ["field isPaginationEnabled src/app/inline.component.ts:12", "field paged src/app/alt.component.ts:4"].sort(),
+    );
+  });
+
+  it("marks an input ambiguous, and never records it, when two components share the selector", async () => {
+    write(
+      "src/app/parent.component.ts",
+      lines(
+        "import { Component } from '@angular/core';",
+        "@Component({",
+        "  selector: 'app-parent',",
+        "  template: '<app-dup [paginationShown]=\"isPaginationEnabled\"></app-dup>',",
+        "})",
+        "export class ParentComponent {",
+        "  isPaginationEnabled = this.ff.isFeatureFlagEnabled('Pagination');",
+        "}",
+      ),
+    );
+    for (const n of [1, 2]) {
+      write(
+        `src/app/dup${n}.component.ts`,
+        lines(
+          "import { Component, Input } from '@angular/core';",
+          "@Component({ selector: 'app-dup', template: '' })",
+          `export class Dup${n}Component {`,
+          "  @Input() paginationShown = false;",
+          "}",
+        ),
+      );
+    }
+    expect(await flowOf()).toEqual(
+      [
+        "field isPaginationEnabled src/app/parent.component.ts:7",
+        "field paginationShown src/app/dup1.component.ts:4 ambiguous",
+        "field paginationShown src/app/dup2.component.ts:4 ambiguous",
+      ].sort(),
+    );
+    const entry = (await buildInventory(workspace())).flags.find((f) => f.flag === "Pagination");
+    expect(entry?.flow.filter((n) => n.name === "paginationShown").map((n) => n.record)).toEqual([false, false]);
+  });
+});
