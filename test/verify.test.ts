@@ -91,6 +91,7 @@ describe("verify on the realistic fixture", () => {
       build: "skipped",
       tests: "skipped",
       lint: "skipped",
+      coverage: "warn",
     });
     expect(report.checks.find((c) => c.id === "dead-code")?.summary).toBe(
       "compiler diagnostics skipped for api: no build output",
@@ -383,7 +384,7 @@ describe("verify on the realistic fixture", () => {
         await takeBaseline(failing, true);
         applyAfter();
         acceptBaseline(tmp, FLAG, workspace(failing), ["failures"]);
-        const report = await verify({ skip: ["build"], strict: true }, failing);
+        const report = await verify({ skip: ["build", "coverage"], strict: true }, failing);
         expect(status(report).tests).toBe("pass");
         expect(findings(report, "tests")).toEqual([]);
         const tests = report.checks.find((c) => c.id === "tests");

@@ -23,6 +23,7 @@ import {
 } from "../types.js";
 import { buildCheck, compareTests, lintCheck, testsCheck } from "./commands.js";
 import { skippedResult, type VerifyContext } from "./context.js";
+import { coverageCheck } from "./coverage.js";
 import { deadCodeCheck } from "./dead-code.js";
 import { leftoversCheck } from "./leftovers.js";
 
@@ -73,6 +74,7 @@ export async function verifyFlag(
     build: () => buildCheck(v),
     tests: () => testsCheck(v, tests),
     lint: () => lintCheck(v),
+    coverage: () => coverageCheck(v),
   };
   const checks: CheckResult[] = [];
   for (const id of CHECK_IDS) {

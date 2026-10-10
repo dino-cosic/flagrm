@@ -278,6 +278,8 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
       build: "skipped",
       tests: "skipped",
       lint: "skipped",
+      // Not a git repository: no baseline commit to diff against.
+      coverage: "skipped",
     });
     expect(report.verifyFile).toBe(path.join(dir, ".flagrm", "NewCheckout", "verify.json"));
   });
