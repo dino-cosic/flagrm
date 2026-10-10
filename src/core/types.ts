@@ -368,6 +368,8 @@ export interface TestComparison {
   unexplained: string[];
   /** Without names from result files: how many more tests stopped running, by the log's counts, than the diff deletes. */
   missing?: number;
+  /** `missing` may be data rows or `.each` cases, which logs count separately from declarations. */
+  missingMayBeRows?: boolean;
 }
 
 /** A build/test run in a verify report: test counts without the per-test name lists. */

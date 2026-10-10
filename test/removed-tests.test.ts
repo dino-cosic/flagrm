@@ -195,6 +195,20 @@ describe("declaredTests", () => {
 });
 
 describe("declaredTestDiff", () => {
+  it("flags data rows and .each cases, which logs count one by one", () => {
+    git("init", "-q");
+    fs.writeFileSync(path.join(tmp, "CartTests.cs"), "[Theory]\n[InlineData(true)]\npublic void Quote(bool b) {}\n");
+    fs.writeFileSync(path.join(tmp, "b.spec.ts"), "it.each([1, 2])('x %i', () => {});\n");
+    fs.writeFileSync(path.join(tmp, "c.spec.ts"), "it('x', () => {});\n");
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
+    const sha = git("rev-parse", "HEAD");
+    for (const f of ["CartTests.cs", "b.spec.ts", "c.spec.ts"]) fs.appendFileSync(path.join(tmp, f), "\n");
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["CartTests.cs"] })).rows).toBe(true);
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["b.spec.ts"] })).rows).toBe(true);
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["c.spec.ts"] })).rows).toBe(false);
+  });
+
   it("compares declarations at the baseline and now as multisets", () => {
     git("init", "-q");
     const file = path.join(tmp, "a.spec.ts");
@@ -208,6 +222,7 @@ describe("declaredTestDiff", () => {
       removed: ["Cart › adds", "Cart › removes when NewCheckout is on"],
       added: ["Cart › removes"],
       now: ["Cart › adds", "Cart › removes"],
+      rows: false,
     });
   });
 });

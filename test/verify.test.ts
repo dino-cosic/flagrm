@@ -405,11 +405,11 @@ describe("verify on the realistic fixture", () => {
       });
 
       it("lists deleted and renamed tests from the diff and warns about a count the diff doesn't explain", async () => {
-        // Deleted by the diff: 7 (4 .NET, 3 frontend); 20 - 10 - 7 leaves 3 unexplained.
-        log([], 20);
+        // The web project is the frontend: the diff deletes 3 of its tests and renames 1; 10 - 4 - 3 leaves 3 unexplained.
+        log([], 10);
         await takeBaseline(fromLog, true);
         applyAfter();
-        log([], 10);
+        log([], 4);
         const report = await verify({ skip: ["build"] }, fromLog);
         const web = report.tests.find((t) => t.project === "web");
         expect(web?.removed.length).toBeGreaterThan(0);
@@ -418,10 +418,36 @@ describe("verify on the realistic fixture", () => {
           from: "CheckoutComponent › places the order through the checkout API when NewCheckout is on",
           to: "CheckoutComponent › places the order through the checkout API",
         });
+        expect(web?.deleted.some((n) => n.startsWith("Shop."))).toBe(false);
         expect(web?.missing).toBe(3);
         expect(findings(report, "tests")).toContainEqual(
           expect.stringMatching(/more tests? stopped running than the diff deletes/),
         );
+      });
+
+      it("only informs about a count drop when a changed test file has data rows", async () => {
+        const cs = (rows: string[]) =>
+          `namespace Web.Tests;\npublic class PriceTests {\n  [Theory]\n${rows.map((r) => `  [InlineData(${r})]`).join("\n")}\n  public void Quote(bool on) {}\n}\n`;
+        const file = path.join(tmp, "frontend", "PriceTests.cs");
+        fs.writeFileSync(file, cs(["true", "false"]));
+        git("add", "-A");
+        git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "rows");
+        log([], 10);
+        await takeBaseline(fromLog, true);
+        applyAfter();
+        fs.writeFileSync(file, cs(["true"]));
+        log([], 6);
+        const report = await verify({ skip: ["build"] }, fromLog);
+        const web = report.tests.find((t) => t.project === "web");
+        expect(web?.missing).toBe(1);
+        expect(web?.missingMayBeRows).toBe(true);
+        const missing = report.checks
+          .find((c) => c.id === "tests")
+          ?.findings.filter((f) => /stopped running than the diff deletes/.test(f.message));
+        expect(missing).toEqual([
+          expect.objectContaining({ severity: "info", message: expect.stringContaining("data rows and .each cases") }),
+        ]);
+        expect(status(report).tests).not.toBe("warn");
       });
 
       it("doesn't split failures when the baseline read files and verify the log", async () => {

@@ -157,6 +157,11 @@ function isDeleted(name: string, keyStillRuns: boolean, files: ChangedTestFile[]
 /** xUnit (`InlineData`, `[Bit]AutoData(...)` with values), NUnit and MSTest attributes that each add a data row. */
 const DATA_ROW = /\b(?:\w*InlineData|\w*AutoData|TestCase|DataRow)\s*\(/g;
 
+/** Whether a test file has data-row attributes or `.each` cases. */
+function hasDataRows(text: string): boolean {
+  return new RegExp(DATA_ROW.source).test(text) || /\.each\s*[(`]/.test(text);
+}
+
 /**
  * How many data rows `own` has in `text`: the row attributes between the end
  * of the previous member and its declaration. For JUnit names (`it.each`
@@ -232,12 +237,20 @@ function minus(from: string[], other: string[]): string[] {
  * new declarations, and all declared now: the stand-in for result files'
  * names when there are none.
  */
-export function declaredTestDiff(ctx: RemovedTestsContext): { removed: string[]; added: string[]; now: string[] } {
+export function declaredTestDiff(ctx: RemovedTestsContext): {
+  removed: string[];
+  added: string[];
+  now: string[];
+  /** Whether a changed file has data rows or `.each` cases, which result logs count one by one and declarations don't. */
+  rows: boolean;
+} {
   const before: string[] = [];
   const now: string[] = [];
+  let rows = false;
   for (const file of changedTestFiles(ctx)) {
+    rows ||= hasDataRows(file.before) || (file.now !== undefined && hasDataRows(file.now));
     before.push(...declaredTests(file.before, file.rel));
     if (file.now !== undefined) now.push(...declaredTests(file.now, file.rel));
   }
-  return { removed: minus(before, now), added: minus(now, before), now };
+  return { removed: minus(before, now), added: minus(now, before), now, rows };
 }

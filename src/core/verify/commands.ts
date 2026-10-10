@@ -188,10 +188,13 @@ export function compareTests(v: VerifyContext): TestComparison[] {
       comparison.newFailures = shortTestNames(failures.new);
       comparison.knownFailures = shortTestNames(failures.known);
     }
+    const projectRoot = v.projects.find(({ ctx }) => ctx.name === run.project)?.ctx.root;
     const removedCtx = {
       root: v.root,
       sha: v.baseline.git.sha,
-      changedFiles: v.changedFiles,
+      changedFiles: projectRoot
+        ? (v.changedFiles ?? []).filter((rel) => !path.relative(projectRoot, path.join(v.root, rel)).startsWith(".."))
+        : v.changedFiles,
       names: v.baseline.names,
       testConfigChanged: v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project),
     };
@@ -213,7 +216,10 @@ export function compareTests(v: VerifyContext): TestComparison[] {
       if (comparison.before !== undefined && comparison.after !== undefined) {
         const gap =
           comparison.before - comparison.after - comparison.deleted.length + (declared.added.length - renamed.length);
-        if (gap > 0) comparison.missing = gap;
+        if (gap > 0) {
+          comparison.missing = gap;
+          if (declared.rows) comparison.missingMayBeRows = true;
+        }
       }
     }
     out.push(comparison);
@@ -335,8 +341,8 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
     if (missing > 0 && comparison) {
       const configChanged = v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project);
       findings.push({
-        severity: configChanged ? "info" : "warn",
-        message: `${plural(missing, "more test stopped running", "more tests stopped running")} than the diff deletes (${comparison.before} → ${comparison.after}, ${comparison.deleted.length} deleted): account for ${missing === 1 ? "it" : "them"} in the PR`,
+        severity: configChanged || comparison.missingMayBeRows ? "info" : "warn",
+        message: `${plural(missing, "more test stopped running", "more tests stopped running")} than the diff deletes (${comparison.before} → ${comparison.after}, ${comparison.deleted.length} deleted): account for ${missing === 1 ? "it" : "them"} in the PR${comparison.missingMayBeRows ? " (data rows and .each cases count separately, so this may be them)" : ""}`,
         project: run.project,
       });
     }
