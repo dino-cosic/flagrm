@@ -241,4 +241,33 @@ describe("loadConfig — commands", () => {
     writeConfig(`${project}    test: ""\n`);
     expect(() => loadConfig({}, tmp)).toThrow(/projects\[0\]\.test must be a non-empty string or false/);
   });
+
+  it("reads lint and covers, and accepts lint: false", () => {
+    writeConfig(`${project}    lint: npx eslint .\n    covers: ["src/**", "e2e/**"]\n`);
+    expect(loadConfig({}, tmp).projects[0]).toMatchObject({ lint: "npx eslint .", covers: ["src/**", "e2e/**"] });
+    writeConfig(`${project}    lint: false\n`);
+    expect(loadConfig({}, tmp).projects[0].lint).toBe(false);
+  });
+
+  it("leaves lint and covers out when absent", () => {
+    writeConfig(project);
+    const p = loadConfig({}, tmp).projects[0];
+    expect(p).not.toHaveProperty("lint");
+    expect(p).not.toHaveProperty("covers");
+  });
+
+  it("rejects an empty lint and a covers that is not a list of strings", () => {
+    writeConfig(`${project}    lint: ""\n`);
+    expect(() => loadConfig({}, tmp)).toThrow(/projects\[0\]\.lint must be a non-empty string or false/);
+    writeConfig(`${project}    covers: "src/**"\n`);
+    expect(() => loadConfig({}, tmp)).toThrow("projects[0].covers must be a list of strings.");
+  });
+
+  it("knows lint and covers: no unknown-key warning", () => {
+    writeConfig(`${project}    lint: npx eslint .\n    covers: ["src/**"]\n`);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    loadConfig({}, tmp);
+    expect(spy).not.toHaveBeenCalledWith(expect.stringContaining("unknown key"));
+    spy.mockRestore();
+  });
 });
