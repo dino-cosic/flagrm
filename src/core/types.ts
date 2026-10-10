@@ -131,7 +131,8 @@ export interface FlagFlowName {
   flag: string;
   /** As code refers to it; a static method qualified by its class (`CollectionTerminology.Plural`). */
   name: string;
-  kind: "local" | "field" | "property" | "method" | "parameter";
+  /** `alias`: a renamed import of one of the flag's definitions (`AppFeatureFlags.X`), recorded everywhere. */
+  kind: "local" | "field" | "property" | "method" | "parameter" | "alias";
   /**
    * A parameter of one of several same-named methods the call could reach, or
    * an instance method whose name another method shares; never recorded automatically.

@@ -20,6 +20,9 @@ contain breaking changes.
   running them again, and say so. Removing flags one after another, each
   next baseline takes seconds, and so does `/flagrm-verify` after a
   removal. `--no-reuse` runs them anyway.
+- Angular: a renamed import of a flag registry
+  (`import { FeatureFlags as AppFeatureFlags }`) is followed, so
+  `AppFeatureFlags.X` is recorded and checked like `FeatureFlags.X`.
 
 ### Fixed
 
