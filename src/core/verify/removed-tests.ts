@@ -114,20 +114,20 @@ interface ChangedTestFile {
   now?: string;
 }
 
-function changedTestFiles(ctx: RemovedTestsContext): ChangedTestFile[] {
+function changedTestFiles(ctx: RemovedTestsContext, includeNew = false): ChangedTestFile[] {
   if (!ctx.sha) return [];
   const out: ChangedTestFile[] = [];
   for (const rel of ctx.changedFiles ?? []) {
     if (!isTestPath(rel)) continue;
     const before = fileAt(ctx.root, ctx.sha, rel);
-    if (before === undefined) continue;
+    if (before === undefined && !includeNew) continue;
     let now: string | undefined;
     try {
       now = fs.readFileSync(path.join(ctx.root, rel), "utf8");
     } catch {
       now = undefined;
     }
-    out.push({ rel, before, now });
+    out.push({ rel, before: before ?? "", now });
   }
   return out;
 }
@@ -247,7 +247,8 @@ export function declaredTestDiff(ctx: RemovedTestsContext): {
   const before: string[] = [];
   const now: string[] = [];
   let rows = false;
-  for (const file of changedTestFiles(ctx)) {
+  // A file new since the baseline declared nothing then, so a moved spec's tests cancel out.
+  for (const file of changedTestFiles(ctx, true)) {
     rows ||= hasDataRows(file.before) || (file.now !== undefined && hasDataRows(file.now));
     before.push(...declaredTests(file.before, file.rel));
     if (file.now !== undefined) now.push(...declaredTests(file.now, file.rel));

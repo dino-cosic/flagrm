@@ -171,7 +171,9 @@ export function parseJestJson(text: string): TestRunResults | undefined {
   if (!Array.isArray(json?.testResults)) return undefined;
   const results = empty();
   for (const file of json.testResults) {
+    if (!file || typeof file !== "object" || !Array.isArray(file.assertionResults ?? [])) return undefined;
     for (const test of file.assertionResults ?? []) {
+      if (!test || typeof test !== "object") return undefined;
       const owners = test.ancestorTitles?.length ? test.ancestorTitles : file.name ? [path.basename(file.name)] : [];
       const status = test.status ?? "";
       record(

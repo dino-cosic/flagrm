@@ -92,6 +92,11 @@ describe("parseJestJson", () => {
     expect(parseJestJson("{ half")).toBeUndefined();
     expect(parseJestJson('{"other":1}')).toBeUndefined();
   });
+
+  it("is undefined for a file with null entries or a non-array assertionResults", () => {
+    expect(parseJestJson('{"testResults":[null]}')).toBeUndefined();
+    expect(parseJestJson('{"testResults":[{"name":"a.spec.ts","assertionResults":"nope"}]}')).toBeUndefined();
+  });
 });
 
 describe("hasTestNames", () => {

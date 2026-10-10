@@ -165,7 +165,7 @@ async function configChecks(
       if (check === "test" && !commands.testResults) {
         add(
           "warn",
-          `${ctx.name}: test command has no testResults — verify can't compare tests by name, so a test that fails before the removal fails verify too`,
+          `${ctx.name}: test command has no testResults — verify reads failing tests and counts from the log only and deleted tests from the diff, so it can't compare tests by name`,
           [`fix: ${missingResultsFix(adapter.id, ctx, root)}`],
         );
       }

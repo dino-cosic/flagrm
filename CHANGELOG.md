@@ -9,6 +9,8 @@ contain breaking changes.
 
 ### Added
 
+- `testResults` reads Jest JSON (`jest --json`, Vitest's `json` reporter); a
+  result file that doesn't parse is skipped.
 - Without `testResults`, `verify` reads the changed test files to list
   deleted and renamed tests, and warns when the log's test count dropped by
   more than the diff deletes.

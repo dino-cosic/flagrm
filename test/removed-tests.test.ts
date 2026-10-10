@@ -155,6 +155,7 @@ describe("declaredTests", () => {
       "describe('CheckoutComponent', () => {",
       "  it('places the order', () => { const o = { a: 1 }; });",
       "  describe.each([[1], [2]])('submit', () => {",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal template text under test
       "    test.skip(`retries ${'x'}`, () => {});",
       "  });",
       "  // it('commented out', () => {});",
@@ -164,6 +165,7 @@ describe("declaredTests", () => {
     ].join("\n");
     expect(declaredTests(spec, "a.spec.ts")).toEqual([
       "CheckoutComponent › places the order",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal template text under test
       "CheckoutComponent › submit › retries ${'x'}",
       "CheckoutComponent › shows the title",
       "top level",
@@ -224,5 +226,22 @@ describe("declaredTestDiff", () => {
       now: ["Cart › adds", "Cart › removes"],
       rows: false,
     });
+  });
+
+  it("counts a test file new since the baseline, so a moved spec cancels out", () => {
+    git("init", "-q");
+    const body = "describe('Cart', () => { it('adds', () => {}); it('removes', () => {}); });\n";
+    fs.mkdirSync(path.join(tmp, "old"));
+    fs.writeFileSync(path.join(tmp, "old", "a.spec.ts"), body);
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
+    const sha = git("rev-parse", "HEAD");
+    fs.rmSync(path.join(tmp, "old"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "new"));
+    fs.writeFileSync(path.join(tmp, "new", "a.spec.ts"), body);
+    const diff = declaredTestDiff(ctx({ sha, changedFiles: ["old/a.spec.ts", "new/a.spec.ts"] }));
+    expect(diff.removed).toEqual([]);
+    expect(diff.added).toEqual([]);
+    expect(diff.now).toEqual(["Cart › adds", "Cart › removes"]);
   });
 });

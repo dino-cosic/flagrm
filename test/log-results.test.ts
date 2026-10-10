@@ -88,6 +88,10 @@ describe("parseTestLog", () => {
     expect(r?.files).toEqual([]);
   });
 
+  it("takes a test titled ...Warning for a failing test", () => {
+    expect(parseTestLog("  ● Cart › shows low-stock Warning")?.failedNames).toEqual(["Cart › shows low-stock Warning"]);
+  });
+
   it("is undefined for a log without test output", () => {
     expect(parseTestLog("error TS2304: Cannot find name 'x'.\nnpm ERR! Test failed.")).toBeUndefined();
   });

@@ -368,7 +368,7 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
         c.renamed.length && `${c.renamed.length} renamed`,
         c.excludedByConfig.length && `${c.excludedByConfig.length} excluded by config`,
         c.unexplained.length && `${c.unexplained.length} unexplained`,
-        c.missing && `${c.missing} unexplained`,
+        c.missing && `${c.missing} unaccounted for`,
       ].filter(Boolean);
       return `${c.project} ${c.before} → ${c.after}${why.length ? `: ${why.join(", ")}` : ""}`;
     });

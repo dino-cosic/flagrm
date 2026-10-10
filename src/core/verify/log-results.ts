@@ -22,7 +22,7 @@ const FAILED: Array<[RegExp, (m: RegExpExecArray) => string | undefined]> = [
   // Karma: `Chrome Headless 120.0.0.0 (Mac OS 10.15.7) CheckoutComponent places the order FAILED`
   [/^\S.*? \d[\d.]* \((?:Mac OS|Linux|Windows|Ubuntu)[^)]*\) (.+?) FAILED$/, (m) => m[1]],
   // Jest: `● CheckoutComponent › places the order`
-  [/^● (.+)$/, (m) => (/^(?:Test suite failed to run|Console)$|Warning:?$/.test(m[1]) ? undefined : m[1])],
+  [/^● (.+)$/, (m) => (/^(?:Test suite failed to run|Console)$|Warning:$/.test(m[1]) ? undefined : m[1])],
   // Vitest: `FAIL  src/a.spec.ts > Suite > title` (optionally after a `|project|` tag) and `× Suite > title 12ms`
   [/^FAIL\s+(?:\|[^|]+\|\s+)?\S+ > (.+)$/, (m) => vitestName(m[1])],
   [/^[×✗] (.+ > .+?)(?: \d+ms)?$/, (m) => vitestName(m[1])],
