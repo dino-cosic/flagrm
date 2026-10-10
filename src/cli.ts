@@ -26,6 +26,7 @@ import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
 import { buildInventory } from "./core/inventory.js";
 import { verifyMarkdown } from "./core/markdown.js";
+import { assertOwnNames } from "./core/name-owner.js";
 import { packageVersion } from "./core/package.js";
 import { resolveProjects } from "./core/registry.js";
 import {
@@ -195,6 +196,7 @@ addCommonOptions(
       let result: ReturnType<typeof writeBaseline>;
       try {
         validateAgentNames(projects, added);
+        await assertOwnNames(root, projects, flag, added);
         const exists = fs.existsSync(baselinePath(root, flag));
         if (exists && opts.force) {
           const testResults = projects.flatMap(({ adapter, ctx }) => projectCommands(adapter, ctx).testResults ?? []);

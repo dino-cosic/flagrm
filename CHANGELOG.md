@@ -27,6 +27,9 @@ contain breaking changes.
   its `templateUrl` template too, whether discovery or `--file` scoped it.
 - `baseline --file` repeats: `--name x --file a.ts --file b.ts` records the
   name for every file in one call.
+- `baseline --name` refuses a name whose code reads only other flags (a
+  helper named like this flag that evaluates a different one), since
+  `verify` would then ask to delete the other flag's code.
 
 ### Fixed
 

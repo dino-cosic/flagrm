@@ -168,6 +168,27 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(outside.stderr).toContain("--file ../elsewhere.ts is outside");
   });
 
+  it("baseline --name refuses a name whose code reads only another flag", () => {
+    const file = path.join(dir, ".flagrm", "NewCheckout", "baseline.json");
+    const before = fs.readFileSync(file, "utf8");
+    const r = runCli(
+      [
+        "baseline",
+        "NewCheckout",
+        "--name",
+        "expressShipping",
+        "--file",
+        "frontend/src/app/checkout/checkout.component.ts",
+      ],
+      dir,
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain(
+      '"expressShipping" reads ExpressShipping, not NewCheckout (frontend/src/app/checkout/checkout.component.ts:24); not recorded.',
+    );
+    expect(fs.readFileSync(file, "utf8")).toBe(before);
+  });
+
   it("baseline refuses to overwrite an existing baseline without --force", () => {
     const { status, stderr } = runCli(["baseline", "NewCheckout", "--no-checks"], dir);
     expect(status).toBe(2);
