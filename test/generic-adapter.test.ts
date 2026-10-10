@@ -107,7 +107,13 @@ describe("verify on the Go fixture", () => {
     writeBaseline(tmp, FLAG, workspace(tmp), gitState(tmp), undefined, await discoverNames(workspace(tmp), FLAG));
     applyAfter();
     const report = await verify(undefined, ["build", "tests"]);
-    expect(status(report)).toEqual({ leftovers: "pass", "dead-code": "skipped", build: "skipped", tests: "skipped" });
+    expect(status(report)).toEqual({
+      leftovers: "pass",
+      "dead-code": "skipped",
+      build: "skipped",
+      tests: "skipped",
+      lint: "skipped",
+    });
     expect(report.status).toBe("pass");
   });
 

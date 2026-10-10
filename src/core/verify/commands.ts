@@ -4,11 +4,14 @@
  * tests of the OFF path is part of removing a flag, losing any other test is not.
  * A changed test file none of whose tests ran is a warning too: the test
  * command doesn't cover it, so verify didn't check the edit.
+ *
+ * The `lint` check: a failing lint command fails, unless it already failed at
+ * the baseline: lint debt only warns, listing the log lines new since.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { errorExcerpt, templateCheckGap } from "../baseline.js";
+import { errorExcerpt, logLines, templateCheckGap } from "../baseline.js";
 import { projectCommands } from "../config-snapshot.js";
 import { escapeRegExp, isTestPath } from "../scan.js";
 import type { CheckFinding, CheckResult, CheckRun, TestComparison } from "../types.js";
@@ -38,8 +41,8 @@ function setupFinding(run: CheckRun): CheckFinding {
 }
 
 /** No command to run: skipped, unless the baseline had one, which is worth a warning. */
-function noCommandResult(v: VerifyContext, id: "build" | "tests"): CheckResult {
-  const summary = `no ${id === "build" ? "build" : "test"} command configured`;
+function noCommandResult(v: VerifyContext, id: "build" | "tests" | "lint"): CheckResult {
+  const summary = `no ${id === "tests" ? "test" : id} command configured`;
   const findings = configFindings(v, id);
   return findings.length ? checkResult(id, summary, findings) : skippedResult(id, summary);
 }
@@ -63,6 +66,61 @@ export function buildCheck(v: VerifyContext): CheckResult {
     ? `${plural(failed, "build")} failed`
     : `${runs.map((r) => r.project).join(", ")} built successfully`;
   return checkResult("build", summary, findings);
+}
+
+export function lintCheck(v: VerifyContext): CheckResult {
+  const runs = v.runs.filter((r) => r.check === "lint");
+  if (runs.length === 0) return noCommandResult(v, "lint");
+  const findings: CheckFinding[] = [];
+  let failed = 0;
+  let known = 0;
+  for (const run of runs) {
+    if (run.exitCode === 0) continue;
+    const before = v.baseline.checks?.find((c) => c.project === run.project && c.check === "lint");
+    // A setup problem is the machine's, not lint debt: it fails even when the baseline failed too.
+    if (run.failure || !before || before.exitCode === 0) {
+      failed++;
+      findings.push(...failedRunFindings(run));
+      if (!before) {
+        findings.push({
+          severity: "info",
+          message: "the baseline has no lint run to compare with (lint configured after it, or baseline --no-checks)",
+          project: run.project,
+        });
+      }
+      continue;
+    }
+    known++;
+    findings.push(...knownLintFindings(before, run));
+  }
+  findings.push(...configFindings(v, "lint"));
+  const summary = failed
+    ? `${plural(failed, "lint run")} failed`
+    : known
+      ? `${plural(known, "lint run fails", "lint runs fail")} as at the baseline`
+      : `${runs.map((r) => r.project).join(", ")} linted cleanly`;
+  return checkResult("lint", summary, findings);
+}
+
+/** A lint run that fails as it did at the baseline: a warning, plus the log lines new since (at most 20). */
+function knownLintFindings(before: CheckRun, run: CheckRun): CheckFinding[] {
+  const was = logLines(before.log);
+  const seen = new Set(was ?? []);
+  const added = was ? [...new Set((logLines(run.log) ?? []).filter((line) => !seen.has(line)))] : [];
+  const why = !was
+    ? "baseline log not found, so new lines can't be told"
+    : added.length
+      ? `${plural(added.length, "new line")} in the log`
+      : "no new lines in the log";
+  return [
+    {
+      severity: "warn",
+      message: `lint already failed at the baseline: ${why} (log: ${run.log})`,
+      project: run.project,
+      file: run.log,
+    },
+    ...added.slice(0, 20).map((line) => ({ severity: "info" as const, message: `new: ${line}`, project: run.project })),
+  ];
 }
 
 export function compareTests(v: VerifyContext): TestComparison[] {

@@ -272,7 +272,13 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(status).toBe(1);
     const report = JSON.parse(stdout);
     const byId = Object.fromEntries(report.checks.map((c: { id: string; status: string }) => [c.id, c.status]));
-    expect(byId).toEqual({ leftovers: "fail", "dead-code": "skipped", build: "skipped", tests: "skipped" });
+    expect(byId).toEqual({
+      leftovers: "fail",
+      "dead-code": "skipped",
+      build: "skipped",
+      tests: "skipped",
+      lint: "skipped",
+    });
     expect(report.verifyFile).toBe(path.join(dir, ".flagrm", "NewCheckout", "verify.json"));
   });
 
@@ -299,9 +305,9 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     const missing = runCli(["verify", "Nope", "--skip", "build,tests"], dir);
     expect(missing.status).toBe(2);
     expect(missing.stderr).toContain("flagrm baseline Nope");
-    const unknown = runCli(["verify", "NewCheckout", "--skip", "lint"], dir);
+    const unknown = runCli(["verify", "NewCheckout", "--skip", "style"], dir);
     expect(unknown.status).toBe(2);
-    expect(unknown.stderr).toContain('Unknown check "lint"');
+    expect(unknown.stderr).toContain('Unknown check "style"');
   });
 });
 

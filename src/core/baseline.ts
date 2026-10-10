@@ -462,6 +462,24 @@ export function validateAgentNames(projects: Workspace, names: RecordedName[]): 
   }
 }
 
+/** A log's non-blank lines, trimmed, without ANSI colors or the `$ <command>` header; undefined when unreadable. */
+export function logLines(log: string | undefined): string[] | undefined {
+  if (!log) return undefined;
+  let text: string;
+  try {
+    text = fs.readFileSync(log, "utf8");
+  } catch {
+    return undefined;
+  }
+  return (
+    text
+      .split(/\r?\n/)
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colors (ngc colors even when piped)
+      .map((line) => line.replace(/\u001b\[[0-9;]*m/g, "").trim())
+      .filter((line) => line && !line.startsWith("$ "))
+  );
+}
+
 /**
  * Up to `max` distinct lines of a log that look like errors, so the reader sees
  * why a command failed without opening the log. Compiler warnings and summary
@@ -469,18 +487,8 @@ export function validateAgentNames(projects: Workspace, names: RecordedName[]): 
  * real error. When no line looks like an error, the last `max` lines instead.
  */
 export function errorExcerpt(log: string | undefined, max = 10): string[] {
-  if (!log) return [];
-  let text: string;
-  try {
-    text = fs.readFileSync(log, "utf8");
-  } catch {
-    return [];
-  }
-  const all = text
-    .split(/\r?\n/)
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colors (ngc colors even when piped)
-    .map((line) => line.replace(/\u001b\[[0-9;]*m/g, "").trim())
-    .filter((line) => line && !line.startsWith("$ "));
+  const all = logLines(log);
+  if (!all) return [];
   const lines = all
     .filter((line) => /\berror\b|\bfailed\b|✗|×/i.test(line))
     .filter((line) => !/:\s*warning\b/i.test(line) && !/^\d+ Error\(s\)$/i.test(line));

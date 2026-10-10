@@ -105,7 +105,7 @@ function namedFiles(command: string, cwd: string, root: string): CommandSnapshot
 
 /** A difference between the baseline's configuration and the current one, reported by the check it affects. */
 export interface ConfigChange {
-  check: Extract<CheckId, "build" | "tests" | "leftovers">;
+  check: Extract<CheckId, "build" | "tests" | "lint" | "leftovers">;
   project?: string;
   message: string;
   /** For a change to the config file outside the commands: its changed lines (`- old`, `+ new`). */
@@ -123,6 +123,7 @@ export function configChanges(before: ConfigSnapshot | undefined, now: ConfigSna
     for (const [kind, check] of [
       ["build", "build"],
       ["test", "tests"],
+      ["lint", "lint"],
     ] as const) {
       const a = was?.[kind];
       const b = is?.[kind];
@@ -180,7 +181,16 @@ function withoutCommands(text: string): string {
   }
   const strip = (project: unknown) => {
     if (!project || typeof project !== "object") return project;
-    const { build: _b, test: _t, testResults: _r, timeout: _o, ...rest } = project as Record<string, unknown>;
+    // `covers` changes no command's result, and `coverage` always reads the current config.
+    const {
+      build: _b,
+      test: _t,
+      lint: _l,
+      testResults: _r,
+      timeout: _o,
+      covers: _c,
+      ...rest
+    } = project as Record<string, unknown>;
     return rest;
   };
   if (parsed && typeof parsed === "object") {

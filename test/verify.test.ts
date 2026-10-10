@@ -85,7 +85,13 @@ describe("verify on the realistic fixture", () => {
     const report = await verify();
     expect(findings(report, "dead-code")).toEqual([]);
     // Without the build, the changed C# files have no compiler output to read: not a dead-code pass.
-    expect(status(report)).toEqual({ leftovers: "pass", "dead-code": "skipped", build: "skipped", tests: "skipped" });
+    expect(status(report)).toEqual({
+      leftovers: "pass",
+      "dead-code": "skipped",
+      build: "skipped",
+      tests: "skipped",
+      lint: "skipped",
+    });
     expect(report.checks.find((c) => c.id === "dead-code")?.summary).toBe(
       "compiler diagnostics skipped for api: no build output",
     );

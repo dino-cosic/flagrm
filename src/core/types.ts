@@ -303,7 +303,7 @@ export interface ConfigSnapshot {
 // verify
 // ---------------------------------------------------------------------------
 
-export const CHECK_IDS = ["leftovers", "dead-code", "build", "tests"] as const;
+export const CHECK_IDS = ["leftovers", "dead-code", "build", "tests", "lint"] as const;
 
 export type CheckId = (typeof CHECK_IDS)[number];
 

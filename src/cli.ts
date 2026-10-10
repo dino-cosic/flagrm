@@ -230,7 +230,7 @@ addCommonOptions(
   program
     .command("verify <flag>")
     .description(
-      "gate a flag removal against its baseline (`flagrm baseline <flag>`): build, tests and new unused code; " +
+      "gate a flag removal against its baseline (`flagrm baseline <flag>`): build, tests, lint and new unused code; " +
         "writes .flagrm/<flag>/verify.json; exit 0 pass, 1 fail, 2 usage error",
     ),
 )

@@ -77,6 +77,16 @@ describe("configChanges", () => {
     ]);
   });
 
+  it("reports a changed lint command against lint only, and a covers change not at all", () => {
+    const before = snapshot();
+    const lint = snapshot(CONFIG.replace("    testResults:", "    lint: npx eslint .\n    testResults:"));
+    expect(configChanges(before, lint)).toEqual([
+      { check: "lint", project: "api", message: "lint command changed since the baseline: (none) → `npx eslint .`" },
+    ]);
+    const covers = snapshot(CONFIG.replace("    testResults:", '    covers: ["src/**"]\n    testResults:'));
+    expect(configChanges(before, covers)).toEqual([]);
+  });
+
   it("reports a changed file a command names, against each command naming it", () => {
     const before = snapshot();
     fs.writeFileSync(path.join(tmp, "api", "flagrm.slnf"), '{"solution":{"projects":[]}}');
