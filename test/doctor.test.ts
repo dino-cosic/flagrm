@@ -120,6 +120,16 @@ describe("runDoctor", () => {
     );
   });
 
+  it("says how to get test results for the detected runner", async () => {
+    config('node -e ""', 'node -e ""');
+    fs.writeFileSync(path.join(tmp, "vitest.config.ts"), "");
+    commitAll();
+    const check = (await runDoctor(tmp)).checks.find((c) => c.message.includes("has no testResults"));
+    expect(check?.details).toEqual([
+      'fix: add `--reporter=default --reporter=junit --outputFile.junit=".flagrm/test-results/svc/junit.xml"` to the test command and set testResults: ./.flagrm/test-results/svc/junit.xml',
+    ]);
+  });
+
   it("fails with --run when the test command writes no results matching testResults", async () => {
     config('node -e ""', 'node -e ""', "./out/*.xml");
     commitAll();

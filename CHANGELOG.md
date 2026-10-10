@@ -9,6 +9,8 @@ contain breaking changes.
 
 ### Added
 
+- `doctor`'s warning about a test command without `testResults` says how
+  to get results for the detected runner (Vitest, Jest, Karma, `dotnet test`).
 - An optional per-project `lint` command (lint or type-check), run by
   `baseline`, `verify` and `doctor --run`. `verify`'s new `lint` check fails
   on lint errors the removal caused; a lint that already failed at the

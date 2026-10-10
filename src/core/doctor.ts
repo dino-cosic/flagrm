@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { realProbes, type SetupProbes } from "../adapters/dotnet/setup.js";
-import type { Workspace } from "./adapter.js";
+import type { ProjectContext, Workspace } from "./adapter.js";
 import { errorExcerpt, incrementalBuildGap, runCheck, templateCheckGap } from "./baseline.js";
 import { changeFilter, changeFilterAt } from "./change-filter.js";
 import { findConfigFile, loadConfig, TOOL_IDS, type ToolId } from "./config.js";
@@ -17,6 +17,7 @@ import { installedSkillVersion, SKILLS, stopHookState, TOOL_SKILL_DIRS } from ".
 import { packageVersion } from "./package.js";
 import { resolveProjects } from "./registry.js";
 import { setupReport } from "./scope.js";
+import { detectTestRunner, testResultsHint } from "./test-runner.js";
 import { savedTools } from "./tools.js";
 import type { Baseline } from "./types.js";
 import { onPath, readJson, relativePath } from "./util.js";
@@ -42,6 +43,17 @@ export interface DoctorOptions {
   run?: boolean;
   /** What the machine has (SDKs, `cargo`, Docker); the real machine by default. */
   probes?: SetupProbes;
+}
+
+/** How to get test results for a project without `testResults`: .NET writes TRX, JavaScript runners by detection. */
+function missingResultsFix(adapterId: string, ctx: ProjectContext, root: string): string {
+  const dir = path.join(root, ".flagrm", "test-results", ctx.name);
+  const fromProject = relativePath(ctx.root, dir) || ".";
+  const fromConfig = `./${relativePath(root, dir)}`;
+  if (adapterId === "dotnet") {
+    return `add \`--logger trx --results-directory "${fromProject}"\` to the test command and set testResults: ${fromConfig}/*.trx`;
+  }
+  return testResultsHint(detectTestRunner(ctx.root), fromProject, fromConfig, adapterId === "angular");
 }
 
 /** Check the setup in `cwd`: config and commands, git, .gitignore, skills, hook and abandoned baselines. */
@@ -153,6 +165,7 @@ async function configChecks(
         add(
           "warn",
           `${ctx.name}: test command has no testResults — verify can't compare tests by name, so a test that fails before the removal fails verify too`,
+          [`fix: ${missingResultsFix(adapter.id, ctx, root)}`],
         );
       }
       if (!options.run) {
