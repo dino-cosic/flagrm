@@ -162,6 +162,7 @@ describe("declaredTests", () => {
       "  it(\"shows the title\", () => { expect(/x/.test('not a test')).toBe(true); });",
       "});",
       "it('top level', () => {});",
+      "it.todo('later');",
     ].join("\n");
     expect(declaredTests(spec, "a.spec.ts")).toEqual([
       "CheckoutComponent › places the order",
@@ -169,6 +170,7 @@ describe("declaredTests", () => {
       "CheckoutComponent › submit › retries ${'x'}",
       "CheckoutComponent › shows the title",
       "top level",
+      "later",
     ]);
   });
 
@@ -220,7 +222,7 @@ describe("declaredTestDiff", () => {
     git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
     const sha = git("rev-parse", "HEAD");
     fs.writeFileSync(file, block("adds") + block("removes"));
-    expect(declaredTestDiff(ctx({ sha, changedFiles: ["a.spec.ts"] }))).toEqual({
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["a.spec.ts"] }))).toMatchObject({
       removed: ["Cart › adds", "Cart › removes when NewCheckout is on"],
       added: ["Cart › removes"],
       now: ["Cart › adds", "Cart › removes"],

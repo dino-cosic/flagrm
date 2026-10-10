@@ -205,7 +205,13 @@ export function compareTests(v: VerifyContext): TestComparison[] {
     } else {
       // No names from result files on both sides: the test files' declarations show what the diff deleted or renamed.
       const declared = declaredTestDiff(removedCtx);
-      const { renamed } = classifyRemovedTests(declared.removed, declared.added, declared.now, removedCtx);
+      const { renamed } = classifyRemovedTests(
+        declared.removed,
+        declared.added,
+        declared.now,
+        removedCtx,
+        declared.files,
+      );
       const from = new Set(renamed.map((r) => r.from));
       Object.assign(comparison, {
         removed: declared.removed,

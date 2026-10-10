@@ -21,8 +21,8 @@ const vitestName = (name: string) => name.split(" > ").join(JUNIT_SEPARATOR);
 const FAILED: Array<[RegExp, (m: RegExpExecArray) => string | undefined]> = [
   // Karma: `Chrome Headless 120.0.0.0 (Mac OS 10.15.7) CheckoutComponent places the order FAILED`
   [/^\S.*? \d[\d.]* \((?:Mac OS|Linux|Windows|Ubuntu)[^)]*\) (.+?) FAILED$/, (m) => m[1]],
-  // Jest: `● CheckoutComponent › places the order`
-  [/^● (.+)$/, (m) => (/^(?:Test suite failed to run|Console)$|Warning:$/.test(m[1]) ? undefined : m[1])],
+  // Jest: `● CheckoutComponent › places the order`; its notices (`● Console`, `● Multiple configurations found:`) aren't tests
+  [/^● (.+)$/, (m) => (/^(?:Test suite failed to run|Console)$|:$/.test(m[1]) ? undefined : m[1])],
   // Vitest: `FAIL  src/a.spec.ts > Suite > title` (optionally after a `|project|` tag) and `× Suite > title 12ms`
   [/^FAIL\s+(?:\|[^|]+\|\s+)?\S+ > (.+)$/, (m) => vitestName(m[1])],
   [/^[×✗] (.+ > .+?)(?: \d+ms)?$/, (m) => vitestName(m[1])],
@@ -38,14 +38,22 @@ function count(parts: string, word: string): number {
   return Number(new RegExp(`(\\d+) ${word}`).exec(parts)?.[1] ?? 0);
 }
 
-/** The summary counts in one log line; `sum` for runners that print one summary per test project. */
-function summary(line: string): { counts: Counts; sum?: boolean } | undefined {
+/**
+ * The summary counts in one log line; `sum` for runners that print one
+ * summary per test project, `browser` for Karma's one summary per browser.
+ */
+function summary(line: string): { counts: Counts; sum?: boolean; browser?: string } | undefined {
   // Karma, possibly several `\r`-separated progress updates: the last one counts.
-  const karma = [...line.matchAll(/Executed (\d+) of (\d+)(?: \((\d+) FAILED\))?(?: \(skipped (\d+)\))?/g)].pop();
+  const karma = [
+    ...line.matchAll(
+      /(?:^|\r)\s*(?:(\S[^\r]*?):\s+)?Executed (\d+) of (\d+)(?: \((\d+) FAILED\))?(?: \(skipped (\d+)\))?/g,
+    ),
+  ].pop();
   if (karma) {
-    const failed = Number(karma[3] ?? 0);
+    const failed = Number(karma[4] ?? 0);
     return {
-      counts: { total: Number(karma[2]), passed: Number(karma[1]) - failed, failed, skipped: Number(karma[4] ?? 0) },
+      counts: { total: Number(karma[3]), passed: Number(karma[2]) - failed, failed, skipped: Number(karma[5] ?? 0) },
+      browser: karma[1] ?? "",
     };
   }
   const jest = /^Tests:\s+(.*?)(\d+) total/.exec(line);
@@ -87,23 +95,27 @@ function summary(line: string): { counts: Counts; sum?: boolean } | undefined {
   return undefined;
 }
 
+const add = (a: Counts, b: Counts): Counts => ({
+  total: a.total + b.total,
+  passed: a.passed + b.passed,
+  failed: a.failed + b.failed,
+  skipped: a.skipped + b.skipped,
+});
+
 export function parseTestLog(text: string): TestRunResults | undefined {
   const failed = new Set<string>();
   let counts: Counts | undefined;
+  const browsers = new Map<string, Counts>();
   // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colors
   for (const raw of text.replace(/\u001b\[[0-9;]*m/g, "").split(/\r?\n/)) {
     const line = raw.trim();
     const found = summary(line);
-    if (found) {
-      counts =
-        found.sum && counts
-          ? {
-              total: counts.total + found.counts.total,
-              passed: counts.passed + found.counts.passed,
-              failed: counts.failed + found.counts.failed,
-              skipped: counts.skipped + found.counts.skipped,
-            }
-          : found.counts;
+    if (found?.browser !== undefined) {
+      // Several browsers each run every test: the last summary per browser counts, summed over browsers.
+      browsers.set(found.browser, found.counts);
+      counts = [...browsers.values()].reduce(add);
+    } else if (found) {
+      counts = found.sum && counts ? add(counts, found.counts) : found.counts;
     }
     // Karma's progress updates share a line through `\r`: names are looked for in each part.
     for (const part of line.split("\r")) {

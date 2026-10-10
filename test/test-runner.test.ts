@@ -111,14 +111,17 @@ describe("runnerTestCommands", () => {
 describe("testResultsHint", () => {
   it("says what to change for each runner", () => {
     const hint = (runner: Parameters<typeof testResultsHint>[0]) =>
-      testResultsHint(runner, "../.flagrm/r", "./.flagrm/r", true);
+      testResultsHint(runner, "../.flagrm/r", "./.flagrm/r", true, "/repo");
     expect(hint({ kind: "karma" })).toContain("npm i -D karma-junit-reporter");
+    expect(hint({ kind: "karma", junit: { outputDir: "/repo/web/reports" } })).toBe(
+      "add `--reporters=progress --reporters=junit` to the test command and set testResults: ./web/reports/**/*.xml (or remove `test` to use the adapter default)",
+    );
     expect(hint({ kind: "vitest-ng" })).toBe(
       'add `--reporters=junit --output-file="../.flagrm/r/junit.xml"` to the test command and set testResults: ./.flagrm/r/junit.xml (or remove `test` to use the adapter default)',
     );
     expect(hint({ kind: "jest", viaNg: false })).toContain("--json --outputFile=");
     expect(hint({ kind: "jest", viaNg: true })).toContain("@angular-builders/jest");
-    expect(testResultsHint({ kind: "vitest" }, "r", "./r", false)).toBe(
+    expect(testResultsHint({ kind: "vitest" }, "r", "./r", false, "/repo")).toBe(
       'add `--reporter=default --reporter=junit --outputFile.junit="r/junit.xml"` to the test command and set testResults: ./r/junit.xml',
     );
     expect(hint({ kind: "unknown" })).toBe(

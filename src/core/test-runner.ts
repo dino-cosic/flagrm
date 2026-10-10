@@ -145,18 +145,24 @@ export function runnerTestCommands(
  * to the project (for the command), `dirFromConfig` the same relative to the
  * config file (for `testResults`). `adapterDefault`: the adapter's default
  * test command writes results for this runner (Angular), so removing `test` is a fix too.
+ * `configRoot`: the config file's directory, for a results directory karma.conf.js names.
  */
 export function testResultsHint(
   runner: TestRunner,
   dirFromProject: string,
   dirFromConfig: string,
   adapterDefault: boolean,
+  configRoot: string,
 ): string {
   const flags = resultFlags(runner, (name) => `${dirFromProject}/${name}`);
   const name = RESULT_FILE[runner.kind];
+  const fallback = adapterDefault ? " (or remove `test` to use the adapter default)" : "";
   if (flags && name) {
-    const fallback = adapterDefault ? " (or remove `test` to use the adapter default)" : "";
     return `add \`${flags}\` to the test command and set testResults: ${dirFromConfig}/${name}${fallback}`;
+  }
+  if (runner.kind === "karma" && runner.junit) {
+    const results = `./${relativePath(configRoot, runner.junit.outputDir)}/**/*.xml`;
+    return `add \`--reporters=progress --reporters=junit\` to the test command and set testResults: ${results}${fallback}`;
   }
   if (runner.kind === "karma") {
     return "npm i -D karma-junit-reporter, add require('karma-junit-reporter') to plugins and junitReporter: { outputDir: 'test-results' } to karma.conf.js; the angular adapter's default test command then writes JUnit";

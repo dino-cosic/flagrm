@@ -54,7 +54,7 @@ function missingResultsFix(adapterId: string, ctx: ProjectContext, root: string)
   if (adapterId === "dotnet") {
     return `add \`--logger trx --results-directory "${fromProject}"\` to the test command and set testResults: ${fromConfig}/*.trx`;
   }
-  return testResultsHint(detectTestRunner(ctx.root), fromProject, fromConfig, adapterId === "angular");
+  return testResultsHint(detectTestRunner(ctx.root), fromProject, fromConfig, adapterId === "angular", root);
 }
 
 /** Check the setup in `cwd`: config and commands, git, .gitignore, skills, hook and abandoned baselines. */

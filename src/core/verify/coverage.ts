@@ -4,9 +4,11 @@
  * when it ran a command in this verify (or has one `--skip` left out) and one
  * of its `covers` globs (relative to its path; default: everything) matches
  * the file. A file that was already dirty at the baseline and hasn't changed
- * since is no edit of the removal.
+ * since is no edit of the removal. Outside every project, deleted files and
+ * documentation have nothing for a command to check.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import { excludeMatcher } from "../change-filter.js";
 import { projectCommands } from "../config-snapshot.js";
@@ -19,6 +21,8 @@ import { checkResult, plural, skippedResult, type VerifyContext } from "./contex
 const MAX_FILES = 20;
 
 const UNCHECKED = "no build, test or lint command checks";
+
+const DOCS = /\.(?:md|mdx|markdown|txt|rst|adoc)$/i;
 
 export function coverageCheck(v: VerifyContext): CheckResult {
   if (!v.changedFiles) return skippedResult("coverage", "no baseline commit to diff against");
@@ -45,6 +49,8 @@ export function coverageCheck(v: VerifyContext): CheckResult {
       .map((p) => ({ ...p, rel: relativePath(p.root, path.join(v.root, file)) }))
       .filter((p) => p.rel !== ".." && !p.rel.startsWith("../") && !path.isAbsolute(p.rel));
     if (containing.some((p) => p.ran && p.covers(p.rel))) continue;
+    // Outside every project, documentation and deleted files have nothing for a command to check.
+    if (containing.length === 0 && (DOCS.test(file) || !fs.existsSync(path.join(v.root, file)))) continue;
     const innermost = containing.sort((a, b) => b.root.length - a.root.length)[0];
     uncovered.push({ file, project: innermost?.name });
   }

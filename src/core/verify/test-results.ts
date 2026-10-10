@@ -186,10 +186,16 @@ export function parseJestJson(text: string): TestRunResults | undefined {
   return results;
 }
 
-/** One result file by its content: TRX, Jest JSON or JUnit XML. Undefined when it can't be read as any. */
+/**
+ * One result file by its content: TRX, Jest JSON or JUnit XML. Undefined when
+ * it can't be read as any, or the XML document isn't complete (still being written).
+ */
 function parseResultFile(text: string): TestRunResults | undefined {
   if (/^\s*\{/.test(text)) return parseJestJson(text);
-  return /<TestRun\b/.test(text) ? parseTrx(text) : parseJUnit(text);
+  if (/<TestRun\b/.test(text)) return /<\/TestRun>\s*$/.test(text) ? parseTrx(text) : undefined;
+  return /<testsuites?\b/.test(text) && /(?:<\/testsuites?>|<testsuites?\b[^>]*\/>)\s*$/.test(text)
+    ? parseJUnit(text)
+    : undefined;
 }
 
 /** Whether results name every test that ran (read from result files), not only the failing ones a log names. */

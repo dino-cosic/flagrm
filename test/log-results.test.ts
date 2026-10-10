@@ -23,6 +23,20 @@ describe("parseTestLog", () => {
     });
   });
 
+  it("sums Karma's last summary per browser", () => {
+    const log = [
+      "Chrome Headless 120.0.0.0 (Mac OS 10.15.7): Executed 3 of 3 (1 FAILED) (0.1 secs / 0.1 secs)",
+      "Firefox 121.0 (Mac OS 10.15): Executed 2 of 3\rFirefox 121.0 (Mac OS 10.15): Executed 3 of 3 (0.1 secs / 0.1 secs)",
+      "TOTAL: 1 FAILED, 5 SUCCESS",
+    ].join("\n");
+    expect(result(log)).toMatchObject({ total: 6, passed: 5, failed: 1, skipped: 0 });
+  });
+
+  it("doesn't take Jest notices for failing tests", () => {
+    const log = ["  ● Multiple configurations found:", "  ● A › b", "Tests:       1 failed, 1 total"].join("\n");
+    expect(result(log)?.names).toEqual(["A › b"]);
+  });
+
   it("reads Jest, ignoring suites that failed to run and console blocks", () => {
     const log = [
       "  ● CheckoutComponent › submit › places the order",

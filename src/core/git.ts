@@ -4,6 +4,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -34,23 +35,30 @@ export function gitState(cwd: string): GitState {
   return { sha: head.stdout.trim(), dirty: dirtyFiles.length > 0, dirtyFiles };
 }
 
+function hashObjects(cwd: string, files: string[]): string[] | undefined {
+  const result = spawnSync("git", ["hash-object", "--stdin-paths"], {
+    cwd,
+    encoding: "utf8",
+    input: `${files.join("\n")}\n`,
+  });
+  return result.status === 0 ? (result.stdout ?? "").split("\n") : undefined;
+}
+
 /**
  * Each file's git blob id as it is in the working tree (null when it doesn't
- * exist), so a later run can tell whether it changed since. Paths are relative to `cwd`.
+ * exist), so a later run can tell whether it changed since. A file git can't
+ * hash (a submodule directory) gets an id of its own each time, so it always
+ * counts as changed. Paths are relative to `cwd`.
  */
 export function blobIds(cwd: string, files: string[]): Record<string, string | null> {
   const ids: Record<string, string | null> = {};
   const existing = files.filter((rel) => fs.existsSync(path.join(cwd, rel)));
   for (const rel of files) ids[rel] = null;
   if (existing.length === 0) return ids;
-  const result = spawnSync("git", ["hash-object", "--stdin-paths"], {
-    cwd,
-    encoding: "utf8",
-    input: `${existing.join("\n")}\n`,
-  });
-  const out = result.status === 0 ? (result.stdout ?? "").split("\n") : [];
+  // One git call for all files; when it fails, one per file, so a single unhashable path doesn't spoil the rest.
+  const out = hashObjects(cwd, existing);
   existing.forEach((rel, i) => {
-    ids[rel] = out[i] || null;
+    ids[rel] = (out ? out[i] : hashObjects(cwd, [rel])?.[0]) || `unhashable:${randomUUID()}`;
   });
   return ids;
 }

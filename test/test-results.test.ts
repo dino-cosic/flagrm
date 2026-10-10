@@ -125,6 +125,13 @@ describe("collectTestResults", () => {
     expect(r?.files.map((f) => path.basename(f))).toEqual(["a.trx", "b.xml"]);
   });
 
+  it("skips a truncated or unrelated XML file", () => {
+    fs.writeFileSync(path.join(tmp, "half.xml"), JUNIT.slice(0, JUNIT.lastIndexOf("</testcase>")));
+    fs.writeFileSync(path.join(tmp, "coverage.xml"), '<?xml version="1.0"?><coverage line-rate="1"></coverage>');
+    fs.writeFileSync(path.join(tmp, "half.trx"), TRX.replace("</TestRun>", ""));
+    expect(collectTestResults(path.join(tmp, "*.{xml,trx}"), Date.now() - 5000)).toBeUndefined();
+  });
+
   it("returns undefined when no fresh result file exists", () => {
     expect(collectTestResults(path.join(tmp, "*.trx"), Date.now())).toBeUndefined();
   });

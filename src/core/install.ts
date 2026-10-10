@@ -141,7 +141,7 @@ function projectLines(p: DetectedProject, cwd: string): string[] {
       ...(tests
         ? []
         : [
-            `    # to get test results: ${testResultsHint(runner, relativePath(path.join(cwd, p.path), results) || ".", `./${relativePath(cwd, results)}`, true)}`,
+            `    # to get test results: ${testResultsHint(runner, relativePath(path.join(cwd, p.path), results) || ".", `./${relativePath(cwd, results)}`, true, cwd)}`,
           ]),
       `    # methods: [${DEFAULT_FRONTEND_METHODS.join(", ")}]   # flag evaluation methods (defaults shown)`,
     );

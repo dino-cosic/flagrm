@@ -10,7 +10,7 @@ contain breaking changes.
 ### Added
 
 - `testResults` reads Jest JSON (`jest --json`, Vitest's `json` reporter); a
-  result file that doesn't parse is skipped.
+  result file that doesn't parse, or an XML file that isn't complete, is skipped.
 - Without `testResults`, `verify` reads the changed test files to list
   deleted and renamed tests, and warns when the log's test count dropped by
   more than the diff deletes.
@@ -28,7 +28,8 @@ contain breaking changes.
 - `verify`'s new `coverage` check warns about changed files that no build,
   test or lint command checks; a project's optional `covers` globs say which
   files its commands check (default: everything under its path). Files
-  already dirty at the baseline and unchanged since don't count. With
+  already dirty at the baseline and unchanged since don't count, nor do
+  documentation and deleted files outside every project. With
   `--strict`, such a file now fails verify.
 - `/flagrm-remove` takes several flags (`/flagrm-remove A B C`): it asks
   once whether they are all ON and whether to commit each one, then removes

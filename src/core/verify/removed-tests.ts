@@ -35,17 +35,20 @@ export interface RemovedTestsContext {
   testConfigChanged: boolean;
 }
 
-/** Sort the tests that no longer run (`removed`) using the new ones (`added`) and the diff. */
+/**
+ * Sort the tests that no longer run (`removed`) using the new ones (`added`)
+ * and the diff. `files`: the changed test files when the caller already read them.
+ */
 export function classifyRemovedTests(
   removed: string[],
   added: string[],
   afterNames: string[],
   ctx: RemovedTestsContext,
+  files: ChangedTestFile[] = changedTestFiles(ctx),
 ): RemovedTests {
   const out: RemovedTests = { deleted: [], renamed: [], excludedByConfig: [], unexplained: [] };
   const renamedTo = matchRenames(removed, added, flagWords(ctx.names));
   const stillRuns = new Set(afterNames.map(testKey));
-  const files = changedTestFiles(ctx);
   for (const name of removed) {
     const to = renamedTo.get(testKey(name));
     if (to) out.renamed.push({ from: name, to });
@@ -107,7 +110,7 @@ function matchRenames(removed: string[], added: string[], flag: Set<string>): Ma
 
 // --- deletions -----------------------------------------------------------------
 
-interface ChangedTestFile {
+export interface ChangedTestFile {
   rel: string;
   before: string;
   /** Undefined when the file was deleted. */
@@ -181,7 +184,7 @@ function dataRows(text: string, own: string, junit: boolean): number {
 // --- declarations ----------------------------------------------------------------
 
 const JS_TEST =
-  /(?<![\w$.])(describe|fdescribe|xdescribe|context|suite|it|fit|xit|test)(?:\.(?:only|skip))?(?:\.each\s*(?:\([\s\S]*?\)|`[\s\S]*?`))?\s*\(\s*(['"`])((?:\\.|(?!\2)[^\\])*)\2/g;
+  /(?<![\w$.])(describe|fdescribe|xdescribe|context|suite|it|fit|xit|test)(?:\.(?:only|skip|todo))?(?:\.each\s*(?:\([\s\S]*?\)|`[\s\S]*?`))?\s*\(\s*(['"`])((?:\\.|(?!\2)[^\\])*)\2/g;
 
 /** `it`/`test` titles prefixed with the titles of the `describe` blocks around them (by brace depth over code). */
 function jsTests(text: string): string[] {
@@ -243,15 +246,18 @@ export function declaredTestDiff(ctx: RemovedTestsContext): {
   now: string[];
   /** Whether a changed file has data rows or `.each` cases, which result logs count one by one and declarations don't. */
   rows: boolean;
+  /** The changed test files read, for `classifyRemovedTests`. */
+  files: ChangedTestFile[];
 } {
   const before: string[] = [];
   const now: string[] = [];
   let rows = false;
   // A file new since the baseline declared nothing then, so a moved spec's tests cancel out.
-  for (const file of changedTestFiles(ctx, true)) {
+  const files = changedTestFiles(ctx, true);
+  for (const file of files) {
     rows ||= hasDataRows(file.before) || (file.now !== undefined && hasDataRows(file.now));
     before.push(...declaredTests(file.before, file.rel));
     if (file.now !== undefined) now.push(...declaredTests(file.now, file.rel));
   }
-  return { removed: minus(before, now), added: minus(now, before), now, rows };
+  return { removed: minus(before, now), added: minus(now, before), now, rows, files };
 }
