@@ -216,6 +216,9 @@ export function compareTests(v: VerifyContext): TestComparison[] {
 function splitBaselineFailures(v: VerifyContext, run: CheckRun): { known: string[]; new: string[] } | undefined {
   const before = v.baseline.checks?.find((c) => c.project === run.project && c.check === "test")?.results;
   if (!before || !run.results?.failed) return undefined;
+  // Counts without all their names (a log may not name every failing test) can't be split.
+  if (run.results.failedNames.length < run.results.failed || before.failedNames.length < before.failed)
+    return undefined;
   // Names from a log and from result files aren't spelled alike, so they can't be matched.
   if ((before.source ?? "files") !== (run.results.source ?? "files")) return undefined;
   return splitFailures(before.failedNames, run.results.failedNames);

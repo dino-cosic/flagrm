@@ -138,6 +138,14 @@ describe("runDoctor", () => {
     );
   });
 
+  it("fails --run when a log reports failed tests without naming them", async () => {
+    config('node -e ""', `node -e "console.log('Tests:       1 failed, 1 total');process.exit(1)"`);
+    commitAll();
+    const found = await problems(tmp, { run: true });
+    expect(found).toContainEqual(expect.stringMatching(/^fail svc: .* failed \(exit 1/));
+    expect(found.join("\n")).not.toContain("known failure");
+  });
+
   it("still fails --run when testResults is set but only the log has test output", async () => {
     fs.writeFileSync(path.join(tmp, "out.txt"), "Tests:       2 passed, 2 total\n");
     config('node -e ""', `node -e "process.stdout.write(require('fs').readFileSync('out.txt','utf8'))"`, "./out/*.xml");

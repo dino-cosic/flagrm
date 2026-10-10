@@ -414,6 +414,21 @@ describe("verify on the realistic fixture", () => {
         expect(report.tests[0].knownFailures).toEqual([]);
       });
 
+      it("fails when the log counts a failure but names no test", async () => {
+        results("Tests:       4 passed, 4 total\n");
+        await takeBaseline(fromLog, true);
+        applyAfter();
+        results("Tests:       1 failed, 3 passed, 4 total\n");
+        const unnamed = (config: ToolConfig) => {
+          fromLog(config);
+          const web = config.projects.find((p) => p.name === "web");
+          if (web)
+            web.test = `node -e "process.stdout.write(require('fs').readFileSync('results.src.xml','utf8'));process.exit(1)"`;
+        };
+        const report = await verify({ skip: ["build"] }, unnamed);
+        expect(status(report).tests).toBe("fail");
+      });
+
       it("shows the log's error lines when it names no failing test", async () => {
         log([], 4);
         await takeBaseline(fromLog, true);

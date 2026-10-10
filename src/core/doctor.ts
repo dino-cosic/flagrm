@@ -186,7 +186,7 @@ async function configChecks(
         continue;
       }
       // A suite that is already red is no setup problem: the baseline records those tests as known failures.
-      if (run.exitCode !== 0 && run.results?.failed) {
+      if (run.exitCode !== 0 && run.results?.failed && run.results.failedNames.length >= run.results.failed) {
         const failed = run.results.failed;
         add(
           "warn",
