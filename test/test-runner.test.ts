@@ -2,7 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { angularAdapter } from "../src/adapters/angular/index.js";
 import { detectTestRunner, runnerTestCommands, testResultsHint } from "../src/core/test-runner.js";
+import { projectContext } from "./support/projects.js";
 
 let tmp: string;
 const write = (rel: string, text: string) => {
@@ -122,5 +124,24 @@ describe("testResultsHint", () => {
     expect(hint({ kind: "unknown" })).toBe(
       "make the test runner write JUnit XML, TRX or Jest JSON and point testResults at the file",
     );
+  });
+});
+
+describe("angular adapter defaults", () => {
+  it("defaults to a test command that writes the detected runner's results", () => {
+    angular("@angular/build:unit-test");
+    expect(angularAdapter.defaultCommands?.(projectContext("angular", tmp))).toEqual({
+      build: "npx ng build",
+      test: 'npx ng test --watch=false --reporters=junit --output-file=".flagrm/test-results/frontend/junit.xml"',
+      testResults: path.join(tmp, ".flagrm", "test-results", "frontend", "junit.xml"),
+    });
+  });
+
+  it("keeps the plain ng test without a runner that can write results", () => {
+    angular("@angular-devkit/build-angular:karma");
+    expect(angularAdapter.defaultCommands?.(projectContext("angular", tmp))).toEqual({
+      build: "npx ng build",
+      test: "npx ng test --watch=false",
+    });
   });
 });

@@ -21,6 +21,7 @@ import {
 } from "./config.js";
 import { type DetectedProject, detectProjects } from "./detect.js";
 import { packageRoot, packageVersion } from "./package.js";
+import { runnerTestCommands, testResultsHint } from "./test-runner.js";
 import { saveTools } from "./tools.js";
 import { relativePath } from "./util.js";
 
@@ -123,17 +124,25 @@ const EXAMPLE_PROJECTS: DetectedProject[] = [
 ];
 
 /** The config lines for one project, with commented-out commands that fit it. */
-function projectLines(p: DetectedProject): string[] {
+function projectLines(p: DetectedProject, cwd: string): string[] {
   const dir = p.path === "." ? "." : `./${p.path}`;
   const inDir = (rel: string) => (p.path === "." ? `./${rel}` : `${dir}/${rel}`);
   const lines = [`  - name: ${p.name}`, `    adapter: ${p.adapter}`, `    path: ${dir}`];
   if (p.adapter === "angular") {
+    const results = path.join(cwd, ".flagrm", "test-results", p.name);
+    const runner = p.testRunner ?? { kind: "unknown" as const };
+    const tests = runnerTestCommands(runner, path.join(cwd, p.path), results);
     lines.push(
       "    # build: npx ng build",
-      p.jest
-        ? "    # test: JEST_JUNIT_OUTPUT_DIR=test-results npx jest --ci --reporters=default --reporters=jest-junit"
-        : "    # test: npx ng test --watch=false",
-      `    # testResults: ${inDir("test-results/junit.xml")}   # JUnit XML, so verify can count tests`,
+      `    # test: ${tests?.test ?? "npx ng test --watch=false"}`,
+      tests
+        ? `    # testResults: ./${relativePath(cwd, tests.testResults)}   # the default test command writes these`
+        : `    # testResults: ${inDir("test-results/junit.xml")}   # JUnit XML, TRX or Jest JSON, so verify can compare tests`,
+      ...(tests
+        ? []
+        : [
+            `    # to get test results: ${testResultsHint(runner, relativePath(path.join(cwd, p.path), results) || ".", `./${relativePath(cwd, results)}`, true)}`,
+          ]),
       `    # methods: [${DEFAULT_FRONTEND_METHODS.join(", ")}]   # flag evaluation methods (defaults shown)`,
     );
   } else {
@@ -149,13 +158,20 @@ function projectLines(p: DetectedProject): string[] {
   return lines;
 }
 
-export function configTemplate(projects: DetectedProject[], tools?: readonly ToolId[]): string {
+export function configTemplate(projects: DetectedProject[], tools?: readonly ToolId[], cwd = process.cwd()): string {
   const listed = projects.length ? projects : EXAMPLE_PROJECTS;
   const [comment1, comment2, projectsKey] = CONFIG_HEADER;
   const toolLines = tools
     ? ["# The AI coding tools `flagrm init` and `flagrm update` set up.", `tools: [${tools.join(", ")}]`]
     : [];
-  return [comment1, comment2, ...toolLines, projectsKey, ...listed.flatMap(projectLines), ...CONFIG_FOOTER].join("\n");
+  return [
+    comment1,
+    comment2,
+    ...toolLines,
+    projectsKey,
+    ...listed.flatMap((p) => projectLines(p, cwd)),
+    ...CONFIG_FOOTER,
+  ].join("\n");
 }
 
 /** Write `flagrm.config.yaml` for the projects found in `cwd` (an example when none are) unless a config file exists. */
@@ -164,7 +180,7 @@ export function writeConfigTemplate(cwd: string, tools?: readonly ToolId[]): Ste
   if (existing) return { path: relativePath(cwd, existing), status: "skipped" };
   const file = path.join(cwd, "flagrm.config.yaml");
   const projects = detectProjects(cwd);
-  fs.writeFileSync(file, configTemplate(projects, tools), "utf8");
+  fs.writeFileSync(file, configTemplate(projects, tools, cwd), "utf8");
   const note = projects.length
     ? `detected ${projects.map((p) => `${p.adapter} (${p.marker})`).join(", ")}`
     : "no Angular or .NET project found: edit the example projects";

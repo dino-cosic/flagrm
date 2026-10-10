@@ -7,6 +7,7 @@
 
 import path from "node:path";
 import fg from "fast-glob";
+import { detectTestRunner, type TestRunner } from "./test-runner.js";
 
 export interface DetectedProject {
   name: string;
@@ -15,8 +16,8 @@ export interface DetectedProject {
   path: string;
   /** The file that marked the project, relative to the repository. */
   marker: string;
-  /** Whether the project has a Jest config (Angular workspaces often test with Jest instead of Karma). */
-  jest?: boolean;
+  /** The test runner an Angular workspace uses, for the commented test command `init` writes. */
+  testRunner?: TestRunner;
 }
 
 const IGNORE = ["**/node_modules/**", "**/.git/**", "**/bin/**", "**/obj/**", "**/dist/**"];
@@ -51,8 +52,7 @@ export function detectProjects(cwd: string): DetectedProject[] {
 
   for (const marker of topmost(find("**/angular.json"))) {
     const dir = path.posix.dirname(marker);
-    const jest = fg.sync("jest.config.{js,ts,mjs,cjs}", { cwd: path.join(cwd, dir) }).length > 0;
-    found.push({ adapter: "angular", path: dir, marker, jest });
+    found.push({ adapter: "angular", path: dir, marker, testRunner: detectTestRunner(path.join(cwd, dir)) });
   }
 
   const solutions = topmost(find("**/*.{sln,slnx}"));

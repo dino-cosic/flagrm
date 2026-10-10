@@ -124,6 +124,26 @@ describe("flagrm.config.yaml from detected projects", () => {
     expect(config).not.toContain("admin");
   });
 
+  it("comments the detected runner's test command and results", () => {
+    write(
+      "web/angular.json",
+      JSON.stringify({ projects: { app: { architect: { test: { builder: "@angular/build:unit-test" } } } } }),
+    );
+    write(
+      "legacy/angular.json",
+      JSON.stringify({
+        projects: { app: { architect: { test: { builder: "@angular-devkit/build-angular:karma" } } } },
+      }),
+    );
+    initProject(tmp);
+    const config = read("flagrm.config.yaml");
+    expect(config).toContain(
+      '    # test: npx ng test --watch=false --reporters=junit --output-file="../.flagrm/test-results/web/junit.xml"\n    # testResults: ./.flagrm/test-results/web/junit.xml',
+    );
+    expect(config).toContain("    # test: npx ng test --watch=false\n");
+    expect(config).toContain("npm i -D karma-junit-reporter");
+  });
+
   it("names a root project after the repository and falls back to .csproj files without a solution", () => {
     const repo = path.join(tmp, "shop");
     fs.mkdirSync(repo);

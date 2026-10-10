@@ -52,6 +52,13 @@ contain breaking changes.
 - JSON schema version 8: `--json`, `baseline.json` and `verify.json` gain
   the `lint` and `coverage` checks, `lint` runs and `git.dirtyHashes`.
   Version 6 and 7 baselines are still read.
+- The Angular adapter's default test command now writes test results when
+  the workspace's runner can without setup: JUnit for Angular's Vitest
+  builder (`ng test --reporters=junit --output-file`) and plain Vitest, Jest
+  JSON for Jest, and JUnit for Karma once karma.conf configures
+  `karma-junit-reporter`. Results go to `.flagrm/test-results/<project>/`.
+  A baseline taken before upgrading reports the test command as changed
+  once; `flagrm baseline <flag> --accept config` or a new baseline clears it.
 
 ### Fixed
 
