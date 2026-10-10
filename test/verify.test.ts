@@ -404,6 +404,26 @@ describe("verify on the realistic fixture", () => {
         expect(info).toContain(`new failure: CheckoutComponent › ${OTHER}`);
       });
 
+      it("lists deleted and renamed tests from the diff and warns about a count the diff doesn't explain", async () => {
+        // Deleted by the diff: 7 (4 .NET, 3 frontend); 20 - 10 - 7 leaves 3 unexplained.
+        log([], 20);
+        await takeBaseline(fromLog, true);
+        applyAfter();
+        log([], 10);
+        const report = await verify({ skip: ["build"] }, fromLog);
+        const web = report.tests.find((t) => t.project === "web");
+        expect(web?.removed.length).toBeGreaterThan(0);
+        expect(web?.deleted).toContain("CheckoutComponent › falls back to the legacy cart when NewCheckout is off");
+        expect(web?.renamed).toContainEqual({
+          from: "CheckoutComponent › places the order through the checkout API when NewCheckout is on",
+          to: "CheckoutComponent › places the order through the checkout API",
+        });
+        expect(web?.missing).toBe(3);
+        expect(findings(report, "tests")).toContainEqual(
+          expect.stringMatching(/more tests? stopped running than the diff deletes/),
+        );
+      });
+
       it("doesn't split failures when the baseline read files and verify the log", async () => {
         results(junit(testcase(KNOWN, `<failure message="boom"/>`), ON, OFF, OTHER));
         await takeBaseline(withTests, true);

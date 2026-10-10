@@ -25,7 +25,7 @@ import {
 } from "../types.js";
 import { relativePath } from "../util.js";
 import { checkResult, configFindings, plural, skippedResult, type VerifyContext } from "./context.js";
-import { classifyRemovedTests } from "./removed-tests.js";
+import { classifyRemovedTests, declaredTestDiff } from "./removed-tests.js";
 import { diffTestNames, hasTestNames, shortTestNames, splitFailures } from "./test-results.js";
 
 function failedRunFindings(run: CheckRun): CheckFinding[] {
@@ -188,19 +188,33 @@ export function compareTests(v: VerifyContext): TestComparison[] {
       comparison.newFailures = shortTestNames(failures.new);
       comparison.knownFailures = shortTestNames(failures.known);
     }
+    const removedCtx = {
+      root: v.root,
+      sha: v.baseline.git.sha,
+      changedFiles: v.changedFiles,
+      names: v.baseline.names,
+      testConfigChanged: v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project),
+    };
     if (hasTestNames(before) && hasTestNames(after)) {
       const { removed, added } = diffTestNames(before.names, after.names);
       Object.assign(comparison, { removed, added });
-      Object.assign(
-        comparison,
-        classifyRemovedTests(removed, added, after.names, {
-          root: v.root,
-          sha: v.baseline.git.sha,
-          changedFiles: v.changedFiles,
-          names: v.baseline.names,
-          testConfigChanged: v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project),
-        }),
-      );
+      Object.assign(comparison, classifyRemovedTests(removed, added, after.names, removedCtx));
+    } else {
+      // No names from result files on both sides: the test files' declarations show what the diff deleted or renamed.
+      const declared = declaredTestDiff(removedCtx);
+      const { renamed } = classifyRemovedTests(declared.removed, declared.added, declared.now, removedCtx);
+      const from = new Set(renamed.map((r) => r.from));
+      Object.assign(comparison, {
+        removed: declared.removed,
+        added: declared.added,
+        renamed,
+        deleted: declared.removed.filter((name) => !from.has(name)),
+      });
+      if (comparison.before !== undefined && comparison.after !== undefined) {
+        const gap =
+          comparison.before - comparison.after - comparison.deleted.length + (declared.added.length - renamed.length);
+        if (gap > 0) comparison.missing = gap;
+      }
     }
     out.push(comparison);
   }
@@ -317,6 +331,15 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
         findings.push({ severity: "info", message: `no longer runs: ${name}`, project: run.project });
       }
     }
+    const missing = comparison?.missing ?? 0;
+    if (missing > 0 && comparison) {
+      const configChanged = v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project);
+      findings.push({
+        severity: configChanged ? "info" : "warn",
+        message: `${plural(missing, "more test stopped running", "more tests stopped running")} than the diff deletes (${comparison.before} → ${comparison.after}, ${comparison.deleted.length} deleted): account for ${missing === 1 ? "it" : "them"} in the PR`,
+        project: run.project,
+      });
+    }
     if (hasTestNames(run.results) && ctx) {
       for (const file of changedTestFiles(v, ctx.root)) {
         if (testFileRan(file, ctx.root, run.results.names)) continue;
@@ -339,6 +362,7 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
         c.renamed.length && `${c.renamed.length} renamed`,
         c.excludedByConfig.length && `${c.excludedByConfig.length} excluded by config`,
         c.unexplained.length && `${c.unexplained.length} unexplained`,
+        c.missing && `${c.missing} unexplained`,
       ].filter(Boolean);
       return `${c.project} ${c.before} → ${c.after}${why.length ? `: ${why.join(", ")}` : ""}`;
     });

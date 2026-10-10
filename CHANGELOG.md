@@ -9,6 +9,9 @@ contain breaking changes.
 
 ### Added
 
+- Without `testResults`, `verify` reads the changed test files to list
+  deleted and renamed tests, and warns when the log's test count dropped by
+  more than the diff deletes.
 - Without `testResults`, `verify` reads failing test names and counts from
   the test command's log (Karma, Jest, Vitest, `dotnet test`; Go and pytest
   names), so a test that already failed at the baseline is a known failure

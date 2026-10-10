@@ -366,6 +366,8 @@ export interface TestComparison {
   excludedByConfig: string[];
   /** None of the above: the only ones `verify` warns about. */
   unexplained: string[];
+  /** Without names from result files: how many more tests stopped running, by the log's counts, than the diff deletes. */
+  missing?: number;
 }
 
 /** A build/test run in a verify report: test counts without the per-test name lists. */

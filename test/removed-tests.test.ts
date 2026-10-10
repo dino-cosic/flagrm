@@ -5,7 +5,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { words } from "../src/core/flag-words.js";
 import type { RecordedName } from "../src/core/types.js";
-import { classifyRemovedTests, type RemovedTestsContext } from "../src/core/verify/removed-tests.js";
+import {
+  classifyRemovedTests,
+  declaredTestDiff,
+  declaredTests,
+  type RemovedTestsContext,
+} from "../src/core/verify/removed-tests.js";
 
 let tmp: string;
 const git = (...args: string[]) => execFileSync("git", args, { cwd: tmp, encoding: "utf8" }).trim();
@@ -140,6 +145,69 @@ describe("classifyRemovedTests", () => {
       const files = [...changed(), "test/Core.Test/UntouchedTests.cs"];
       const result = classifyRemovedTests(["Ns.UntouchedTests.Runs"], [], [], ctx({ sha, changedFiles: files }));
       expect(result.deleted).toEqual(["Ns.UntouchedTests.Runs"]);
+    });
+  });
+});
+
+describe("declaredTests", () => {
+  it("names JS tests by their enclosing describe titles", () => {
+    const spec = [
+      "describe('CheckoutComponent', () => {",
+      "  it('places the order', () => { const o = { a: 1 }; });",
+      "  describe.each([[1], [2]])('submit', () => {",
+      "    test.skip(`retries ${'x'}`, () => {});",
+      "  });",
+      "  // it('commented out', () => {});",
+      "  it(\"shows the title\", () => { expect(/x/.test('not a test')).toBe(true); });",
+      "});",
+      "it('top level', () => {});",
+    ].join("\n");
+    expect(declaredTests(spec, "a.spec.ts")).toEqual([
+      "CheckoutComponent › places the order",
+      "CheckoutComponent › submit › retries ${'x'}",
+      "CheckoutComponent › shows the title",
+      "top level",
+    ]);
+  });
+
+  it("names C# test methods like TRX, Go and pytest functions by name", () => {
+    const cs = [
+      "namespace Shop.Tests;",
+      "public class CheckoutTests {",
+      "  [Fact]",
+      "  public async Task PlacesOrder() {}",
+      "  [Theory]",
+      "  [InlineData(true)]",
+      "  public void Quote(bool express) {}",
+      "  private void Helper() {}",
+      "}",
+    ].join("\n");
+    expect(declaredTests(cs, "CheckoutTests.cs")).toEqual([
+      "Shop.Tests.CheckoutTests.PlacesOrder",
+      "Shop.Tests.CheckoutTests.Quote",
+    ]);
+    expect(declaredTests("func TestCart(t *testing.T) {}\nfunc helper() {}", "cart_test.go")).toEqual(["TestCart"]);
+    expect(declaredTests("def test_total():\n    pass\ndef helper():\n    pass", "test_cart.py")).toEqual([
+      "test_total",
+    ]);
+    expect(declaredTests("it('x', () => {})", "README.md")).toEqual([]);
+  });
+});
+
+describe("declaredTestDiff", () => {
+  it("compares declarations at the baseline and now as multisets", () => {
+    git("init", "-q");
+    const file = path.join(tmp, "a.spec.ts");
+    const block = (title: string) => `describe('Cart', () => { it('${title}', () => {}); });\n`;
+    fs.writeFileSync(file, block("adds") + block("adds") + block("removes when NewCheckout is on"));
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
+    const sha = git("rev-parse", "HEAD");
+    fs.writeFileSync(file, block("adds") + block("removes"));
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["a.spec.ts"] }))).toEqual({
+      removed: ["Cart › adds", "Cart › removes when NewCheckout is on"],
+      added: ["Cart › removes"],
+      now: ["Cart › adds", "Cart › removes"],
     });
   });
 });
