@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fg from "fast-glob";
 import { describe, expect, it } from "vitest";
+import { CHECK_IDS } from "../src/core/types.js";
 
 // Every `flagrm <command> --option` a skill tells the agent to run must exist in
 // the CLI. The skills went stale once (inspect, fold, report); this keeps them honest.
@@ -60,6 +61,11 @@ describe("skills reference only real flagrm commands and options", () => {
       }
     }
     expect(problems).toEqual([]);
+  });
+
+  it("explains every verify check in the remove skill's table", () => {
+    const skill = fs.readFileSync(path.join(ROOT, "skills/flagrm-remove/SKILL.md"), "utf8");
+    for (const id of CHECK_IDS) expect(skill).toContain(`| \`${id}\` |`);
   });
 
   it("keeps the skills short", () => {

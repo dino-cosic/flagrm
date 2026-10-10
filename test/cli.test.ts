@@ -456,3 +456,54 @@ describe("CLI hook stop (spawned dist/cli.js)", () => {
     }
   });
 });
+
+describe("CLI lint (spawned dist/cli.js)", () => {
+  let dir: string;
+  const git = (...args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+
+  beforeAll(() => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ffr-lint-")));
+    fs.writeFileSync(
+      path.join(dir, "flagrm.config.yaml"),
+      [
+        "projects:",
+        "  - name: app",
+        "    adapter: generic",
+        "    path: .",
+        '    globs: ["**/*.txt"]',
+        "    methods: [isEnabled]",
+        "    build: false",
+        "    test: false",
+        "    lint: node lint.cjs",
+        "",
+      ].join("\n"),
+    );
+    fs.writeFileSync(
+      path.join(dir, "lint.cjs"),
+      'if (require("node:fs").readFileSync("app.txt", "utf8").includes("bad")) { console.log("app.txt:1 error bad word"); process.exit(1); }\n',
+    );
+    fs.writeFileSync(path.join(dir, "app.txt"), "good\n");
+    fs.writeFileSync(path.join(dir, ".gitignore"), ".flagrm/\n");
+    git("init", "-q");
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");
+  });
+
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("verify fails on a lint error the edit caused, --skip lint passes, and --md lists both new checks", () => {
+    expect(runCli(["baseline", "FlagA", "--json"], dir).status).toBe(0);
+    fs.writeFileSync(path.join(dir, "app.txt"), "bad\n");
+    const failed = runCli(["verify", "FlagA", "--json"], dir);
+    expect(failed.status).toBe(1);
+    const report = JSON.parse(failed.stdout);
+    expect(report.checks.find((c: { id: string }) => c.id === "lint")).toMatchObject({ status: "fail" });
+    expect(report.checks.find((c: { id: string }) => c.id === "coverage")).toMatchObject({ status: "pass" });
+    expect(runCli(["verify", "FlagA", "--skip", "lint"], dir).status).toBe(0);
+    const md = runCli(["verify", "FlagA", "--md"], dir).stdout;
+    expect(md).toContain("| lint |");
+    expect(md).toContain("| coverage |");
+  });
+});

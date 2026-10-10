@@ -111,12 +111,12 @@ of these reasons is a warning, for the agent to explain in its notes.
 | Command | What it does | Exit codes |
 |---|---|---|
 | `init` | Set up the config and `.gitignore` entry, and each chosen AI tool's files (asks, or `--tool claude-code,copilot,codex`; saved as `tools:`). Never overwrites or deletes | 0, 2 usage error |
-| `doctor` | Check the config, the build and test commands (marking adapter defaults; `--run` runs them and fails when tests write no readable `testResults`), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
+| `doctor` | Check the config, the build, test and lint commands (marking adapter defaults; `--run` runs them and fails when tests write no readable `testResults`), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
 | `scope` | For each .NET project, show what the machine lacks and which projects a solution filter would leave out; `--write` creates `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build and test at it | 0 nothing missing, 1 something missing |
 | `update` | Refresh the installed skills, prompt files, `AGENTS.md` block and hook from this flagrm version, for the config's `tools:` | 0 |
 | `list` | List every feature flag in the project: definitions, configured state per environment, reference counts; flow names include renamed imports of a flag registry (`import { FeatureFlags as AppFeatureFlags }`) and, in Angular, the fields, getters, methods and locals holding a flag and a child component's input bound to one | 0 |
-| `baseline <flag>` | Before any edit, record the git commit, build and test results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET and Angular code the names include the locals, fields, getters, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file, and an Angular component's template); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` (repeatable) limits `--name` entries to those files (and records them as wrappers). `--name X --kind alias\|wrapper` adds names to an existing baseline (a name whose declaration reads only other flags is refused); `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit; `--accept config,failures` acknowledges, also mid-removal, a config change or the baseline's failing tests so verify stops warning about them; `--no-checks` skips build and tests; build and test results of a passing verify on the same tree and commands are reused (`--no-reuse` runs them) | 0, 2 usage error |
-| `verify <flag>` | Gate the removal with `leftovers`, `dead-code`, `build` and `tests`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings; reuses its own or another flag's passing runs on the same tree and commands (`--no-reuse` runs them) | 0 pass, 1 fail, 2 usage error |
+| `baseline <flag>` | Before any edit, record the git commit, build, test and lint results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET and Angular code the names include the locals, fields, getters, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file, and an Angular component's template); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` (repeatable) limits `--name` entries to those files (and records them as wrappers). `--name X --kind alias\|wrapper` adds names to an existing baseline (a name whose declaration reads only other flags is refused); `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit; `--accept config,failures` acknowledges, also mid-removal, a config change or the baseline's failing tests so verify stops warning about them; `--no-checks` skips build, tests and lint; build, test and lint results of a passing verify on the same tree and commands are reused (`--no-reuse` runs them) | 0, 2 usage error |
+| `verify <flag>` | Gate the removal with `leftovers`, `dead-code`, `build`, `tests`, `lint` and `coverage`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings; reuses its own or another flag's passing runs on the same tree and commands (`--no-reuse` runs them) | 0 pass, 1 fail, 2 usage error |
 | `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
 
 `list`, `baseline` and `verify` accept `--json`, `--config <path>`, and
@@ -130,9 +130,11 @@ of these reasons is a warning, for the agent to explain in its notes.
 | `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files. A method, property, field or type the removal left named only where it is declared is a warning (compilers don't report public members) |
 | `build` | A project's build command fails |
 | `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. A test that no longer runs though the diff neither deletes nor renames it and the test config is unchanged, and a changed test file none of whose tests ran, are warnings for the agent to account for |
+| `lint` | The project's `lint` command fails where it passed at the baseline. A lint that already failed at the baseline only warns, listing the log lines new since |
+| `coverage` | Never fails: a changed file that no project's build, test or lint command checks (outside every project with a command, or outside its `covers` globs) is a warning |
 
 The baseline also records the configuration it was taken with: each project's
-resolved build and test commands, the files they name (a `.slnf`, a
+resolved build, test and lint commands, the files they name (a `.slnf`, a
 `.runsettings`, a filter list) and the text of `flagrm.config.yaml`. When any
 of it changed since, the check it affects warns and shows the difference: a
 narrower test command makes "no new failures" mean less.
@@ -152,6 +154,8 @@ projects:
     build: npm run build
     test: npx ng test --watch=false
     testResults: ./frontend/test-results/junit.xml
+    lint: npx eslint e2e && npx tsc --noEmit -p e2e   # optional lint / type-check
+    covers: ['src/**', 'e2e/**']         # what the commands check (default: everything under path)
     methods: [isEnabled, watch]          # flag evaluation methods
   - name: api
     adapter: dotnet
@@ -184,6 +188,15 @@ command of your own needs its own `testResults`. `timeout` (seconds) fails a pro
 a test runner left in watch mode. `tools` lists the AI coding tools whose files
 `init` and `update` manage (`claude-code`, `copilot`, `codex`); dropping one
 leaves its files in place, and `init` names them so you can delete them.
+
+`lint` is an optional lint or type-check command (no adapter default) that
+`baseline` and `verify` run like `build` and `test`; use it for code the build
+and tests don't reach, such as end-to-end specs. A lint that already fails at
+the baseline only warns. flagrm doesn't check formatting: put a formatter's
+check (`npx prettier --check .`) in `lint` if you want it. `covers` lists the
+files (globs relative to `path`) the project's commands check; the `coverage`
+check warns about a changed file no project with a command covers. Without
+`covers`, a project covers everything under its path.
 
 Paths matching `exclude` (relative to the config file or a project's path; a
 directory excludes everything under it) and flagrm's own setup files don't
