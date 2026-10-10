@@ -23,6 +23,8 @@ contain breaking changes.
 - Angular: a renamed import of a flag registry
   (`import { FeatureFlags as AppFeatureFlags }`) is followed, so
   `AppFeatureFlags.X` is recorded and checked like `FeatureFlags.X`.
+- Angular: a name checked only in a component's `.ts` file is checked in
+  its `templateUrl` template too, whether discovery or `--file` scoped it.
 
 ### Fixed
 

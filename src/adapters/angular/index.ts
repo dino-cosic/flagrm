@@ -3,6 +3,7 @@ import type { Adapter, ProjectContext } from "../../core/adapter.js";
 import { discoverInText } from "../../core/discover.js";
 import { FRONTEND_GLOBS } from "../../core/scan.js";
 import type { FlagCandidate } from "../../core/types.js";
+import { componentScopeFiles } from "./component-files.js";
 import { discoverTypeScript } from "./discover.js";
 import { angularFlow } from "./flow.js";
 import { angularUnusedDiagnostics } from "./unused.js";
@@ -33,6 +34,7 @@ export const angularAdapter: Adapter = {
   defaultGlobs: FRONTEND_GLOBS,
   discover: async (ctx) => discoverAngularFlags(ctx),
   flow: (ctx, flags) => angularFlow(ctx, flags),
+  scopeFiles: (_ctx, file) => componentScopeFiles(file),
   defaultCommands: () => ({ build: "npx ng build", test: "npx ng test --watch=false" }),
   unusedDiagnostics: (_ctx, input) => angularUnusedDiagnostics(input),
 };

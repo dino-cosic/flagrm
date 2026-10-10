@@ -9,6 +9,7 @@ import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { environmentProblem } from "./environment.js";
 import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
+import { withScopeFiles } from "./scope-files.js";
 import {
   type Baseline,
   type CheckRun,
@@ -314,8 +315,9 @@ function flowNames(projects: Workspace, n: FlagFlowName): RecordedName[] {
   if (n.kind === "alias") return [{ name: n.name, kind: "alias", source: "discovery" }];
   const name: RecordedName = { name: n.name, kind: "wrapper", source: "discovery" };
   const root = projects[0]?.ctx.config.root;
-  if (root && (n.kind === "local" || n.kind === "parameter" || n.kind === "field"))
-    name.file = relativePath(root, n.file);
+  if (root && (n.kind === "local" || n.kind === "parameter" || n.kind === "field")) {
+    return withScopeFiles(projects, root, relativePath(root, n.file)).map((file) => ({ ...name, file }));
+  }
   return [name];
 }
 
