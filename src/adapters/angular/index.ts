@@ -33,7 +33,7 @@ export const angularAdapter: Adapter = {
   id: "angular",
   defaultGlobs: FRONTEND_GLOBS,
   discover: async (ctx) => discoverAngularFlags(ctx),
-  flow: (ctx, flags) => angularFlow(ctx, flags),
+  flow: (ctx, flags) => angularFlow(ctx, flags, ctx.project.methods),
   scopeFiles: (_ctx, file) => componentScopeFiles(file),
   defaultCommands: () => ({ build: "npx ng build", test: "npx ng test --watch=false" }),
   unusedDiagnostics: (_ctx, input) => angularUnusedDiagnostics(input),

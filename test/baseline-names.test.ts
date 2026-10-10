@@ -60,6 +60,24 @@ describe("discoverNames", () => {
   it("records only the literal for a flag discovery does not know", async () => {
     expect(await discoverNames(workspace(), "Nope")).toEqual([{ name: "Nope", kind: "literal", source: "discovery" }]);
   });
+
+  it("records an Angular field holding the flag for its component and template", async () => {
+    const names = await discoverNames(workspace(), FLAG);
+    expect(names.filter((n) => n.name === "newCheckout")).toEqual([
+      {
+        name: "newCheckout",
+        kind: "wrapper",
+        source: "discovery",
+        file: "frontend/src/app/checkout/checkout.component.ts",
+      },
+      {
+        name: "newCheckout",
+        kind: "wrapper",
+        source: "discovery",
+        file: "frontend/src/app/checkout/checkout.component.html",
+      },
+    ]);
+  });
 });
 
 describe("mergeNames", () => {
