@@ -72,15 +72,15 @@ Read `patterns.md` in this skill's directory when a case is unclear.
 | `dead-code` | Delete what the removal left unused. A declaration "referenced only where it is declared" (warning): delete it if only the OFF path used it; else say why it stays |
 | `build` | Fix the error your edit caused; don't touch unrelated code. `tsc` skips templates: grep `.html` for each member you removed or renamed |
 | `tests` | A new failure means ON behavior changed: fix the edit, not the test. Known failures (failed at the baseline) only warn. A test listed as no longer running (`unexplained`) must be one you removed on purpose: say why. A changed test file whose tests didn't run: run them yourself and report it |
+| `lint` | Fix what your edit caused. An already-failing lint fails only on new error lines: fix those; other new lines it lists only warn |
+| `coverage` | Tell the user which changed files no command checks; don't add or change commands yourself |
 
-Exit 2 is a usage or config error: read the message. `--skip build,tests` is fine for a quick check
-in between; only a full run counts, and the Stop hook won't let you finish on one with `--skip`. After three failed attempts on one check, show the user the findings. Don't run code generators or formatters after the passing verify; if you must, verify again.
+Exit 2 is a usage or config error: read the message. `--skip build,tests,lint,coverage` is fine for a quick check in between; only a full run counts, and the Stop hook won't let you finish on one with `--skip`. After three failed attempts on one check, show the user the findings. Don't run code generators or formatters after the passing verify; if you must, verify again.
 
 ## 6. Hand back
 
-1. `flagrm verify <flag> --md` on the final tree (it reuses the passing build and test runs; edit nothing after it): show its output exactly as printed; don't reword it or change its numbers. It must pass: the Stop hook checks it.
-2. **Notes**, 3–5 lines: what you kept on purpose, each remaining warning with its reason, follow-ups in
-   the flag service. If `state` wasn't `on` and nobody confirmed ON, start with "Assumed ON everywhere".
+1. `flagrm verify <flag> --md` on the final tree (it reuses the passing build, test and lint runs; edit nothing after it): show its output exactly as printed; don't reword it or change its numbers. It must pass: the Stop hook checks it.
+2. **Notes**, 3–5 lines: what you kept on purpose, each remaining warning with its reason, follow-ups in the flag service. If `state` wasn't `on` and nobody confirmed ON, start with "Assumed ON everywhere".
 3. The commit message:
 
 <!-- commit-message:start -->
@@ -104,5 +104,5 @@ Commit only when the user asked (in a batch: their answer at the start).
 - Never lift code out of the OFF path into live code.
 - Match the file's formatting; don't refactor unrelated code.
 - Never edit `.flagrm/`. Rerun `flagrm baseline <flag>` only with `--name`, or with `--force` before your first edit (it refuses after).
-- Never `--skip` a failing check, and never change a test's expected value or the build/test commands to pass. If the user changes the config mid-removal (say, to leave out tests that need services), run `flagrm baseline <flag> --accept config` once they confirm.
-- `baseline` and `verify` reuse a passing verify's build and test results on the same tree and commands. If the user changed the machine (SDK, Docker, services) since, add `--no-reuse`.
+- Never `--skip` a failing check, and never change a test's expected value or the build, test or lint commands or `covers` to pass. If the user changes the config mid-removal (say, to leave out tests that need services), run `flagrm baseline <flag> --accept config` once they confirm.
+- `baseline` and `verify` reuse a passing verify's build, test and lint results on the same tree and commands. If the user changed the machine (SDK, Docker, services) since, add `--no-reuse`.

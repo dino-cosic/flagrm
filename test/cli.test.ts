@@ -39,7 +39,7 @@ describe("CLI end-to-end (spawned dist/cli.js)", () => {
     const { status, stdout } = runCli(["list", "--json"], tmp);
     expect(status).toBe(0);
     const report = JSON.parse(stdout);
-    expect(report.schemaVersion).toBe(7);
+    expect(report.schemaVersion).toBe(8);
     expect(Array.isArray(report.candidates)).toBe(true);
     const entry = report.flags.find((f: { flag: string }) => f.flag === "EnableNewDashboard");
     expect(entry).toBeDefined();
@@ -110,7 +110,7 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     const { status, stdout } = runCli(["baseline", "NewCheckout", "--no-checks", "--json"], dir);
     expect(status).toBe(0);
     const baseline = JSON.parse(stdout);
-    expect(baseline).toMatchObject({ schemaVersion: 7, flag: "NewCheckout", git: { sha: null, dirty: false } });
+    expect(baseline).toMatchObject({ schemaVersion: 8, flag: "NewCheckout", git: { sha: null, dirty: false } });
     expect(baseline.checks).toBeUndefined();
     const file = path.join(dir, ".flagrm", "NewCheckout", "baseline.json");
     expect(baseline.baselineFile).toBe(file);
@@ -272,7 +272,15 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(status).toBe(1);
     const report = JSON.parse(stdout);
     const byId = Object.fromEntries(report.checks.map((c: { id: string; status: string }) => [c.id, c.status]));
-    expect(byId).toEqual({ leftovers: "fail", "dead-code": "skipped", build: "skipped", tests: "skipped" });
+    expect(byId).toEqual({
+      leftovers: "fail",
+      "dead-code": "skipped",
+      build: "skipped",
+      tests: "skipped",
+      lint: "skipped",
+      // Not a git repository: no baseline commit to diff against.
+      coverage: "skipped",
+    });
     expect(report.verifyFile).toBe(path.join(dir, ".flagrm", "NewCheckout", "verify.json"));
   });
 
@@ -299,9 +307,9 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     const missing = runCli(["verify", "Nope", "--skip", "build,tests"], dir);
     expect(missing.status).toBe(2);
     expect(missing.stderr).toContain("flagrm baseline Nope");
-    const unknown = runCli(["verify", "NewCheckout", "--skip", "lint"], dir);
+    const unknown = runCli(["verify", "NewCheckout", "--skip", "style"], dir);
     expect(unknown.status).toBe(2);
-    expect(unknown.stderr).toContain('Unknown check "lint"');
+    expect(unknown.stderr).toContain('Unknown check "style"');
   });
 });
 
@@ -446,5 +454,56 @@ describe("CLI hook stop (spawned dist/cli.js)", () => {
     } finally {
       fs.rmSync(repo, { recursive: true, force: true });
     }
+  });
+});
+
+describe("CLI lint (spawned dist/cli.js)", () => {
+  let dir: string;
+  const git = (...args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+
+  beforeAll(() => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ffr-lint-")));
+    fs.writeFileSync(
+      path.join(dir, "flagrm.config.yaml"),
+      [
+        "projects:",
+        "  - name: app",
+        "    adapter: generic",
+        "    path: .",
+        '    globs: ["**/*.txt"]',
+        "    methods: [isEnabled]",
+        "    build: false",
+        "    test: false",
+        "    lint: node lint.cjs",
+        "",
+      ].join("\n"),
+    );
+    fs.writeFileSync(
+      path.join(dir, "lint.cjs"),
+      'if (require("node:fs").readFileSync("app.txt", "utf8").includes("bad")) { console.log("app.txt:1 error bad word"); process.exit(1); }\n',
+    );
+    fs.writeFileSync(path.join(dir, "app.txt"), "good\n");
+    fs.writeFileSync(path.join(dir, ".gitignore"), ".flagrm/\n");
+    git("init", "-q");
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");
+  });
+
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("verify fails on a lint error the edit caused, --skip lint passes, and --md lists both new checks", () => {
+    expect(runCli(["baseline", "FlagA", "--json"], dir).status).toBe(0);
+    fs.writeFileSync(path.join(dir, "app.txt"), "bad\n");
+    const failed = runCli(["verify", "FlagA", "--json"], dir);
+    expect(failed.status).toBe(1);
+    const report = JSON.parse(failed.stdout);
+    expect(report.checks.find((c: { id: string }) => c.id === "lint")).toMatchObject({ status: "fail" });
+    expect(report.checks.find((c: { id: string }) => c.id === "coverage")).toMatchObject({ status: "pass" });
+    expect(runCli(["verify", "FlagA", "--skip", "lint"], dir).status).toBe(0);
+    const md = runCli(["verify", "FlagA", "--md"], dir).stdout;
+    expect(md).toContain("| lint |");
+    expect(md).toContain("| coverage |");
   });
 });

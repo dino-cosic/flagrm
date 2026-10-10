@@ -35,6 +35,27 @@ export function gitState(cwd: string): GitState {
 }
 
 /**
+ * Each file's git blob id as it is in the working tree (null when it doesn't
+ * exist), so a later run can tell whether it changed since. Paths are relative to `cwd`.
+ */
+export function blobIds(cwd: string, files: string[]): Record<string, string | null> {
+  const ids: Record<string, string | null> = {};
+  const existing = files.filter((rel) => fs.existsSync(path.join(cwd, rel)));
+  for (const rel of files) ids[rel] = null;
+  if (existing.length === 0) return ids;
+  const result = spawnSync("git", ["hash-object", "--stdin-paths"], {
+    cwd,
+    encoding: "utf8",
+    input: `${existing.join("\n")}\n`,
+  });
+  const out = result.status === 0 ? (result.stdout ?? "").split("\n") : [];
+  existing.forEach((rel, i) => {
+    ids[rel] = out[i] || null;
+  });
+  return ids;
+}
+
+/**
  * Files added, modified or deleted in the working tree since `sha` (tracked
  * diff plus untracked files), without the ones `ignore` names.
  */

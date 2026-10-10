@@ -9,6 +9,16 @@ contain breaking changes.
 
 ### Added
 
+- An optional per-project `lint` command (lint or type-check), run by
+  `baseline`, `verify` and `doctor --run`. `verify`'s new `lint` check fails
+  on lint errors the removal caused; a lint that already failed at the
+  baseline only warns, unless its log has error lines the baseline's didn't
+  (line and column numbers ignored).
+- `verify`'s new `coverage` check warns about changed files that no build,
+  test or lint command checks; a project's optional `covers` globs say which
+  files its commands check (default: everything under its path). Files
+  already dirty at the baseline and unchanged since don't count. With
+  `--strict`, such a file now fails verify.
 - `/flagrm-remove` takes several flags (`/flagrm-remove A B C`): it asks
   once whether they are all ON and whether to commit each one, then removes
   them one after another, one commit per flag.
@@ -37,8 +47,18 @@ contain breaking changes.
   helper named like this flag that evaluates a different one), since
   `verify` would then ask to delete the other flag's code.
 
+### Changed
+
+- JSON schema version 8: `--json`, `baseline.json` and `verify.json` gain
+  the `lint` and `coverage` checks, `lint` runs and `git.dirtyHashes`.
+  Version 6 and 7 baselines are still read.
+
 ### Fixed
 
+- A lint, build or test command that fails because its package script
+  (`npm run lint` without a `lint` script) or ESLint config is missing is a
+  setup problem: `verify` and `doctor --run` fail on it instead of treating
+  it as lint debt.
 - Deleting a committed file that matches `exclude` (say, a generator removing
   `graphify-out/graph.html`) no longer invalidates a passing verify: the
   Stop hook's tree fingerprint now leaves out deletions under `exclude`, as

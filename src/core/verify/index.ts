@@ -18,11 +18,13 @@ import {
   type CheckResult,
   type CheckRun,
   JSON_SCHEMA_VERSION,
+  RUN_CHECK_ID,
   type VerifyReport,
   type VerifyRun,
 } from "../types.js";
-import { buildCheck, compareTests, testsCheck } from "./commands.js";
+import { buildCheck, compareTests, lintCheck, testsCheck } from "./commands.js";
 import { skippedResult, type VerifyContext } from "./context.js";
+import { coverageCheck } from "./coverage.js";
 import { deadCodeCheck } from "./dead-code.js";
 import { leftoversCheck } from "./leftovers.js";
 
@@ -51,7 +53,7 @@ export async function verifyFlag(
   const ignore = changeFilter(projects[0]?.ctx.config);
   const changedFiles = baseline.git.sha ? changedFilesSince(root, baseline.git.sha, ignore) : undefined;
 
-  const only = [...(skip.has("build") ? [] : ["build" as const]), ...(skip.has("tests") ? [] : ["test" as const])];
+  const only = (["build", "test", "lint"] as const).filter((check) => !skip.has(RUN_CHECK_ID[check]));
   // Before the commands: the key is the tree they run on.
   const key = only.length ? runsKey(root, projects) : undefined;
   const found = key && options.reuse !== false ? findRuns(root, projects, key, plannedRuns(projects, only)) : undefined;
@@ -66,12 +68,24 @@ export async function verifyFlag(
   const now = configSnapshot(projects);
   const configChanges = configChangesSince(baseline.acceptedConfig ?? baseline.config, now);
   const originalConfigChanges = baseline.acceptedConfig ? configChangesSince(baseline.config, now) : configChanges;
-  const v: VerifyContext = { root, flag, projects, baseline, changedFiles, runs, configChanges, originalConfigChanges };
+  const v: VerifyContext = {
+    root,
+    flag,
+    projects,
+    baseline,
+    changedFiles,
+    runs,
+    skip,
+    configChanges,
+    originalConfigChanges,
+  };
   const tests = compareTests(v);
   const run: Record<Exclude<CheckId, "leftovers">, () => CheckResult> = {
     "dead-code": () => deadCodeCheck(v),
     build: () => buildCheck(v),
     tests: () => testsCheck(v, tests),
+    lint: () => lintCheck(v),
+    coverage: () => coverageCheck(v),
   };
   const checks: CheckResult[] = [];
   for (const id of CHECK_IDS) {
@@ -99,7 +113,11 @@ export async function verifyFlag(
   // Only a full pass is worth reusing: a failure may be flaky or a stopped service.
   if (key && report.status === "pass" && report.skipped.length === 0) saveRuns(root, flag, projects, key, runs);
   // A fresh run that fails on this tree outweighs a saved pass for it (`--no-reuse` after a machine change).
-  else if (key && !found && checks.some((c) => (c.id === "build" || c.id === "tests") && c.status === "fail")) {
+  else if (
+    key &&
+    !found &&
+    checks.some((c) => (c.id === "build" || c.id === "tests" || c.id === "lint") && c.status === "fail")
+  ) {
     dropRuns(root, key);
   }
   const file = verifyPath(root, flag);

@@ -20,11 +20,14 @@ import type { AdapterId } from "./config.js";
  *   counts and at most 20 short failed test names (`failedTests`), no
  *   `config`. `baseline.json` itself is unchanged, so version 6 files are
  *   still read.
+ * - 8: `lint` runs (`check: "lint"`) and the `lint` and `coverage` checks;
+ *   `baseline.json` gains the config's `lint` commands and `git.dirtyHashes`.
+ *   Both are optional, so version 6 and 7 files are still read.
  */
-export const JSON_SCHEMA_VERSION = 7;
+export const JSON_SCHEMA_VERSION = 8;
 
-/** `baseline.json` versions this flagrm reads: 7 only added optional fields to 6. */
-export const READABLE_BASELINE_VERSIONS: readonly number[] = [6, 7];
+/** `baseline.json` versions this flagrm reads: 7 and 8 only added optional fields to 6. */
+export const READABLE_BASELINE_VERSIONS: readonly number[] = [6, 7, 8];
 
 /** Where a candidate flag name was discovered by `flagrm list`. */
 export type FlagCandidateSource =
@@ -184,7 +187,7 @@ export interface TestRunResults {
 /** One build or test command run for the baseline (or by `verify`). */
 export interface CheckRun {
   project: string;
-  check: "build" | "test";
+  check: "build" | "test" | "lint";
   command: string;
   exitCode: number;
   durationMs: number;
@@ -194,6 +197,8 @@ export interface CheckRun {
   results?: TestRunResults;
   /** Why a failed run failed, when the log shows a machine setup problem rather than broken code. */
   failure?: CheckFailure;
+  /** Why the command didn't run to completion: it timed out, was killed, or could not start. */
+  interrupted?: string;
   /** Copied from a passing verify on the same tree and commands instead of run (see `run-cache.ts`). */
   reused?: RunReuse;
 }
@@ -230,6 +235,8 @@ export interface GitState {
   dirty: boolean;
   /** Files (relative to the config root) with uncommitted changes when the state was taken. */
   dirtyFiles?: string[];
+  /** Baseline only: each dirty file's git blob id then (null: deleted), so `verify` tells the removal's edits from earlier ones. */
+  dirtyHashes?: Record<string, string | null>;
 }
 
 /**
@@ -290,16 +297,28 @@ export interface CommandSnapshot {
 export interface ConfigSnapshot {
   /** The config file (relative to the config root) and its text; absent without one. */
   file?: { path: string; text: string };
-  projects: Array<{ name: string; build?: CommandSnapshot; test?: CommandSnapshot; testResults?: string }>;
+  projects: Array<{
+    name: string;
+    build?: CommandSnapshot;
+    test?: CommandSnapshot;
+    lint?: CommandSnapshot;
+    testResults?: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
 // verify
 // ---------------------------------------------------------------------------
 
-export const CHECK_IDS = ["leftovers", "dead-code", "build", "tests"] as const;
+export const CHECK_IDS = ["leftovers", "dead-code", "build", "tests", "lint", "coverage"] as const;
 
 export type CheckId = (typeof CHECK_IDS)[number];
+
+/** The check that judges each kind of command run. */
+export const RUN_CHECK_ID = { build: "build", test: "tests", lint: "lint" } as const satisfies Record<
+  CheckRun["check"],
+  CheckId
+>;
 
 export type CheckStatus = "pass" | "fail" | "warn" | "skipped";
 

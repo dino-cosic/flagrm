@@ -36,12 +36,16 @@ export interface ProjectConfig {
   build?: string | false;
   /** Test command, run inside `path` by `verify`; `false` runs none. Absent: the adapter's default. */
   test?: string | false;
-  /** Seconds each build/test command may run before it is killed and fails; unlimited when absent. */
+  /** Lint or type-check command, run inside `path` by `baseline` and `verify`; `false` or absent runs none (no adapter default). */
+  lint?: string | false;
+  /** Seconds each build/test/lint command may run before it is killed and fails; unlimited when absent. */
   timeout?: number;
   /** Absolute path or glob of the JUnit/TRX files `test` writes, so `verify` can count tests. */
   testResults?: string;
   /** Globs (relative to `path`) replacing the adapter's default language globs. */
   globs?: string[];
+  /** Globs (relative to `path`) of the files the project's commands check, for the `coverage` check; absent: everything under `path`. */
+  covers?: string[];
   /** Method names treated as flag evaluations. */
   methods: string[];
   /** Attribute names treated as feature gates (.NET). */
@@ -95,9 +99,11 @@ interface ProjectFileShape {
   path?: unknown;
   build?: unknown;
   test?: unknown;
+  lint?: unknown;
   testResults?: unknown;
   timeout?: unknown;
   globs?: unknown;
+  covers?: unknown;
   methods?: unknown;
   attributes?: unknown;
 }
@@ -135,9 +141,11 @@ const KNOWN_PROJECT_KEYS = [
   "path",
   "build",
   "test",
+  "lint",
   "testResults",
   "timeout",
   "globs",
+  "covers",
   "methods",
   "attributes",
 ];
@@ -292,14 +300,16 @@ function parseProject(
     path: resolveProjectDir(fileDir, p.path, `Project "${name}"`),
     build: optionalCommand(p.build, `${where}.build`),
     test: optionalCommand(p.test, `${where}.test`),
+    lint: optionalCommand(p.lint, `${where}.lint`),
     testResults: testResults && path.resolve(fileDir, testResults),
     timeout: optionalPositiveNumber(p.timeout, `${where}.timeout`),
     globs: optionalStringList(p.globs, `${where}.globs`),
+    covers: optionalStringList(p.covers, `${where}.covers`),
     methods: optionalStringList(p.methods, `${where}.methods`) ?? defaults.methods,
     attributes: optionalStringList(p.attributes, `${where}.attributes`) ?? defaults.attributes,
   };
   // Keep the resolved shape free of absent optional keys.
-  for (const key of ["build", "test", "testResults", "timeout", "globs"] as const) {
+  for (const key of ["build", "test", "lint", "testResults", "timeout", "globs", "covers"] as const) {
     if (project[key] === undefined) delete project[key];
   }
   return project;

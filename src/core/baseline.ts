@@ -135,6 +135,7 @@ export async function runCheck(
     durationMs: Date.now() - started,
     log: logFile,
   };
+  if (reason) run.interrupted = reason;
   if (run.exitCode !== 0) {
     const problem = environmentProblem(fs.readFileSync(logFile, "utf8"), ctx.root);
     if (problem) run.failure = { kind: "environment", message: problem };
@@ -217,14 +218,15 @@ export function incrementalBuildGap(adapter: Adapter, build: string | undefined)
 }
 
 /**
- * Build then test every project, each command resolved on its own (see
- * `projectCommands`): the configured one, none for `false`, else the
- * adapter's default (`dotnet build --no-incremental`, `npx ng test`, ...).
+ * Build, test, then lint every project, each command resolved on its own
+ * (see `projectCommands`): the configured one, none for `false`, else the
+ * adapter's default (`dotnet build --no-incremental`, `npx ng test`, ...;
+ * lint has none).
  */
 export async function runChecks(
   projects: Workspace,
   logDir: string,
-  only: ReadonlyArray<CheckRun["check"]> = ["build", "test"],
+  only: ReadonlyArray<CheckRun["check"]> = ["build", "test", "lint"],
 ): Promise<CheckRun[]> {
   const runs: CheckRun[] = [];
   // Projects whose `testResults` patterns overlap must not count each other's result files.
@@ -461,6 +463,29 @@ export function validateAgentNames(projects: Workspace, names: RecordedName[]): 
   }
 }
 
+/** A log's non-blank lines, trimmed, without ANSI colors or the `$ <command>` header; undefined when unreadable. */
+export function logLines(log: string | undefined): string[] | undefined {
+  if (!log) return undefined;
+  let text: string;
+  try {
+    text = fs.readFileSync(log, "utf8");
+  } catch {
+    return undefined;
+  }
+  return (
+    text
+      .split(/\r?\n/)
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colors (ngc colors even when piped)
+      .map((line) => line.replace(/\u001b\[[0-9;]*m/g, "").trim())
+      .filter((line) => line && !line.startsWith("$ "))
+  );
+}
+
+/** A log line that reports an error: not a compiler warning, nor a summary such as `0 Error(s)`. */
+export function looksLikeError(line: string): boolean {
+  return /\berror\b|\bfailed\b|✗|×/i.test(line) && !/:\s*warning\b/i.test(line) && !/^\d+ Error\(s\)$/i.test(line);
+}
+
 /**
  * Up to `max` distinct lines of a log that look like errors, so the reader sees
  * why a command failed without opening the log. Compiler warnings and summary
@@ -468,21 +493,9 @@ export function validateAgentNames(projects: Workspace, names: RecordedName[]): 
  * real error. When no line looks like an error, the last `max` lines instead.
  */
 export function errorExcerpt(log: string | undefined, max = 10): string[] {
-  if (!log) return [];
-  let text: string;
-  try {
-    text = fs.readFileSync(log, "utf8");
-  } catch {
-    return [];
-  }
-  const all = text
-    .split(/\r?\n/)
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colors (ngc colors even when piped)
-    .map((line) => line.replace(/\u001b\[[0-9;]*m/g, "").trim())
-    .filter((line) => line && !line.startsWith("$ "));
-  const lines = all
-    .filter((line) => /\berror\b|\bfailed\b|✗|×/i.test(line))
-    .filter((line) => !/:\s*warning\b/i.test(line) && !/^\d+ Error\(s\)$/i.test(line));
+  const all = logLines(log);
+  if (!all) return [];
+  const lines = all.filter(looksLikeError);
   // No line says error (e.g. "A compatible .NET SDK was not found"): the end of the log usually does.
   if (!lines.length) return all.slice(-max);
   return [...new Set(lines)].slice(0, max);

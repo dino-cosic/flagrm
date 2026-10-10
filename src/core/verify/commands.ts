@@ -4,14 +4,18 @@
  * tests of the OFF path is part of removing a flag, losing any other test is not.
  * A changed test file none of whose tests ran is a warning too: the test
  * command doesn't cover it, so verify didn't check the edit.
+ *
+ * The `lint` check: a failing lint command fails. One that already failed at
+ * the baseline (lint debt) only warns, unless its log has error lines the
+ * baseline's didn't.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { errorExcerpt, templateCheckGap } from "../baseline.js";
+import { errorExcerpt, logLines, looksLikeError, templateCheckGap } from "../baseline.js";
 import { projectCommands } from "../config-snapshot.js";
 import { escapeRegExp, isTestPath } from "../scan.js";
-import type { CheckFinding, CheckResult, CheckRun, TestComparison } from "../types.js";
+import { type CheckFinding, type CheckResult, type CheckRun, RUN_CHECK_ID, type TestComparison } from "../types.js";
 import { relativePath } from "../util.js";
 import { checkResult, configFindings, plural, skippedResult, type VerifyContext } from "./context.js";
 import { classifyRemovedTests } from "./removed-tests.js";
@@ -38,8 +42,9 @@ function setupFinding(run: CheckRun): CheckFinding {
 }
 
 /** No command to run: skipped, unless the baseline had one, which is worth a warning. */
-function noCommandResult(v: VerifyContext, id: "build" | "tests"): CheckResult {
-  const summary = `no ${id === "build" ? "build" : "test"} command configured`;
+function noCommandResult(v: VerifyContext, kind: CheckRun["check"]): CheckResult {
+  const id = RUN_CHECK_ID[kind];
+  const summary = `no ${kind} command configured`;
   const findings = configFindings(v, id);
   return findings.length ? checkResult(id, summary, findings) : skippedResult(id, summary);
 }
@@ -63,6 +68,92 @@ export function buildCheck(v: VerifyContext): CheckResult {
     ? `${plural(failed, "build")} failed`
     : `${runs.map((r) => r.project).join(", ")} built successfully`;
   return checkResult("build", summary, findings);
+}
+
+export function lintCheck(v: VerifyContext): CheckResult {
+  const runs = v.runs.filter((r) => r.check === "lint");
+  if (runs.length === 0) return noCommandResult(v, "lint");
+  const findings: CheckFinding[] = [];
+  let failed = 0;
+  let known = 0;
+  for (const run of runs) {
+    if (run.exitCode === 0) continue;
+    const before = v.baseline.checks?.find((c) => c.project === run.project && c.check === "lint");
+    // A setup problem, or a run cut short, is no lint debt: it fails even when the baseline failed too.
+    if (run.failure || run.interrupted || !before || before.exitCode === 0 || before.failure || before.interrupted) {
+      failed++;
+      findings.push(...failedRunFindings(run));
+      if (!before) {
+        findings.push({
+          severity: "info",
+          message:
+            "the baseline has no lint run to compare with (lint configured after it, or baseline --no-checks), so every lint error fails: show the user",
+          project: run.project,
+        });
+      }
+      continue;
+    }
+    const debt = knownLintFindings(before, run);
+    if (debt.some((f) => f.severity === "fail")) failed++;
+    else known++;
+    findings.push(...debt);
+  }
+  findings.push(...configFindings(v, "lint"));
+  const summary = failed
+    ? `${plural(failed, "lint run")} failed`
+    : known
+      ? `${plural(known, "lint run fails", "lint runs fail")} as at the baseline`
+      : `${runs.map((r) => r.project).join(", ")} linted cleanly`;
+  return checkResult("lint", summary, findings);
+}
+
+/**
+ * A lint run that failed at the baseline too: compared line by line with the
+ * baseline's log. Numbers are masked first, so an old error whose line moved
+ * (`40:5` → `30:5`) or a changed problem count isn't new. Lines are counted,
+ * not just compared: ESLint prints an error without its file, so a second
+ * identical one is still new. A new line that looks like an error fails; other
+ * new lines only warn. At most 20 are listed, errors first.
+ */
+function knownLintFindings(before: CheckRun, run: CheckRun): CheckFinding[] {
+  const was = logLines(before.log);
+  if (!was) {
+    return [
+      {
+        severity: "warn",
+        message: `lint already failed at the baseline; its log wasn't found, so new errors can't be told (log: ${run.log})`,
+        project: run.project,
+        file: run.log,
+      },
+    ];
+  }
+  const mask = (line: string) => line.replace(/\d+/g, "#");
+  const seen = new Map<string, number>();
+  for (const line of was) seen.set(mask(line), (seen.get(mask(line)) ?? 0) + 1);
+  const added = (logLines(run.log) ?? []).filter((line) => {
+    const left = seen.get(mask(line)) ?? 0;
+    seen.set(mask(line), left - 1);
+    return left <= 0;
+  });
+  const errors = added.filter(looksLikeError);
+  const listed = [...errors, ...added.filter((line) => !looksLikeError(line))].slice(0, 20);
+  const head: CheckFinding = errors.length
+    ? {
+        severity: "fail",
+        message: `lint already failed at the baseline, but ${plural(errors.length, "error line is", "error lines are")} new: fix ${errors.length === 1 ? "it" : "them"} (log: ${run.log})`,
+        project: run.project,
+        file: run.log,
+      }
+    : {
+        severity: "warn",
+        message: `lint already failed at the baseline: ${added.length ? `${plural(added.length, "new line")} in the log, none an error` : "no new lines in the log"} (log: ${run.log})`,
+        project: run.project,
+        file: run.log,
+      };
+  return [
+    head,
+    ...listed.map((line) => ({ severity: "info" as const, message: `new: ${line}`, project: run.project })),
+  ];
 }
 
 export function compareTests(v: VerifyContext): TestComparison[] {
@@ -170,7 +261,7 @@ function failedTestFindings(
 
 export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): CheckResult {
   const runs = v.runs.filter((r) => r.check === "test");
-  if (runs.length === 0) return noCommandResult(v, "tests");
+  if (runs.length === 0) return noCommandResult(v, "test");
   const findings: CheckFinding[] = configFindings(v, "tests");
   let failed = 0;
   let known = 0;

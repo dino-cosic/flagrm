@@ -95,6 +95,20 @@ describe("run cache", () => {
     expect(runs[1].results?.names.length).toBe(1);
   });
 
+  it("runs everything again once a lint command is added, then saves and reuses lint too", async () => {
+    await savedVerify("FlagA");
+    expect(ran()).toEqual(["build", "test"]);
+    write("flagrm.config.yaml", CONFIG.replace("    testResults:", "    lint: node run.cjs lint\n    testResults:"));
+    const runs = await baselineRuns(tmp, "FlagB", workspace());
+    expect(ran()).toEqual(["build", "test", "build", "test", "lint"]);
+    expect(runs.map((r) => r.check)).toEqual(["build", "test", "lint"]);
+    expect(runs[2].log).toBe(path.join(flagDir(tmp, "FlagB"), "app.lint.log"));
+    await savedVerify("FlagB");
+    const reused = await baselineRuns(tmp, "FlagC", workspace());
+    expect(ran()).toHaveLength(8);
+    expect(reused.map((r) => `${r.check} ${r.reused?.flag}`)).toEqual(["build FlagB", "test FlagB", "lint FlagB"]);
+  });
+
   it("ignores changes to the test results file, but not under exclude, which a build may read", async () => {
     const key = await savedVerify("FlagA");
     write("junit.xml", "<testsuite/>");
@@ -159,6 +173,21 @@ describe("run cache", () => {
     ).toBe("build and tests reused from FlagA's verify (same tree and commands, 3 min ago; --no-reuse to run them)");
     expect(reusedNote([{ check: "build", reused }], "2026-10-10T10:00:20.000Z")).toBe(
       "build reused from FlagA's verify (same tree and commands, under a minute ago; --no-reuse to run them)",
+    );
+    expect(
+      reusedNote(
+        [
+          { check: "build", reused },
+          { check: "test", reused },
+          { check: "lint", reused },
+        ],
+        "2026-10-10T10:03:00.000Z",
+      ),
+    ).toBe(
+      "build, tests and lint reused from FlagA's verify (same tree and commands, 3 min ago; --no-reuse to run them)",
+    );
+    expect(reusedNote([{ check: "lint", reused }], "2026-10-10T10:00:20.000Z")).toBe(
+      "lint reused from FlagA's verify (same tree and commands, under a minute ago; --no-reuse to run them)",
     );
     expect(reusedNote([{ check: "build" }], "2026-10-10T10:00:00.000Z")).toBeUndefined();
   });

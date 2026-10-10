@@ -21,7 +21,7 @@ import { changeFilter } from "./core/change-filter.js";
 import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
 import { projectCommands } from "./core/config-snapshot.js";
 import { runDoctor } from "./core/doctor.js";
-import { gitState } from "./core/git.js";
+import { blobIds, gitState } from "./core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
 import { buildInventory } from "./core/inventory.js";
@@ -106,15 +106,15 @@ addCommonOptions(
   program
     .command("baseline <flag>")
     .description(
-      "record the state before removing a flag: the git commit, each project's build and test results, and the " +
+      "record the state before removing a flag: the git commit, each project's build, test and lint results, and the " +
         "flag's names for the leftovers check; writes .flagrm/<flag>/baseline.json for verify. With --name on an " +
         "existing baseline, only adds names",
     ),
 )
-  .option("--no-checks", "record only the git state, without running build and test commands")
+  .option("--no-checks", "record only the git state, without running build, test and lint commands")
   .option(
     "--no-reuse",
-    "run build and tests even when a passing verify on the same tree and commands saved their results",
+    "run build, tests and lint even when a passing verify on the same tree and commands saved their results",
   )
   .option("--name <name>", "add a name the flag is read through (repeatable)", collect, [])
   .option(
@@ -209,6 +209,7 @@ addCommonOptions(
           result = addNames(root, flag, added);
         } else {
           const git = gitState(root);
+          if (git.dirtyFiles?.length) git.dirtyHashes = blobIds(root, git.dirtyFiles);
           const checks = opts.checks ? await baselineRuns(root, flag, projects, opts.reuse) : undefined;
           const { names, ...flow } = await discoverFlag(projects, flag);
           result = writeBaseline(root, flag, projects, git, checks, mergeNames(names, added), flow);
@@ -230,7 +231,7 @@ addCommonOptions(
   program
     .command("verify <flag>")
     .description(
-      "gate a flag removal against its baseline (`flagrm baseline <flag>`): build, tests and new unused code; " +
+      "gate a flag removal against its baseline (`flagrm baseline <flag>`): leftovers, new unused code, build, tests, lint and coverage; " +
         "writes .flagrm/<flag>/verify.json; exit 0 pass, 1 fail, 2 usage error",
     ),
 )
@@ -239,7 +240,7 @@ addCommonOptions(
   .option("--md", "print a markdown overview (for the user or a PR) instead of text")
   .option(
     "--no-reuse",
-    "run build and tests even when a passing verify on the same tree and commands saved their results",
+    "run build, tests and lint even when a passing verify on the same tree and commands saved their results",
   )
   .action(
     async (flag: string, opts: CommonOptions & { skip?: string; strict?: boolean; md?: boolean; reuse: boolean }) => {
@@ -384,14 +385,14 @@ function printInstallRoot(root: string): void {
 program
   .command("doctor")
   .description(
-    "check that this repository is ready for flag removal: config, build/test commands, git, .gitignore, " +
+    "check that this repository is ready for flag removal: config, build/test/lint commands, git, .gitignore, " +
       "installed skills and Stop hook, abandoned baselines; exit 0 ok, 1 problems",
   )
   .option(
     "--config <path>",
     "path to a config file (default: the nearest flagrm.config.yaml up to the git repository root)",
   )
-  .option("--run", "also run each build and test command")
+  .option("--run", "also run each build, test and lint command")
   .option("--json", "machine-readable JSON output")
   .action(async (opts: { config?: string; run?: boolean; json?: boolean }) => {
     const report = await runDoctor(process.cwd(), { config: opts.config, run: opts.run });

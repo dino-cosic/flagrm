@@ -13,7 +13,7 @@ const commitAll = () => {
   git("add", "-A");
   git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "setup");
 };
-const config = (build: string, test?: string, testResults?: string) =>
+const config = (build: string, test?: string, testResults?: string, lint?: string) =>
   fs.writeFileSync(
     path.join(tmp, "flagrm.config.yaml"),
     [
@@ -25,6 +25,7 @@ const config = (build: string, test?: string, testResults?: string) =>
       `    build: ${JSON.stringify(build)}`,
       ...(test ? [`    test: ${JSON.stringify(test)}`] : []),
       ...(testResults ? [`    testResults: ${testResults}`] : []),
+      ...(lint ? [`    lint: ${JSON.stringify(lint)}`] : []),
       "",
     ].join("\n"),
   );
@@ -136,6 +137,47 @@ describe("runDoctor", () => {
       `warn svc: \`${test}\`: 1 test fails already — the baseline records it as a known failure, which verify only warns about`,
     ]);
     expect(report.status).toBe("ok");
+  });
+
+  it("lists a lint command, and reports nothing without one", async () => {
+    expect(await problems()).toEqual([]);
+    config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml", 'node -e ""');
+    commitAll();
+    const report = await runDoctor(tmp);
+    expect(report.checks.filter((c) => c.status !== "ok")).toEqual([]);
+    expect(report.checks.map((c) => c.message)).toContain('svc: lint command `node -e ""`');
+  });
+
+  it("only warns with --run when lint already fails: verify only warns about lint debt", async () => {
+    const lint = `node -e "console.log('a.ts:1:1 error old problem');process.exit(1)"`;
+    config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml", lint);
+    commitAll();
+    const report = await runDoctor(tmp, { run: true });
+    const notOk = report.checks.filter((c) => c.status !== "ok");
+    expect(notOk.map((c) => `${c.status} ${c.message}`)).toEqual([
+      `warn svc: \`${lint}\` fails already (exit 1) — verify only warns about lint errors the baseline had`,
+    ]);
+    expect(notOk[0].details).toEqual(["a.ts:1:1 error old problem"]);
+    expect(report.status).toBe("ok");
+  });
+
+  it("fails with --run when lint is cut short", async () => {
+    config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml", 'node -e "setInterval(() => {}, 1000)"');
+    fs.appendFileSync(path.join(tmp, "flagrm.config.yaml"), "    timeout: 1\n");
+    commitAll();
+    const lint = (await runDoctor(tmp, { run: true })).checks.find((c) => c.message.includes("setInterval"));
+    expect(lint?.status).toBe("fail");
+  });
+
+  it("fails with --run on a lint setup problem", async () => {
+    // Shell syntax, so the PATH check leaves it to the run.
+    config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml", "flagrm-no-such-command-xyz && echo");
+    commitAll();
+    const lint = (await runDoctor(tmp, { run: true })).checks.find((c) =>
+      c.message.includes("flagrm-no-such-command-xyz"),
+    );
+    expect(lint?.status).toBe("fail");
+    expect(lint?.details).toEqual(["setup problem: `flagrm-no-such-command-xyz` is not installed or not on PATH"]);
   });
 
   it("labels the commands that are adapter defaults", async () => {
