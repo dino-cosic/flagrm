@@ -15,7 +15,8 @@ contain breaking changes.
   baseline only warns, listing the log lines new since.
 - `verify`'s new `coverage` check warns about changed files that no build,
   test or lint command checks; a project's optional `covers` globs say which
-  files its commands check (default: everything under its path).
+  files its commands check (default: everything under its path). With
+  `--strict`, such a file now fails verify.
 - `/flagrm-remove` takes several flags (`/flagrm-remove A B C`): it asks
   once whether they are all ON and whether to commit each one, then removes
   them one after another, one commit per flag.

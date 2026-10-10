@@ -95,6 +95,13 @@ describe("coverage check", () => {
     expect(coverage(["web/src/app.ts", "web/src/.eslintrc.json"], ["web"], config).status).toBe("pass");
   });
 
+  it("treats a directory in covers as everything under it, and ./ as everything", () => {
+    for (const covers of ['["src"]', '["src/"]', '["./src"]']) {
+      expect(coverage(["web/src/a/b.ts"], ["web"], CONFIG.replace('["src/**"]', covers)).status).toBe("pass");
+    }
+    expect(coverage(["web/playwright/x.ts"], ["web"], CONFIG.replace('["src/**"]', '["./"]')).status).toBe("pass");
+  });
+
   it("counts deleted files, and every file when no command ran (--skip)", () => {
     // Nothing on disk: changed files come from git, deleted ones included.
     expect(warnings(coverage(["web/src/gone.ts"], []))).toEqual([

@@ -135,6 +135,7 @@ export async function runCheck(
     durationMs: Date.now() - started,
     log: logFile,
   };
+  if (reason) run.interrupted = reason;
   if (run.exitCode !== 0) {
     const problem = environmentProblem(fs.readFileSync(logFile, "utf8"), ctx.root);
     if (problem) run.failure = { kind: "environment", message: problem };

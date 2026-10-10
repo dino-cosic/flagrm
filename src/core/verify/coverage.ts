@@ -6,7 +6,7 @@
  */
 
 import path from "node:path";
-import picomatch from "picomatch";
+import { excludeMatcher } from "../change-filter.js";
 import type { CheckFinding, CheckResult } from "../types.js";
 import { relativePath } from "../util.js";
 import { checkResult, plural, skippedResult, type VerifyContext } from "./context.js";
@@ -20,13 +20,12 @@ export function coverageCheck(v: VerifyContext): CheckResult {
   if (!v.changedFiles) return skippedResult("coverage", "no baseline commit to diff against");
   const ran = new Set(v.runs.map((r) => r.project));
   const projects = v.projects.map(({ ctx }) => {
-    // `./src/**` is how the rest of the config writes paths.
-    const covers = ctx.project.covers?.map((glob) => glob.replace(/^\.\//, ""));
+    const covers = ctx.project.covers;
     return {
       name: ctx.name,
       root: ctx.root,
       ran: ran.has(ctx.name),
-      covers: covers ? picomatch(covers, { dot: true }) : () => true,
+      covers: covers ? excludeMatcher(covers.map(coversGlob)) : () => true,
     };
   });
   const uncovered: Array<{ file: string; project?: string }> = [];
@@ -50,6 +49,12 @@ export function coverageCheck(v: VerifyContext): CheckResult {
           }),
         );
   return checkResult("coverage", `${plural(uncovered.length, "changed file")} no command checks`, findings);
+}
+
+/** A `covers` entry as a glob: `./src/**` is how the rest of the config writes paths, and `./` or `.` is everything. */
+function coversGlob(glob: string): string {
+  const rel = glob.replace(/^\.\//, "").replace(/\/+$/, "");
+  return rel === "" || rel === "." ? "**" : rel;
 }
 
 /** One warning per top-level directory (`.` for files in the root) with its count. */

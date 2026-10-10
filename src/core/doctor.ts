@@ -181,7 +181,7 @@ async function configChecks(
         continue;
       }
       // Lint debt is no setup problem: verify only warns about a lint run that already failed at the baseline.
-      if (check === "lint" && run.exitCode !== 0 && !run.failure) {
+      if (check === "lint" && run.exitCode !== 0 && !run.failure && !run.interrupted) {
         add(
           "warn",
           `${ctx.name}: \`${command}\` fails already (exit ${run.exitCode}) — verify only warns about lint errors the baseline had`,

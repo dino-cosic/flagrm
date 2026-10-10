@@ -194,6 +194,8 @@ export interface CheckRun {
   results?: TestRunResults;
   /** Why a failed run failed, when the log shows a machine setup problem rather than broken code. */
   failure?: CheckFailure;
+  /** Why the command didn't run to completion: it timed out, was killed, or could not start. */
+  interrupted?: string;
   /** Copied from a passing verify on the same tree and commands instead of run (see `run-cache.ts`). */
   reused?: RunReuse;
 }

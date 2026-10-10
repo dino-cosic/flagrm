@@ -161,6 +161,14 @@ describe("runDoctor", () => {
     expect(report.status).toBe("ok");
   });
 
+  it("fails with --run when lint is cut short", async () => {
+    config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml", 'node -e "setInterval(() => {}, 1000)"');
+    fs.appendFileSync(path.join(tmp, "flagrm.config.yaml"), "    timeout: 1\n");
+    commitAll();
+    const lint = (await runDoctor(tmp, { run: true })).checks.find((c) => c.message.includes("setInterval"));
+    expect(lint?.status).toBe("fail");
+  });
+
   it("fails with --run on a lint setup problem", async () => {
     // Shell syntax, so the PATH check leaves it to the run.
     config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml", "flagrm-no-such-command-xyz && echo");

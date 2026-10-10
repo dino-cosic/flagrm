@@ -45,8 +45,12 @@ const NO_LINT = CONFIG.replace("    lint: node lint.cjs\n", "");
 const LINT = [
   'const fs = require("node:fs");',
   'const out = fs.readFileSync(process.env.FLAGRM_TEST_LINT, "utf8");',
-  "process.stdout.write(out);",
-  "process.exit(out.trim() ? 1 : 0);",
+  // HANG: never finish, so the project's timeout kills it.
+  'if (out.includes("HANG")) setInterval(() => {}, 1000);',
+  "else {",
+  "  process.stdout.write(out);",
+  "  process.exit(out.trim() ? 1 : 0);",
+  "}",
   "",
 ].join("\n");
 
@@ -144,7 +148,7 @@ describe("lint check", () => {
     const check = lint(await verify());
     expect(check.status).toBe("fail");
     expect(messages(check, "info")).toContain(
-      "the baseline has no lint run to compare with (lint configured after it, or baseline --no-checks)",
+      "the baseline has no lint run to compare with (lint configured after it, or baseline --no-checks), so every lint error fails: show the user",
     );
     // Also "lint.cjs, named by the lint command, changed since the baseline": the command names a file.
     expect(messages(check, "warn")).toContain("lint command changed since the baseline: (none) → `node lint.cjs`");
@@ -158,6 +162,31 @@ describe("lint check", () => {
     expect(messages(check, "info")).toContain(
       "setup problem: `flagrm-no-such-command-xyz` is not installed or not on PATH",
     );
+  });
+
+  it("lists a new error whose text matches an error the baseline already had", async () => {
+    const unused = "1:10  error  'FeatureFlags' is defined but never used  no-unused-vars";
+    lintSays("/r/a.ts", unused, "✖ 1 problem");
+    await baseline();
+    lintSays("/r/a.ts", unused, "/r/b.ts", unused, "✖ 2 problems");
+    expect(messages(lint(await verify()), "info")).toEqual(["new: /r/b.ts", `new: ${unused}`, "new: ✖ 2 problems"]);
+  });
+
+  it("fails when lint was cut short, even when it failed at the baseline", async () => {
+    write("flagrm.config.yaml", `${CONFIG}    timeout: 1\n`);
+    lintSays("a.ts:1:1 error old problem");
+    await baseline();
+    lintSays("HANG");
+    const check = lint(await verify());
+    expect(check.status).toBe("fail");
+  });
+
+  it("fails on a lint error when the baseline's lint run was a setup problem", async () => {
+    write("flagrm.config.yaml", CONFIG.replace("node lint.cjs", "flagrm-no-such-command-xyz"));
+    await baseline();
+    write("flagrm.config.yaml", CONFIG);
+    lintSays("a.ts:1:1 error new problem");
+    expect(lint(await verify()).status).toBe("fail");
   });
 
   it("runs no lint with --skip lint", async () => {

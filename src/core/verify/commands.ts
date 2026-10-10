@@ -77,14 +77,15 @@ export function lintCheck(v: VerifyContext): CheckResult {
   for (const run of runs) {
     if (run.exitCode === 0) continue;
     const before = v.baseline.checks?.find((c) => c.project === run.project && c.check === "lint");
-    // A setup problem is the machine's, not lint debt: it fails even when the baseline failed too.
-    if (run.failure || !before || before.exitCode === 0) {
+    // A setup problem, or a run cut short, is no lint debt: it fails even when the baseline failed too.
+    if (run.failure || run.interrupted || !before || before.exitCode === 0 || before.failure || before.interrupted) {
       failed++;
       findings.push(...failedRunFindings(run));
       if (!before) {
         findings.push({
           severity: "info",
-          message: "the baseline has no lint run to compare with (lint configured after it, or baseline --no-checks)",
+          message:
+            "the baseline has no lint run to compare with (lint configured after it, or baseline --no-checks), so every lint error fails: show the user",
           project: run.project,
         });
       }
@@ -102,11 +103,22 @@ export function lintCheck(v: VerifyContext): CheckResult {
   return checkResult("lint", summary, findings);
 }
 
-/** A lint run that fails as it did at the baseline: a warning, plus the log lines new since (at most 20). */
+/**
+ * A lint run that fails as it did at the baseline: a warning, plus the log
+ * lines new since (at most 20). Lines are counted, not just compared: ESLint
+ * prints an error without its file, so a second identical one is still new.
+ */
 function knownLintFindings(before: CheckRun, run: CheckRun): CheckFinding[] {
   const was = logLines(before.log);
-  const seen = new Set(was ?? []);
-  const added = was ? [...new Set((logLines(run.log) ?? []).filter((line) => !seen.has(line)))] : [];
+  const seen = new Map<string, number>();
+  for (const line of was ?? []) seen.set(line, (seen.get(line) ?? 0) + 1);
+  const added = was
+    ? (logLines(run.log) ?? []).filter((line) => {
+        const left = seen.get(line) ?? 0;
+        seen.set(line, left - 1);
+        return left <= 0;
+      })
+    : [];
   const why = !was
     ? "baseline log not found, so new lines can't be told"
     : added.length

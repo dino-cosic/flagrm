@@ -50,8 +50,9 @@ export function changeFilter(config?: Pick<ToolConfig, "root" | "exclude" | "pro
  * Matches `exclude` the way scanning's fast-glob `ignore` does: a pattern
  * that matches a directory (`graphify-out`, `graphify-out/`) excludes
  * everything under it, so test the path and each of its parent directories.
+ * `covers` reads the same way.
  */
-function excludeMatcher(patterns: readonly string[]): (rel: string) => boolean {
+export function excludeMatcher(patterns: readonly string[]): (rel: string) => boolean {
   const isMatch = picomatch(
     patterns.map((p) => p.replace(/\/+$/, "")),
     { dot: true },
