@@ -25,6 +25,8 @@ contain breaking changes.
   `AppFeatureFlags.X` is recorded and checked like `FeatureFlags.X`.
 - Angular: a name checked only in a component's `.ts` file is checked in
   its `templateUrl` template too, whether discovery or `--file` scoped it.
+- `baseline --file` repeats: `--name x --file a.ts --file b.ts` records the
+  name for every file in one call.
 
 ### Fixed
 

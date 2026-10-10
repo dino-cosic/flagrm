@@ -38,6 +38,7 @@ import {
 } from "./core/report.js";
 import { baselineRuns } from "./core/run-cache.js";
 import { setupReport, writeScope } from "./core/scope.js";
+import { withScopeFiles } from "./core/scope-files.js";
 import { askTools, detectTools, savedTools, TOOL_LABELS } from "./core/tools.js";
 import { CHECK_IDS, type RecordedName } from "./core/types.js";
 import { onPath, relativePath } from "./core/util.js";
@@ -121,7 +122,10 @@ addCommonOptions(
   )
   .option(
     "--file <path>",
-    "check the --name entries only in this file (a local, parameter or field; implies --kind wrapper)",
+    "check the --name entries only in these files and the files sharing their scope, such as a component's template " +
+      "(repeatable; a local, parameter or field; implies --kind wrapper)",
+    collect,
+    [],
   )
   .option("--force", "start over: replace the baseline, only while the code is unedited since it")
   .option(
@@ -137,14 +141,14 @@ addCommonOptions(
         reuse: boolean;
         name: string[];
         kind?: string;
-        file?: string;
+        file: string[];
         force?: boolean;
         accept?: string;
       },
     ) => {
       const { root, projects } = loadWorkspace(opts);
       if (opts.accept !== undefined) {
-        if (opts.force || opts.name.length || opts.file || opts.kind || !opts.checks || !opts.reuse) {
+        if (opts.force || opts.name.length || opts.file.length || opts.kind || !opts.checks || !opts.reuse) {
           fail(
             new Error(
               "--accept only records an acknowledgement; run it without --force, --name, --file, --kind, --no-checks and --no-reuse.",
@@ -162,21 +166,32 @@ addCommonOptions(
         return;
       }
       // Only wrappers are matched per file: a name scoped with --file is a local, parameter or field.
-      const kind = opts.kind ?? (opts.file ? "wrapper" : "alias");
+      const kind = opts.kind ?? (opts.file.length ? "wrapper" : "alias");
       if (kind !== "alias" && kind !== "wrapper") {
         fail(new Error(`--kind must be alias or wrapper, not "${kind}".`));
       }
       if (!opts.checks && !opts.reuse) fail(new Error("--no-reuse has nothing to reuse with --no-checks."));
-      if (opts.file && opts.name.length === 0) fail(new Error("--file scopes --name entries; pass --name too."));
-      if (opts.file && kind !== "wrapper") fail(new Error("--file scopes wrapper names; drop --kind alias."));
-      const scope = opts.file && relativePath(root, path.resolve(opts.file));
-      if (scope?.startsWith("..")) fail(new Error(`--file ${opts.file} is outside ${root}.`));
-      const added: RecordedName[] = opts.name.map((name) => ({
-        name,
-        kind: kind as RecordedName["kind"],
-        source: "agent",
-        ...(scope ? { file: scope } : {}),
-      }));
+      if (opts.file.length && opts.name.length === 0) fail(new Error("--file scopes --name entries; pass --name too."));
+      if (opts.file.length && kind !== "wrapper") fail(new Error("--file scopes wrapper names; drop --kind alias."));
+      const scopes = [
+        ...new Set(
+          opts.file.flatMap((file) => {
+            const rel = relativePath(root, path.resolve(file));
+            if (rel.startsWith("..")) fail(new Error(`--file ${file} is outside ${root}.`));
+            return withScopeFiles(projects, root, rel);
+          }),
+        ),
+      ];
+      const added: RecordedName[] = opts.name.flatMap((name) =>
+        (scopes.length ? scopes : [undefined]).map(
+          (file): RecordedName => ({
+            name,
+            kind: kind as RecordedName["kind"],
+            source: "agent",
+            ...(file ? { file } : {}),
+          }),
+        ),
+      );
       let result: ReturnType<typeof writeBaseline>;
       try {
         validateAgentNames(projects, added);

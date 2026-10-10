@@ -37,7 +37,7 @@ Without `failure`: a build, stop. Tests: stop if the failures (`results.failedTe
 ## 3. Find every usage
 
 - Grep for each name in `names[]`: code, templates, config and tests. `parameterizedTests[]` are test calls passing ON/OFF.
-- `suggestedNames[]`: values of the flag with generic names. Record each that carries only this flag, a local, parameter or field with `--file <its file>`.
+- `suggestedNames[]`: values of the flag with generic names. Record each that carries only this flag, a local, parameter or field with `--file <its file>` (repeat `--file` for each file; a component's template is added for you).
 - Follow the value further: a method or property returning it, a field or local holding it, a parameter
   it's passed as, a DI-registered bool. Record each so `verify` checks it, then grep for it:
   `flagrm baseline <flag> --name IsNewCheckoutEnabledAsync --kind wrapper` (`--kind alias` for a constant like `Flags.NewCheckout`).

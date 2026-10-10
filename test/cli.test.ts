@@ -150,6 +150,24 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
     expect(alias.stderr).toContain("--file scopes wrapper names");
   });
 
+  it("baseline --file repeats, and adds a component's template once", () => {
+    const ts = "frontend/src/app/checkout/checkout.component.ts";
+    const html = "frontend/src/app/checkout/checkout.component.html";
+    const steps = "frontend/src/app/checkout/checkout-steps.component.ts";
+    const r = runCli(
+      ["baseline", "NewCheckout", "--name", "promoCode", "--file", ts, "--file", html, "--file", steps, "--json"],
+      dir,
+    );
+    expect(r.status).toBe(0);
+    const recorded = JSON.parse(fs.readFileSync(path.join(dir, ".flagrm", "NewCheckout", "baseline.json"), "utf8"))
+      .names.filter((n: { name: string }) => n.name === "promoCode")
+      .map((n: { file?: string }) => n.file);
+    expect(recorded).toEqual([ts, html, steps]);
+    const outside = runCli(["baseline", "NewCheckout", "--name", "x", "--file", ts, "--file", "../elsewhere.ts"], dir);
+    expect(outside.status).toBe(2);
+    expect(outside.stderr).toContain("--file ../elsewhere.ts is outside");
+  });
+
   it("baseline refuses to overwrite an existing baseline without --force", () => {
     const { status, stderr } = runCli(["baseline", "NewCheckout", "--no-checks"], dir);
     expect(status).toBe(2);
