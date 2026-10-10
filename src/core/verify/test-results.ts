@@ -1,8 +1,9 @@
 /**
  * Read test counts and names from the result files a test command writes:
- * TRX (`dotnet test --logger trx`) and JUnit XML (Karma, Jest, Vitest, NUnit
- * and most CI reporters). Both are parsed with regexes over tags and
- * attributes, which is enough for these machine-written formats.
+ * TRX (`dotnet test --logger trx`), JUnit XML (Karma, Jest, Vitest, NUnit
+ * and most CI reporters) and Jest JSON (`jest --json`, Vitest's `json`
+ * reporter). They are parsed with regexes over tags and attributes, or
+ * JSON.parse, which is enough for these machine-written formats.
  */
 
 import fs from "node:fs";
@@ -148,6 +149,52 @@ export function parseJUnit(xml: string): TestRunResults {
   return results;
 }
 
+interface JestJson {
+  testResults?: Array<{
+    name?: string;
+    assertionResults?: Array<{ ancestorTitles?: string[]; title?: string; status?: string }>;
+  }>;
+}
+
+/**
+ * Jest's `--json` output (Vitest's `json` reporter writes the same shape): a
+ * test is named by its `describe` titles and its own, joined like JUnit names;
+ * a test outside any `describe` by its file name. Undefined when the text isn't that.
+ */
+export function parseJestJson(text: string): TestRunResults | undefined {
+  let json: JestJson;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(json?.testResults)) return undefined;
+  const results = empty();
+  for (const file of json.testResults) {
+    for (const test of file.assertionResults ?? []) {
+      const owners = test.ancestorTitles?.length ? test.ancestorTitles : file.name ? [path.basename(file.name)] : [];
+      const status = test.status ?? "";
+      record(
+        results,
+        [...owners, test.title ?? ""].join(JUNIT_SEPARATOR),
+        status === "passed" ? "passed" : status === "failed" ? "failed" : "skipped",
+      );
+    }
+  }
+  return results;
+}
+
+/** One result file by its content: TRX, Jest JSON or JUnit XML. Undefined when it can't be read as any. */
+function parseResultFile(text: string): TestRunResults | undefined {
+  if (/^\s*\{/.test(text)) return parseJestJson(text);
+  return /<TestRun\b/.test(text) ? parseTrx(text) : parseJUnit(text);
+}
+
+/** Whether results name every test that ran (read from result files), not only the failing ones a log names. */
+export function hasTestNames(results: TestRunResults | undefined): results is TestRunResults {
+  return results !== undefined && results.source !== "log";
+}
+
 /** Result files earlier runs read, with their modification time then: a file rewritten since is new data. */
 export type ClaimedResults = Map<string, number>;
 
@@ -157,7 +204,7 @@ export type ClaimedResults = Map<string, number>;
  * Files in `claimed` that haven't changed since are skipped: another
  * project's run just wrote them, and an overlapping pattern
  * (`./**\/TestResults/*.trx`) would count them twice. The files read are
- * added to `claimed`. Undefined when no such file exists.
+ * added to `claimed`. Undefined when no such file exists or none can be read.
  */
 export function collectTestResults(
   pattern: string,
@@ -175,8 +222,9 @@ export function collectTestResults(
   if (files.length === 0) return undefined;
   const merged = empty();
   for (const { file } of files) {
-    const xml = fs.readFileSync(file, "utf8");
-    const parsed = /<TestRun\b/.test(xml) ? parseTrx(xml) : parseJUnit(xml);
+    // A file that is still being written, or isn't a result file, is skipped rather than failing the run.
+    const parsed = parseResultFile(fs.readFileSync(file, "utf8"));
+    if (!parsed) continue;
     merged.total += parsed.total;
     merged.passed += parsed.passed;
     merged.failed += parsed.failed;
@@ -185,5 +233,5 @@ export function collectTestResults(
     merged.failedNames.push(...parsed.failedNames);
     merged.files.push(file);
   }
-  return merged;
+  return merged.files.length ? merged : undefined;
 }

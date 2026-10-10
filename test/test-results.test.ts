@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   collectTestResults,
   diffTestNames,
+  hasTestNames,
+  parseJestJson,
   parseJUnit,
   parseTrx,
   shortTestName,
@@ -54,6 +56,52 @@ describe("parseJUnit", () => {
   });
 });
 
+const JEST = JSON.stringify({
+  testResults: [
+    {
+      name: "/repo/src/app/checkout.spec.ts",
+      assertionResults: [
+        { ancestorTitles: ["CheckoutComponent", "submit"], title: "places the order", status: "passed" },
+        { ancestorTitles: ["CheckoutComponent"], title: "shows the title", status: "failed" },
+        { ancestorTitles: ["CheckoutComponent"], title: "is pending", status: "pending" },
+        { ancestorTitles: [], title: "top level", status: "todo" },
+      ],
+    },
+  ],
+});
+
+describe("parseJestJson", () => {
+  it("names tests by their describe titles and maps statuses", () => {
+    expect(parseJestJson(JEST)).toEqual({
+      total: 4,
+      passed: 1,
+      failed: 1,
+      skipped: 2,
+      names: [
+        "CheckoutComponent › submit › places the order",
+        "CheckoutComponent › shows the title",
+        "CheckoutComponent › is pending",
+        "checkout.spec.ts › top level",
+      ],
+      failedNames: ["CheckoutComponent › shows the title"],
+      files: [],
+    });
+  });
+
+  it("is undefined for text that isn't Jest JSON", () => {
+    expect(parseJestJson("{ half")).toBeUndefined();
+    expect(parseJestJson('{"other":1}')).toBeUndefined();
+  });
+});
+
+describe("hasTestNames", () => {
+  it("is true for results from files only", () => {
+    expect(hasTestNames(undefined)).toBe(false);
+    expect(hasTestNames(parseJUnit(JUNIT))).toBe(true);
+    expect(hasTestNames({ ...parseJUnit(JUNIT), source: "log" })).toBe(false);
+  });
+});
+
 describe("collectTestResults", () => {
   let tmp: string;
   beforeEach(() => {
@@ -74,6 +122,28 @@ describe("collectTestResults", () => {
 
   it("returns undefined when no fresh result file exists", () => {
     expect(collectTestResults(path.join(tmp, "*.trx"), Date.now())).toBeUndefined();
+  });
+
+  it("merges sharded JUnit files and Jest JSON, skipping a file it can't parse", () => {
+    const dir = path.join(tmp, "shards");
+    fs.mkdirSync(dir);
+    for (const i of [1, 2, 3]) {
+      fs.writeFileSync(
+        path.join(dir, `junit-${i}.xml`),
+        `<testsuite><testcase classname="S${i}" name="t"/></testsuite>`,
+      );
+    }
+    fs.writeFileSync(path.join(dir, "jest.json"), JEST);
+    fs.writeFileSync(path.join(dir, "broken.json"), "{ half");
+    const merged = collectTestResults(path.join(dir, "*"), Date.now() - 1000);
+    expect(merged?.total).toBe(7);
+    expect(merged?.names).toContain("S2 › t");
+    expect(merged?.files.map((f) => path.basename(f)).sort()).toEqual([
+      "jest.json",
+      "junit-1.xml",
+      "junit-2.xml",
+      "junit-3.xml",
+    ]);
   });
 });
 
