@@ -184,7 +184,7 @@ export interface TestRunResults {
 /** One build or test command run for the baseline (or by `verify`). */
 export interface CheckRun {
   project: string;
-  check: "build" | "test";
+  check: "build" | "test" | "lint";
   command: string;
   exitCode: number;
   durationMs: number;
@@ -290,7 +290,13 @@ export interface CommandSnapshot {
 export interface ConfigSnapshot {
   /** The config file (relative to the config root) and its text; absent without one. */
   file?: { path: string; text: string };
-  projects: Array<{ name: string; build?: CommandSnapshot; test?: CommandSnapshot; testResults?: string }>;
+  projects: Array<{
+    name: string;
+    build?: CommandSnapshot;
+    test?: CommandSnapshot;
+    lint?: CommandSnapshot;
+    testResults?: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------

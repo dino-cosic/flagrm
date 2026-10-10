@@ -44,6 +44,17 @@ describe("configSnapshot", () => {
     expect(api.test?.files.map((f) => f.path)).toEqual(["api/ci.runsettings", "api/flagrm.slnf"]);
     expect(api.testResults).toBe("api/TestResults/*.trx");
   });
+
+  it("records a configured lint command, and no lint key without one", () => {
+    expect(snapshot().projects[0]).not.toHaveProperty("lint");
+    const s = snapshot(
+      CONFIG.replace("    testResults:", "    lint: dotnet format --verify-no-changes flagrm.slnf\n    testResults:"),
+    );
+    expect(s.projects[0].lint).toEqual({
+      command: "dotnet format --verify-no-changes flagrm.slnf",
+      files: [{ path: "api/flagrm.slnf", sha256: expect.any(String) }],
+    });
+  });
 });
 
 describe("configChanges", () => {
@@ -133,6 +144,14 @@ describe("projectCommands", () => {
     expect(c.test).toBe("dotnet test Api.sln");
     expect(c.testResults).toBeUndefined();
     expect(c.defaults).toEqual(["build"]);
+  });
+
+  it("resolves lint only from the config, never from the adapter", () => {
+    expect(resolve(project).lint).toBeUndefined();
+    const c = resolve(`${project}    lint: npx eslint .\n`);
+    expect(c.lint).toBe("npx eslint .");
+    expect(c.defaults).not.toContain("lint");
+    expect(resolve(`${project}    lint: false\n`).lint).toBeUndefined();
   });
 
   it("turns a command off with false", () => {

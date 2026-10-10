@@ -106,15 +106,15 @@ addCommonOptions(
   program
     .command("baseline <flag>")
     .description(
-      "record the state before removing a flag: the git commit, each project's build and test results, and the " +
+      "record the state before removing a flag: the git commit, each project's build, test and lint results, and the " +
         "flag's names for the leftovers check; writes .flagrm/<flag>/baseline.json for verify. With --name on an " +
         "existing baseline, only adds names",
     ),
 )
-  .option("--no-checks", "record only the git state, without running build and test commands")
+  .option("--no-checks", "record only the git state, without running build, test and lint commands")
   .option(
     "--no-reuse",
-    "run build and tests even when a passing verify on the same tree and commands saved their results",
+    "run build, tests and lint even when a passing verify on the same tree and commands saved their results",
   )
   .option("--name <name>", "add a name the flag is read through (repeatable)", collect, [])
   .option(
@@ -239,7 +239,7 @@ addCommonOptions(
   .option("--md", "print a markdown overview (for the user or a PR) instead of text")
   .option(
     "--no-reuse",
-    "run build and tests even when a passing verify on the same tree and commands saved their results",
+    "run build, tests and lint even when a passing verify on the same tree and commands saved their results",
   )
   .action(
     async (flag: string, opts: CommonOptions & { skip?: string; strict?: boolean; md?: boolean; reuse: boolean }) => {

@@ -12,11 +12,13 @@ import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
 import type { CheckId, CommandSnapshot, ConfigSnapshot } from "./types.js";
 import { relativePath } from "./util.js";
 
-export type CommandKey = "build" | "test" | "testResults";
+export type CommandKey = "build" | "test" | "lint" | "testResults";
 
 export interface ResolvedCommands {
   build?: string;
   test?: string;
+  /** Only ever the configured one: lint has no adapter default. */
+  lint?: string;
   /** Absolute path or glob of the result files the test command writes. */
   testResults?: string;
   /** Keys that came from the adapter's defaults rather than the config. */
@@ -24,8 +26,8 @@ export interface ResolvedCommands {
 }
 
 /**
- * A project's build/test commands, each resolved on its own: the configured
- * one, none for `false`, else the adapter's default. `testResults` defaults
+ * A project's build/test/lint commands, each resolved on its own: the
+ * configured one, none for `false`, else the adapter's default (lint has none). `testResults` defaults
  * only along with the default test command, whose output location it names.
  */
 export function projectCommands(adapter: Adapter, ctx: ProjectContext): ResolvedCommands {
@@ -40,6 +42,7 @@ export function projectCommands(adapter: Adapter, ctx: ProjectContext): Resolved
       out.defaults.push(key);
     }
   }
+  if (typeof ctx.project.lint === "string") out.lint = ctx.project.lint;
   if (ctx.project.testResults) out.testResults = ctx.project.testResults;
   else if (out.defaults.includes("test") && fallback.testResults) {
     out.testResults = fallback.testResults;
@@ -69,6 +72,7 @@ export function configSnapshot(projects: Workspace): ConfigSnapshot {
     const entry: ConfigSnapshot["projects"][number] = { name: ctx.name };
     if (commands.build) entry.build = command(commands.build);
     if (commands.test) entry.test = command(commands.test);
+    if (commands.lint) entry.lint = command(commands.lint);
     if (commands.testResults) entry.testResults = relativePath(root, commands.testResults);
     snapshot.projects.push(entry);
   }

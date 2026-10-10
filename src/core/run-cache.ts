@@ -124,20 +124,22 @@ export function reuseRuns(found: FoundRuns, logDir: string): CheckRun[] {
   });
 }
 
-/** A baseline's build and test runs: reused from a passing verify on the same tree and commands, else run. */
+/** A baseline's build, test and lint runs: reused from a passing verify on the same tree and commands, else run. */
 export async function baselineRuns(root: string, flag: string, projects: Workspace, reuse = true): Promise<CheckRun[]> {
   const logDir = flagDir(root, flag);
   const key = reuse ? runsKey(root, projects) : undefined;
-  const found = key ? findRuns(root, projects, key, plannedRuns(projects, ["build", "test"])) : undefined;
+  const found = key ? findRuns(root, projects, key, plannedRuns(projects, ["build", "test", "lint"])) : undefined;
   return found ? reuseRuns(found, logDir) : runChecks(projects, logDir);
 }
+
+const CHECK_LABEL: Record<CheckRun["check"], string> = { build: "build", test: "tests", lint: "lint" };
 
 /** One line saying which runs were reused and from where, or undefined when none were. `at`: when they were reused. */
 export function reusedNote(runs: ReadonlyArray<Pick<CheckRun, "check" | "reused">>, at: string): string | undefined {
   const reused = runs.find((r) => r.reused)?.reused;
   if (!reused) return undefined;
-  const checks = [...new Set(runs.filter((r) => r.reused).map((r) => (r.check === "test" ? "tests" : "build")))];
-  const what = checks.length === 2 ? "build and tests" : checks[0];
+  const checks = [...new Set(runs.filter((r) => r.reused).map((r) => CHECK_LABEL[r.check]))];
+  const what = checks.length > 1 ? `${checks.slice(0, -1).join(", ")} and ${checks.at(-1)}` : checks[0];
   return `${what} reused from ${reused.flag}'s verify (same tree and commands, ${age(Date.parse(at) - Date.parse(reused.createdAt))} ago; --no-reuse to run them)`;
 }
 

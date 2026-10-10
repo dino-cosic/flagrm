@@ -217,14 +217,15 @@ export function incrementalBuildGap(adapter: Adapter, build: string | undefined)
 }
 
 /**
- * Build then test every project, each command resolved on its own (see
- * `projectCommands`): the configured one, none for `false`, else the
- * adapter's default (`dotnet build --no-incremental`, `npx ng test`, ...).
+ * Build, test, then lint every project, each command resolved on its own
+ * (see `projectCommands`): the configured one, none for `false`, else the
+ * adapter's default (`dotnet build --no-incremental`, `npx ng test`, ...;
+ * lint has none).
  */
 export async function runChecks(
   projects: Workspace,
   logDir: string,
-  only: ReadonlyArray<CheckRun["check"]> = ["build", "test"],
+  only: ReadonlyArray<CheckRun["check"]> = ["build", "test", "lint"],
 ): Promise<CheckRun[]> {
   const runs: CheckRun[] = [];
   // Projects whose `testResults` patterns overlap must not count each other's result files.
