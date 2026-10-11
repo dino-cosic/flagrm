@@ -5,7 +5,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { words } from "../src/core/flag-words.js";
 import type { RecordedName } from "../src/core/types.js";
-import { classifyRemovedTests, type RemovedTestsContext } from "../src/core/verify/removed-tests.js";
+import {
+  classifyRemovedTests,
+  declaredTestDiff,
+  declaredTests,
+  type RemovedTestsContext,
+} from "../src/core/verify/removed-tests.js";
 
 let tmp: string;
 const git = (...args: string[]) => execFileSync("git", args, { cwd: tmp, encoding: "utf8" }).trim();
@@ -141,5 +146,104 @@ describe("classifyRemovedTests", () => {
       const result = classifyRemovedTests(["Ns.UntouchedTests.Runs"], [], [], ctx({ sha, changedFiles: files }));
       expect(result.deleted).toEqual(["Ns.UntouchedTests.Runs"]);
     });
+  });
+});
+
+describe("declaredTests", () => {
+  it("names JS tests by their enclosing describe titles", () => {
+    const spec = [
+      "describe('CheckoutComponent', () => {",
+      "  it('places the order', () => { const o = { a: 1 }; });",
+      "  describe.each([[1], [2]])('submit', () => {",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal template text under test
+      "    test.skip(`retries ${'x'}`, () => {});",
+      "  });",
+      "  // it('commented out', () => {});",
+      "  it(\"shows the title\", () => { expect(/x/.test('not a test')).toBe(true); });",
+      "});",
+      "it('top level', () => {});",
+      "it.todo('later');",
+    ].join("\n");
+    expect(declaredTests(spec, "a.spec.ts")).toEqual([
+      "CheckoutComponent › places the order",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal template text under test
+      "CheckoutComponent › submit › retries ${'x'}",
+      "CheckoutComponent › shows the title",
+      "top level",
+      "later",
+    ]);
+  });
+
+  it("names C# test methods like TRX, Go and pytest functions by name", () => {
+    const cs = [
+      "namespace Shop.Tests;",
+      "public class CheckoutTests {",
+      "  [Fact]",
+      "  public async Task PlacesOrder() {}",
+      "  [Theory]",
+      "  [InlineData(true)]",
+      "  public void Quote(bool express) {}",
+      "  private void Helper() {}",
+      "}",
+    ].join("\n");
+    expect(declaredTests(cs, "CheckoutTests.cs")).toEqual([
+      "Shop.Tests.CheckoutTests.PlacesOrder",
+      "Shop.Tests.CheckoutTests.Quote",
+    ]);
+    expect(declaredTests("func TestCart(t *testing.T) {}\nfunc helper() {}", "cart_test.go")).toEqual(["TestCart"]);
+    expect(declaredTests("def test_total():\n    pass\ndef helper():\n    pass", "test_cart.py")).toEqual([
+      "test_total",
+    ]);
+    expect(declaredTests("it('x', () => {})", "README.md")).toEqual([]);
+  });
+});
+
+describe("declaredTestDiff", () => {
+  it("flags data rows and .each cases, which logs count one by one", () => {
+    git("init", "-q");
+    fs.writeFileSync(path.join(tmp, "CartTests.cs"), "[Theory]\n[InlineData(true)]\npublic void Quote(bool b) {}\n");
+    fs.writeFileSync(path.join(tmp, "b.spec.ts"), "it.each([1, 2])('x %i', () => {});\n");
+    fs.writeFileSync(path.join(tmp, "c.spec.ts"), "it('x', () => {});\n");
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
+    const sha = git("rev-parse", "HEAD");
+    for (const f of ["CartTests.cs", "b.spec.ts", "c.spec.ts"]) fs.appendFileSync(path.join(tmp, f), "\n");
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["CartTests.cs"] })).rows).toBe(true);
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["b.spec.ts"] })).rows).toBe(true);
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["c.spec.ts"] })).rows).toBe(false);
+  });
+
+  it("compares declarations at the baseline and now as multisets", () => {
+    git("init", "-q");
+    const file = path.join(tmp, "a.spec.ts");
+    const block = (title: string) => `describe('Cart', () => { it('${title}', () => {}); });\n`;
+    fs.writeFileSync(file, block("adds") + block("adds") + block("removes when NewCheckout is on"));
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
+    const sha = git("rev-parse", "HEAD");
+    fs.writeFileSync(file, block("adds") + block("removes"));
+    expect(declaredTestDiff(ctx({ sha, changedFiles: ["a.spec.ts"] }))).toMatchObject({
+      removed: ["Cart › adds", "Cart › removes when NewCheckout is on"],
+      added: ["Cart › removes"],
+      now: ["Cart › adds", "Cart › removes"],
+      rows: false,
+    });
+  });
+
+  it("counts a test file new since the baseline, so a moved spec cancels out", () => {
+    git("init", "-q");
+    const body = "describe('Cart', () => { it('adds', () => {}); it('removes', () => {}); });\n";
+    fs.mkdirSync(path.join(tmp, "old"));
+    fs.writeFileSync(path.join(tmp, "old", "a.spec.ts"), body);
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before");
+    const sha = git("rev-parse", "HEAD");
+    fs.rmSync(path.join(tmp, "old"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, "new"));
+    fs.writeFileSync(path.join(tmp, "new", "a.spec.ts"), body);
+    const diff = declaredTestDiff(ctx({ sha, changedFiles: ["old/a.spec.ts", "new/a.spec.ts"] }));
+    expect(diff.removed).toEqual([]);
+    expect(diff.added).toEqual([]);
+    expect(diff.now).toEqual(["Cart › adds", "Cart › removes"]);
   });
 });

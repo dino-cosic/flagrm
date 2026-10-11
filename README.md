@@ -129,7 +129,7 @@ of these reasons is a warning, for the agent to explain in its notes.
 | `leftovers` | A recorded name (the flag literal, its constants, wrappers the agent recorded) is still in code or config. A mention in a comment is a warning, and so is a test that checks text the removal deleted from the code (a test of the OFF path that never names the flag), or deleted text whose replacement on the same line no test checks (lost ON coverage) |
 | `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files. A method, property, field or type the removal left named only where it is declared is a warning (compilers don't report public members) |
 | `build` | A project's build command fails |
-| `tests` | A test that passed at the baseline fails. With `testResults`, tests that already failed at the baseline are known failures and only warn. A test that no longer runs though the diff neither deletes nor renames it and the test config is unchanged, and a changed test file none of whose tests ran, are warnings for the agent to account for |
+| `tests` | A test that passed at the baseline fails. Tests that already failed at the baseline are known failures and only warn; without `testResults` they are read from the test log (Karma, Jest, Vitest, `dotnet test`), and count as known only when the log names every failing test. A test that no longer runs though the diff neither deletes nor renames it and the test config is unchanged, and a changed test file none of whose tests ran, are warnings for the agent to account for. Without `testResults`, deleted and renamed tests come from the changed test files, and a test count that dropped by more than the diff deletes is a warning (info when the changed test files use data rows such as `[InlineData]`, `TestCase`, `DataRow` or `.each`, whose cases count separately, or when the test config changed since the baseline) |
 | `lint` | The project's `lint` command fails where it passed at the baseline. A lint that already failed at the baseline only warns, unless its log has error lines the baseline's didn't (line and column numbers ignored); a missing package script or ESLint config is a setup problem and fails |
 | `coverage` | A changed file that no project's build, test or lint command checks (outside every project with a command, or outside its `covers` globs) is a warning, so it fails only with `--strict`. Files already dirty at the baseline and unchanged since don't count, nor do projects whose commands `--skip` left out |
 
@@ -180,11 +180,18 @@ path. `build` and `test` are resolved one at a time:
 | a command | that command |
 | `false` | none, not even the default |
 
-`testResults` (JUnit XML or TRX) lets `verify` compare individual tests
-against the baseline, so a test that already failed before the removal only
-warns. Only files written during the run are read. The default .NET test
-command writes TRX to `.flagrm/test-results/<project>/` and reads it; a `test`
-command of your own needs its own `testResults`. `timeout` (seconds) fails a project's build or test command that runs longer, for example
+`testResults` (JUnit XML, TRX or Jest JSON; a path or a glob) lets `verify`
+compare individual tests against the baseline. Only files written during
+the run are read, and every matching file is merged, so a sharded run can
+use `./test-results/*.xml`. The default .NET test command writes TRX to
+`.flagrm/test-results/<project>/`. So does the default Angular test command,
+when the workspace's runner can write results without setup: JUnit for
+Angular's Vitest builder and Vitest, Jest JSON for Jest, and JUnit for Karma
+once karma.conf configures `karma-junit-reporter`. A `test` command of your
+own needs its own `testResults`, and `flagrm doctor` says what to add.
+Without result files, `verify` reads failing test names and counts from the
+test log and deleted tests from the diff, which is coarser: passing tests
+aren't named. `timeout` (seconds) fails a project's build or test command that runs longer, for example
 a test runner left in watch mode. `tools` lists the AI coding tools whose files
 `init` and `update` manage (`claude-code`, `copilot`, `codex`); dropping one
 leaves its files in place, and `init` names them so you can delete them.

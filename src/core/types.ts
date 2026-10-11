@@ -182,6 +182,8 @@ export interface TestRunResults {
   failedNames: string[];
   /** Result files the counts were read from. */
   files: string[];
+  /** Where the results came from: result files (the default when absent) or, without any, the test command's log, which names only failing tests. */
+  source?: "files" | "log";
 }
 
 /** One build or test command run for the baseline (or by `verify`). */
@@ -364,6 +366,10 @@ export interface TestComparison {
   excludedByConfig: string[];
   /** None of the above: the only ones `verify` warns about. */
   unexplained: string[];
+  /** Without names from result files: how many more tests stopped running, by the log's counts, than the diff deletes. */
+  missing?: number;
+  /** `missing` may be data rows or `.each` cases, which logs count separately from declarations. */
+  missingMayBeRows?: boolean;
 }
 
 /** A build/test run in a verify report: test counts without the per-test name lists. */

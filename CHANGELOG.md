@@ -9,6 +9,17 @@ contain breaking changes.
 
 ### Added
 
+- `testResults` reads Jest JSON (`jest --json`, Vitest's `json` reporter); a
+  result file that doesn't parse, or an XML file that isn't complete, is skipped.
+- Without `testResults`, `verify` reads the changed test files to list
+  deleted and renamed tests, and warns when the log's test count dropped by
+  more than the diff deletes.
+- Without `testResults`, `verify` reads failing test names and counts from
+  the test command's log (Karma, Jest, Vitest, `dotnet test`; Go and pytest
+  names), so a test that already failed at the baseline is a known failure
+  there too.
+- `doctor`'s warning about a test command without `testResults` says how
+  to get results for the detected runner (Vitest, Jest, Karma, `dotnet test`).
 - An optional per-project `lint` command (lint or type-check), run by
   `baseline`, `verify` and `doctor --run`. `verify`'s new `lint` check fails
   on lint errors the removal caused; a lint that already failed at the
@@ -17,7 +28,8 @@ contain breaking changes.
 - `verify`'s new `coverage` check warns about changed files that no build,
   test or lint command checks; a project's optional `covers` globs say which
   files its commands check (default: everything under its path). Files
-  already dirty at the baseline and unchanged since don't count. With
+  already dirty at the baseline and unchanged since don't count, nor do
+  documentation and deleted files outside every project. With
   `--strict`, such a file now fails verify.
 - `/flagrm-remove` takes several flags (`/flagrm-remove A B C`): it asks
   once whether they are all ON and whether to commit each one, then removes
@@ -52,9 +64,18 @@ contain breaking changes.
 - JSON schema version 8: `--json`, `baseline.json` and `verify.json` gain
   the `lint` and `coverage` checks, `lint` runs and `git.dirtyHashes`.
   Version 6 and 7 baselines are still read.
+- The Angular adapter's default test command now writes test results when
+  the workspace's runner can without setup: JUnit for Angular's Vitest
+  builder (`ng test --reporters=junit --output-file`) and plain Vitest, Jest
+  JSON for Jest, and JUnit for Karma once karma.conf configures
+  `karma-junit-reporter`. Results go to `.flagrm/test-results/<project>/`.
+  A baseline taken before upgrading reports the test command as changed
+  once; `flagrm baseline <flag> --accept config` or a new baseline clears it.
 
 ### Fixed
 
+- A failed test run without test results showed only "exited with 1":
+  `verify` now lists the log's error lines, as for a failed build.
 - A lint, build or test command that fails because its package script
   (`npm run lint` without a `lint` script) or ESLint config is missing is a
   setup problem: `verify` and `doctor --run` fail on it instead of treating

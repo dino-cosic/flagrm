@@ -2,13 +2,15 @@
  * Why each baseline test no longer runs. Deleting the OFF path's tests and
  * dropping the flag from test names is part of a removal, and a narrower test
  * command leaves tests out on purpose; only the rest needs explaining.
+ * Without result files, the changed test files' declarations stand in for the
+ * names (`declaredTestDiff`).
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { flagWords, words } from "../flag-words.js";
 import { fileAt } from "../git.js";
-import { escapeRegExp, isTestPath } from "../scan.js";
+import { computeCodeMask, escapeRegExp, isTestPath } from "../scan.js";
 import type { RecordedName } from "../types.js";
 import { JUNIT_SEPARATOR, testKey } from "./test-results.js";
 
@@ -33,17 +35,20 @@ export interface RemovedTestsContext {
   testConfigChanged: boolean;
 }
 
-/** Sort the tests that no longer run (`removed`) using the new ones (`added`) and the diff. */
+/**
+ * Sort the tests that no longer run (`removed`) using the new ones (`added`)
+ * and the diff. `files`: the changed test files when the caller already read them.
+ */
 export function classifyRemovedTests(
   removed: string[],
   added: string[],
   afterNames: string[],
   ctx: RemovedTestsContext,
+  files: ChangedTestFile[] = changedTestFiles(ctx),
 ): RemovedTests {
   const out: RemovedTests = { deleted: [], renamed: [], excludedByConfig: [], unexplained: [] };
   const renamedTo = matchRenames(removed, added, flagWords(ctx.names));
   const stillRuns = new Set(afterNames.map(testKey));
-  const files = changedTestFiles(ctx);
   for (const name of removed) {
     const to = renamedTo.get(testKey(name));
     if (to) out.renamed.push({ from: name, to });
@@ -105,26 +110,27 @@ function matchRenames(removed: string[], added: string[], flag: Set<string>): Ma
 
 // --- deletions -----------------------------------------------------------------
 
-interface ChangedTestFile {
+export interface ChangedTestFile {
+  rel: string;
   before: string;
   /** Undefined when the file was deleted. */
   now?: string;
 }
 
-function changedTestFiles(ctx: RemovedTestsContext): ChangedTestFile[] {
+function changedTestFiles(ctx: RemovedTestsContext, includeNew = false): ChangedTestFile[] {
   if (!ctx.sha) return [];
   const out: ChangedTestFile[] = [];
   for (const rel of ctx.changedFiles ?? []) {
     if (!isTestPath(rel)) continue;
     const before = fileAt(ctx.root, ctx.sha, rel);
-    if (before === undefined) continue;
+    if (before === undefined && !includeNew) continue;
     let now: string | undefined;
     try {
       now = fs.readFileSync(path.join(ctx.root, rel), "utf8");
     } catch {
       now = undefined;
     }
-    out.push({ before, now });
+    out.push({ rel, before: before ?? "", now });
   }
   return out;
 }
@@ -154,6 +160,11 @@ function isDeleted(name: string, keyStillRuns: boolean, files: ChangedTestFile[]
 /** xUnit (`InlineData`, `[Bit]AutoData(...)` with values), NUnit and MSTest attributes that each add a data row. */
 const DATA_ROW = /\b(?:\w*InlineData|\w*AutoData|TestCase|DataRow)\s*\(/g;
 
+/** Whether a test file has data-row attributes or `.each` cases. */
+function hasDataRows(text: string): boolean {
+  return new RegExp(DATA_ROW.source).test(text) || /\.each\s*[(`]/.test(text);
+}
+
 /**
  * How many data rows `own` has in `text`: the row attributes between the end
  * of the previous member and its declaration. For JUnit names (`it.each`
@@ -168,4 +179,85 @@ function dataRows(text: string, own: string, junit: boolean): number {
     rows += before.slice(start).match(DATA_ROW)?.length ?? 0;
   }
   return rows;
+}
+
+// --- declarations ----------------------------------------------------------------
+
+const JS_TEST =
+  /(?<![\w$.])(describe|fdescribe|xdescribe|context|suite|it|fit|xit|test)(?:\.(?:only|skip|todo))?(?:\.each\s*(?:\([\s\S]*?\)|`[\s\S]*?`))?\s*\(\s*(['"`])((?:\\.|(?!\2)[^\\])*)\2/g;
+
+/** `it`/`test` titles prefixed with the titles of the `describe` blocks around them (by brace depth over code). */
+function jsTests(text: string): string[] {
+  const code = computeCodeMask(text);
+  const out: string[] = [];
+  const open: Array<{ title: string; depth: number }> = [];
+  let depth = 0;
+  let pos = 0;
+  for (const m of text.matchAll(JS_TEST)) {
+    if (!code[m.index]) continue;
+    for (; pos < m.index; pos++) if (code[pos]) depth += text[pos] === "{" ? 1 : text[pos] === "}" ? -1 : 0;
+    while (open.length && open[open.length - 1].depth >= depth) open.pop();
+    if (/describe|context|suite/.test(m[1])) open.push({ title: m[3], depth });
+    else out.push([...open.map((d) => d.title), m[3]].join(JUNIT_SEPARATOR));
+  }
+  return out;
+}
+
+const CS_TEST =
+  /\[(?:Fact|Theory|Test|TestCase|TestMethod)\b[^\]]*\][\s\S]*?\b(?:void|Task|ValueTask)(?:<[^>]*>)?\s+(\w+)\s*\(/g;
+
+/** Test methods as TRX names them without data-row arguments: `Namespace.Class.Method`. */
+function csTests(text: string): string[] {
+  const ns = /^\s*namespace\s+([\w.]+)/m.exec(text)?.[1];
+  return [...text.matchAll(CS_TEST)].map((m) => {
+    const cls = [...text.slice(0, m.index).matchAll(/\bclass\s+(\w+)/g)].pop()?.[1];
+    return [ns, cls, m[1]].filter(Boolean).join(".");
+  });
+}
+
+/** The tests a test file declares, named as result files name them where the syntax allows. */
+export function declaredTests(text: string, file: string): string[] {
+  if (/\.[cm]?[jt]sx?$/.test(file)) return jsTests(text);
+  if (file.endsWith(".cs")) return csTests(text);
+  if (file.endsWith(".go")) return [...text.matchAll(/\bfunc (Test\w+)\s*\(/g)].map((m) => m[1]);
+  if (file.endsWith(".py")) return [...text.matchAll(/^\s*def (test_\w+)\s*\(/gm)].map((m) => m[1]);
+  return [];
+}
+
+/** `from` without the names in `other`, counting duplicates. */
+function minus(from: string[], other: string[]): string[] {
+  const left = new Map<string, number>();
+  for (const name of other) left.set(name, (left.get(name) ?? 0) + 1);
+  return from.filter((name) => {
+    const n = left.get(name) ?? 0;
+    left.set(name, n - 1);
+    return n <= 0;
+  });
+}
+
+/**
+ * What the changed test files declared at the baseline and don't now, the
+ * new declarations, and all declared now: the stand-in for result files'
+ * names when there are none.
+ */
+export function declaredTestDiff(ctx: RemovedTestsContext): {
+  removed: string[];
+  added: string[];
+  now: string[];
+  /** Whether a changed file has data rows or `.each` cases, which result logs count one by one and declarations don't. */
+  rows: boolean;
+  /** The changed test files read, for `classifyRemovedTests`. */
+  files: ChangedTestFile[];
+} {
+  const before: string[] = [];
+  const now: string[] = [];
+  let rows = false;
+  // A file new since the baseline declared nothing then, so a moved spec's tests cancel out.
+  const files = changedTestFiles(ctx, true);
+  for (const file of files) {
+    rows ||= hasDataRows(file.before) || (file.now !== undefined && hasDataRows(file.now));
+    before.push(...declaredTests(file.before, file.rel));
+    if (file.now !== undefined) now.push(...declaredTests(file.now, file.rel));
+  }
+  return { removed: minus(before, now), added: minus(now, before), now, rows, files };
 }

@@ -15,11 +15,18 @@ import path from "node:path";
 import { errorExcerpt, logLines, looksLikeError, templateCheckGap } from "../baseline.js";
 import { projectCommands } from "../config-snapshot.js";
 import { escapeRegExp, isTestPath } from "../scan.js";
-import { type CheckFinding, type CheckResult, type CheckRun, RUN_CHECK_ID, type TestComparison } from "../types.js";
+import {
+  type CheckFinding,
+  type CheckResult,
+  type CheckRun,
+  RUN_CHECK_ID,
+  type TestComparison,
+  type TestRunResults,
+} from "../types.js";
 import { relativePath } from "../util.js";
 import { checkResult, configFindings, plural, skippedResult, type VerifyContext } from "./context.js";
-import { classifyRemovedTests } from "./removed-tests.js";
-import { diffTestNames, shortTestNames, splitFailures } from "./test-results.js";
+import { classifyRemovedTests, declaredTestDiff } from "./removed-tests.js";
+import { diffTestNames, hasTestNames, shortTestNames, splitFailures } from "./test-results.js";
 
 function failedRunFindings(run: CheckRun): CheckFinding[] {
   const findings: CheckFinding[] = [
@@ -161,10 +168,11 @@ export function compareTests(v: VerifyContext): TestComparison[] {
   for (const run of v.runs.filter((r) => r.check === "test")) {
     const before = v.baseline.checks?.find((c) => c.project === run.project && c.check === "test")?.results;
     const after = run.results;
+    const counted = (r: TestRunResults | undefined) => (r && (r.total > 0 || hasTestNames(r)) ? r.total : undefined);
     const comparison: TestComparison = {
       project: run.project,
-      before: before?.total,
-      after: after?.total,
+      before: counted(before),
+      after: counted(after),
       removed: [],
       added: [],
       deleted: [],
@@ -180,19 +188,45 @@ export function compareTests(v: VerifyContext): TestComparison[] {
       comparison.newFailures = shortTestNames(failures.new);
       comparison.knownFailures = shortTestNames(failures.known);
     }
-    if (before && after) {
+    const projectRoot = v.projects.find(({ ctx }) => ctx.name === run.project)?.ctx.root;
+    const removedCtx = {
+      root: v.root,
+      sha: v.baseline.git.sha,
+      changedFiles: projectRoot
+        ? (v.changedFiles ?? []).filter((rel) => !path.relative(projectRoot, path.join(v.root, rel)).startsWith(".."))
+        : v.changedFiles,
+      names: v.baseline.names,
+      testConfigChanged: v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project),
+    };
+    if (hasTestNames(before) && hasTestNames(after)) {
       const { removed, added } = diffTestNames(before.names, after.names);
       Object.assign(comparison, { removed, added });
-      Object.assign(
-        comparison,
-        classifyRemovedTests(removed, added, after.names, {
-          root: v.root,
-          sha: v.baseline.git.sha,
-          changedFiles: v.changedFiles,
-          names: v.baseline.names,
-          testConfigChanged: v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project),
-        }),
+      Object.assign(comparison, classifyRemovedTests(removed, added, after.names, removedCtx));
+    } else {
+      // No names from result files on both sides: the test files' declarations show what the diff deleted or renamed.
+      const declared = declaredTestDiff(removedCtx);
+      const { renamed } = classifyRemovedTests(
+        declared.removed,
+        declared.added,
+        declared.now,
+        removedCtx,
+        declared.files,
       );
+      const from = new Set(renamed.map((r) => r.from));
+      Object.assign(comparison, {
+        removed: declared.removed,
+        added: declared.added,
+        renamed,
+        deleted: declared.removed.filter((name) => !from.has(name)),
+      });
+      if (comparison.before !== undefined && comparison.after !== undefined) {
+        const gap =
+          comparison.before - comparison.after - comparison.deleted.length + (declared.added.length - renamed.length);
+        if (gap > 0) {
+          comparison.missing = gap;
+          if (declared.rows) comparison.missingMayBeRows = true;
+        }
+      }
     }
     out.push(comparison);
   }
@@ -202,12 +236,17 @@ export function compareTests(v: VerifyContext): TestComparison[] {
 /**
  * For a test run that exited non-zero: its failed tests split into the ones
  * that already failed at the baseline and new ones. Undefined when that can't
- * be told (no result files now or at the baseline, or none of them failed, so
+ * be told (no results now or at the baseline, from different sources, or none of them failed, so
  * the command broke some other way).
  */
 function splitBaselineFailures(v: VerifyContext, run: CheckRun): { known: string[]; new: string[] } | undefined {
   const before = v.baseline.checks?.find((c) => c.project === run.project && c.check === "test")?.results;
   if (!before || !run.results?.failed) return undefined;
+  // Counts without all their names (a log may not name every failing test) can't be split.
+  if (run.results.failedNames.length < run.results.failed || before.failedNames.length < before.failed)
+    return undefined;
+  // Names from a log and from result files aren't spelled alike, so they can't be matched.
+  if ((before.source ?? "files") !== (run.results.source ?? "files")) return undefined;
   return splitFailures(before.failedNames, run.results.failedNames);
 }
 
@@ -226,7 +265,10 @@ function failedTestFindings(
       .slice(0, 20)
       .map((name) => ({ severity: "info", message: `${prefix}: ${name}`, project: run.project }));
   if (!failures) {
-    return [...failedRunFindings(run).slice(0, 1), ...list(run.results?.failedNames ?? [], "failed")];
+    const names = run.results?.failedNames ?? [];
+    const [head, ...excerpt] = failedRunFindings(run);
+    // Without failing test names, the log's error lines are all there is to go on; the caller adds a setup problem.
+    return [head, ...(names.length || run.failure ? [] : excerpt), ...list(names, "failed")];
   }
   if (failures.new.length === 0) {
     return [
@@ -277,13 +319,13 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
     const ctx = entry?.ctx;
     const testResults = entry && projectCommands(entry.adapter, entry.ctx).testResults;
     const comparison = comparisons.find((c) => c.project === run.project);
-    if (testResults && !run.results) {
+    if (testResults && !hasTestNames(run.results)) {
       findings.push({
         severity: "warn",
-        message: `no test results found at ${testResults}, so the test count was not compared`,
+        message: `no test results found at ${testResults}, so tests were not compared by name${run.results ? " (failing tests and counts read from the log)" : ""}`,
         project: run.project,
       });
-    } else if (run.results && comparison?.before === undefined) {
+    } else if (hasTestNames(run.results) && comparison?.before === undefined) {
       findings.push({
         severity: "info",
         message: "the baseline has no test results to compare with (run `flagrm baseline` before the removal)",
@@ -301,7 +343,16 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
         findings.push({ severity: "info", message: `no longer runs: ${name}`, project: run.project });
       }
     }
-    if (run.results && ctx) {
+    const missing = comparison?.missing ?? 0;
+    if (missing > 0 && comparison) {
+      const configChanged = v.originalConfigChanges.some((c) => c.check === "tests" && c.project === run.project);
+      findings.push({
+        severity: configChanged || comparison.missingMayBeRows ? "info" : "warn",
+        message: `${plural(missing, "more test stopped running", "more tests stopped running")} than the diff deletes (${comparison.before} → ${comparison.after}, ${comparison.deleted.length} deleted): account for ${missing === 1 ? "it" : "them"} in the PR${comparison.missingMayBeRows ? " (data rows and .each cases count separately, so this may be them)" : ""}`,
+        project: run.project,
+      });
+    }
+    if (hasTestNames(run.results) && ctx) {
       for (const file of changedTestFiles(v, ctx.root)) {
         if (testFileRan(file, ctx.root, run.results.names)) continue;
         findings.push({
@@ -323,6 +374,7 @@ export function testsCheck(v: VerifyContext, comparisons: TestComparison[]): Che
         c.renamed.length && `${c.renamed.length} renamed`,
         c.excludedByConfig.length && `${c.excludedByConfig.length} excluded by config`,
         c.unexplained.length && `${c.unexplained.length} unexplained`,
+        c.missing && `${c.missing} unaccounted for`,
       ].filter(Boolean);
       return `${c.project} ${c.before} → ${c.after}${why.length ? `: ${why.join(", ")}` : ""}`;
     });

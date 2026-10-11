@@ -94,6 +94,26 @@ describe("runDoctor", () => {
     }
   });
 
+  it("says how to get TRX results for a dotnet project", async () => {
+    fs.writeFileSync(
+      path.join(tmp, "flagrm.config.yaml"),
+      "projects:\n  - name: api\n    adapter: dotnet\n    path: .\n    build: dotnet build --no-incremental\n    test: dotnet test\n",
+    );
+    const onPath = process.env.PATH;
+    const bin = path.join(tmp, "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, process.platform === "win32" ? "dotnet.cmd" : "dotnet"), "", { mode: 0o755 });
+    process.env.PATH = `${bin}${path.delimiter}${onPath}`;
+    try {
+      const check = (await runDoctor(tmp)).checks.find((c) => c.message.includes("has no testResults"));
+      expect(check?.details).toEqual([
+        'fix: add `--logger trx --results-directory ".flagrm/test-results/api"` to the test command and set testResults: ./.flagrm/test-results/api/*.trx',
+      ]);
+    } finally {
+      process.env.PATH = onPath;
+    }
+  });
+
   it("fails on a project path that doesn't exist", async () => {
     fs.writeFileSync(
       path.join(tmp, "flagrm.config.yaml"),
@@ -116,8 +136,18 @@ describe("runDoctor", () => {
     config('node -e ""', 'node -e ""');
     commitAll();
     expect(await problems()).toContain(
-      "warn svc: test command has no testResults — verify can't compare tests by name, so a test that fails before the removal fails verify too",
+      "warn svc: test command has no testResults — verify reads failing tests and counts from the log only and deleted tests from the diff, so it can't compare tests by name",
     );
+  });
+
+  it("says how to get test results for the detected runner", async () => {
+    config('node -e ""', 'node -e ""');
+    fs.writeFileSync(path.join(tmp, "vitest.config.ts"), "");
+    commitAll();
+    const check = (await runDoctor(tmp)).checks.find((c) => c.message.includes("has no testResults"));
+    expect(check?.details).toEqual([
+      'fix: add `--reporter=default --reporter=junit --outputFile.junit=".flagrm/test-results/svc/junit.xml"` to the test command and set testResults: ./.flagrm/test-results/svc/junit.xml',
+    ]);
   });
 
   it("fails with --run when the test command writes no results matching testResults", async () => {
@@ -125,6 +155,23 @@ describe("runDoctor", () => {
     commitAll();
     expect(await problems(tmp, { run: true })).toContain(
       'fail svc: `node -e ""` wrote no test results matching out/*.xml',
+    );
+  });
+
+  it("fails --run when a log reports failed tests without naming them", async () => {
+    config('node -e ""', `node -e "console.log('Tests:       1 failed, 1 total');process.exit(1)"`);
+    commitAll();
+    const found = await problems(tmp, { run: true });
+    expect(found).toContainEqual(expect.stringMatching(/^fail svc: .* failed \(exit 1/));
+    expect(found.join("\n")).not.toContain("known failure");
+  });
+
+  it("still fails --run when testResults is set but only the log has test output", async () => {
+    fs.writeFileSync(path.join(tmp, "out.txt"), "Tests:       2 passed, 2 total\n");
+    config('node -e ""', `node -e "process.stdout.write(require('fs').readFileSync('out.txt','utf8'))"`, "./out/*.xml");
+    commitAll();
+    expect(await problems(tmp, { run: true })).toContainEqual(
+      expect.stringMatching(/wrote no test results matching out\/\*\.xml/),
     );
   });
 

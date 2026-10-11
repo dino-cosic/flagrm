@@ -21,6 +21,7 @@ import {
   type RecordedName,
 } from "./types.js";
 import { readJson, relativePath } from "./util.js";
+import { parseTestLog } from "./verify/log-results.js";
 import { type ClaimedResults, collectTestResults, shortTestNames } from "./verify/test-results.js";
 
 /**
@@ -105,7 +106,8 @@ export function readBaseline(root: string, flag: string): { baseline: Baseline; 
  * (no buffer limit, stdout and stderr interleaved as printed). A command that
  * can't start, is killed or outlives the project's `timeout` fails with the
  * reason at the end of the log. A test run also reads the `testResults`
- * files (absolute path or glob) written during it.
+ * files (absolute path or glob) written during it, or without any, what its
+ * log says (`log-results.ts`).
  */
 export async function runCheck(
   ctx: ProjectContext,
@@ -140,7 +142,9 @@ export async function runCheck(
     const problem = environmentProblem(fs.readFileSync(logFile, "utf8"), ctx.root);
     if (problem) run.failure = { kind: "environment", message: problem };
   }
-  const results = check === "test" && testResults ? collectTestResults(testResults, started, claimed) : undefined;
+  let results = check === "test" && testResults ? collectTestResults(testResults, started, claimed) : undefined;
+  // No result files: the runner's log still names failing tests and prints counts.
+  if (check === "test" && !results) results = parseTestLog(fs.readFileSync(logFile, "utf8"));
   if (results) run.results = results;
   return run;
 }

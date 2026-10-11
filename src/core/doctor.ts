@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { realProbes, type SetupProbes } from "../adapters/dotnet/setup.js";
-import type { Workspace } from "./adapter.js";
+import type { ProjectContext, Workspace } from "./adapter.js";
 import { errorExcerpt, incrementalBuildGap, runCheck, templateCheckGap } from "./baseline.js";
 import { changeFilter, changeFilterAt } from "./change-filter.js";
 import { findConfigFile, loadConfig, TOOL_IDS, type ToolId } from "./config.js";
@@ -17,9 +17,11 @@ import { installedSkillVersion, SKILLS, stopHookState, TOOL_SKILL_DIRS } from ".
 import { packageVersion } from "./package.js";
 import { resolveProjects } from "./registry.js";
 import { setupReport } from "./scope.js";
+import { detectTestRunner, testResultsHint } from "./test-runner.js";
 import { savedTools } from "./tools.js";
 import type { Baseline } from "./types.js";
 import { onPath, readJson, relativePath } from "./util.js";
+import { hasTestNames } from "./verify/test-results.js";
 
 export type DoctorStatus = "ok" | "warn" | "fail";
 
@@ -42,6 +44,17 @@ export interface DoctorOptions {
   run?: boolean;
   /** What the machine has (SDKs, `cargo`, Docker); the real machine by default. */
   probes?: SetupProbes;
+}
+
+/** How to get test results for a project without `testResults`: .NET writes TRX, JavaScript runners by detection. */
+function missingResultsFix(adapterId: string, ctx: ProjectContext, root: string): string {
+  const dir = path.join(root, ".flagrm", "test-results", ctx.name);
+  const fromProject = relativePath(ctx.root, dir) || ".";
+  const fromConfig = `./${relativePath(root, dir)}`;
+  if (adapterId === "dotnet") {
+    return `add \`--logger trx --results-directory "${fromProject}"\` to the test command and set testResults: ${fromConfig}/*.trx`;
+  }
+  return testResultsHint(detectTestRunner(ctx.root), fromProject, fromConfig, adapterId === "angular", root);
 }
 
 /** Check the setup in `cwd`: config and commands, git, .gitignore, skills, hook and abandoned baselines. */
@@ -152,7 +165,8 @@ async function configChecks(
       if (check === "test" && !commands.testResults) {
         add(
           "warn",
-          `${ctx.name}: test command has no testResults — verify can't compare tests by name, so a test that fails before the removal fails verify too`,
+          `${ctx.name}: test command has no testResults — verify reads failing tests and counts from the log only and deleted tests from the diff, so it can't compare tests by name`,
+          [`fix: ${missingResultsFix(adapter.id, ctx, root)}`],
         );
       }
       if (!options.run) {
@@ -163,7 +177,7 @@ async function configChecks(
       const log = path.join(root, ".flagrm", "doctor", `${ctx.name}.${check}.log`);
       const run = await runCheck(ctx, check, command, log, undefined, commands.testResults);
       // Proven here rather than halfway through a removal: without readable results, verify can't compare tests.
-      if (check === "test" && commands.testResults && !run.results) {
+      if (check === "test" && commands.testResults && !hasTestNames(run.results)) {
         add(
           "fail",
           `${ctx.name}: \`${command}\` wrote no test results matching ${relativePath(cwd, commands.testResults)}`,
@@ -172,7 +186,7 @@ async function configChecks(
         continue;
       }
       // A suite that is already red is no setup problem: the baseline records those tests as known failures.
-      if (run.exitCode !== 0 && run.results?.failed) {
+      if (run.exitCode !== 0 && run.results?.failed && run.results.failedNames.length >= run.results.failed) {
         const failed = run.results.failed;
         add(
           "warn",

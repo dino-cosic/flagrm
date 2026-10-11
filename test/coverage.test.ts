@@ -78,13 +78,19 @@ describe("coverage check", () => {
   });
 
   it("warns about a file outside covers, outside every project, or in a project that ran nothing", () => {
-    const result = coverage(["web/playwright/x.ts", "README.md", "docs/guide.md"], ["web"]);
+    fs.writeFileSync(path.join(tmp, "deploy.sh"), "");
+    const result = coverage(["web/playwright/x.ts", "deploy.sh", "docs/guide.md"], ["web"]);
     expect(result).toMatchObject({ status: "warn", summary: "3 changed files no command checks" });
     expect(warnings(result)).toEqual([
       "web web/playwright/x.ts: no build, test or lint command checks it",
-      "- README.md: no build, test or lint command checks it",
+      "- deploy.sh: no build, test or lint command checks it",
       "docs docs/guide.md: no build, test or lint command checks it",
     ]);
+  });
+
+  it("ignores documentation and deleted files outside every project", () => {
+    fs.writeFileSync(path.join(tmp, "README.md"), "");
+    expect(coverage(["README.md", "notes/new-checkout.md", "old-script.sh"], ["web"]).status).toBe("pass");
   });
 
   it("reports the innermost project, and any covering project suffices", () => {
@@ -121,17 +127,17 @@ describe("coverage check", () => {
   });
 
   it("ignores files dirty at the baseline and unchanged since", () => {
-    fs.writeFileSync(path.join(tmp, "notes.txt"), "mine\n");
-    const git: GitState = { sha: "abc", dirty: true, dirtyFiles: ["notes.txt", "gone.txt"] };
+    fs.writeFileSync(path.join(tmp, "notes.sh"), "mine\n");
+    const git: GitState = { sha: "abc", dirty: true, dirtyFiles: ["notes.sh", "web/gone.ts"] };
     git.dirtyHashes = blobIds(tmp, git.dirtyFiles ?? []);
-    expect(git.dirtyHashes["gone.txt"]).toBeNull();
-    expect(coverage(["notes.txt", "gone.txt"], [], CONFIG, { git }).status).toBe("pass");
-    fs.writeFileSync(path.join(tmp, "notes.txt"), "edited by the removal\n");
-    expect(warnings(coverage(["notes.txt", "gone.txt"], [], CONFIG, { git }))).toEqual([
-      "- notes.txt: no build, test or lint command checks it",
+    expect(git.dirtyHashes["web/gone.ts"]).toBeNull();
+    expect(coverage(["notes.sh", "web/gone.ts"], [], CONFIG, { git }).status).toBe("pass");
+    fs.writeFileSync(path.join(tmp, "notes.sh"), "edited by the removal\n");
+    expect(warnings(coverage(["notes.sh", "web/gone.ts"], [], CONFIG, { git }))).toEqual([
+      "- notes.sh: no build, test or lint command checks it",
     ]);
     // A baseline from before dirtyHashes: its dirty files can't be told apart, so none count.
-    expect(coverage(["notes.txt"], [], CONFIG, { git: { ...git, dirtyHashes: undefined } }).status).toBe("pass");
+    expect(coverage(["notes.sh"], [], CONFIG, { git: { ...git, dirtyHashes: undefined } }).status).toBe("pass");
   });
 
   it("counts deleted files", () => {
@@ -144,8 +150,10 @@ describe("coverage check", () => {
   it("groups more than 20 uncovered files by top-level directory", () => {
     const files = [
       ...Array.from({ length: 15 }, (_, i) => `scripts/s${i}.sh`),
-      ...Array.from({ length: 6 }, (_, i) => `f${i}.md`),
+      ...Array.from({ length: 6 }, (_, i) => `f${i}.yml`),
     ];
+    fs.mkdirSync(path.join(tmp, "scripts"));
+    for (const file of files) fs.writeFileSync(path.join(tmp, file), "");
     const result = coverage(files, []);
     expect(result.summary).toBe("21 changed files no command checks");
     expect(warnings(result)).toEqual([

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { changedFilesSince } from "../src/core/git.js";
+import { blobIds, changedFilesSince } from "../src/core/git.js";
 
 let tmp: string;
 
@@ -28,5 +28,19 @@ describe("changedFilesSince", () => {
     fs.writeFileSync(path.join(tmp, "čačak.cs"), "b\n");
     fs.writeFileSync(path.join(tmp, "šuma.cs"), "c\n");
     expect(changedFilesSince(tmp, "HEAD")).toEqual(["šuma.cs", "čačak.cs"].sort());
+  });
+});
+
+describe("blobIds", () => {
+  it("hashes the other files when one can't be hashed, which then never matches", () => {
+    fs.mkdirSync(path.join(tmp, "sub"));
+    const files = ["čačak.cs", "sub", "gone.cs"];
+    const first = blobIds(tmp, files);
+    const again = blobIds(tmp, files);
+    expect(first["čačak.cs"]).toMatch(/^[0-9a-f]{40}$/);
+    expect(again["čačak.cs"]).toBe(first["čačak.cs"]);
+    expect(first["gone.cs"]).toBeNull();
+    expect(first.sub).toBeTruthy();
+    expect(again.sub).not.toBe(first.sub);
   });
 });

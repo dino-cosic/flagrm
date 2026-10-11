@@ -368,6 +368,132 @@ describe("verify on the realistic fixture", () => {
       ]);
     });
 
+    describe("without testResults", () => {
+      const fromLog = (config: ToolConfig) => {
+        withTests(config);
+        const web = config.projects.find((p) => p.name === "web");
+        if (web) {
+          web.test = `node -e "const t=require('fs').readFileSync('results.src.xml','utf8');process.stdout.write(t);process.exit(t.includes('●')?1:0)"`;
+          web.testResults = undefined;
+        }
+      };
+      const log = (failing: string[], total: number) =>
+        results(
+          [
+            ...failing.map((n) => `  ● CheckoutComponent › ${n}`),
+            `Tests:       ${failing.length} failed, ${total - failing.length} passed, ${total} total`,
+          ].join("\n"),
+        );
+      const KNOWN = "formats prices in the user's locale";
+
+      it("splits failures read from the log into known and new", async () => {
+        log([KNOWN], 4);
+        await takeBaseline(fromLog, true);
+        applyAfter();
+        const known = await verify({ skip: ["build"] }, fromLog);
+        expect(status(known).tests).toBe("warn");
+        expect(findings(known, "tests")).toEqual([expect.stringContaining("1 test fails, as at the baseline")]);
+
+        log([KNOWN, OTHER], 4);
+        const fresh = await verify({ skip: ["build"] }, fromLog);
+        expect(status(fresh).tests).toBe("fail");
+        const info = fresh.checks
+          .find((c) => c.id === "tests")
+          ?.findings.filter((f) => f.severity === "info")
+          .map((f) => f.message);
+        expect(info).toContain(`new failure: CheckoutComponent › ${OTHER}`);
+      });
+
+      it("lists deleted and renamed tests from the diff and warns about a count the diff doesn't explain", async () => {
+        // The web project is the frontend: the diff deletes 3 of its tests and renames 1; 10 - 4 - 3 leaves 3 unexplained.
+        log([], 10);
+        await takeBaseline(fromLog, true);
+        applyAfter();
+        log([], 4);
+        const report = await verify({ skip: ["build"] }, fromLog);
+        const web = report.tests.find((t) => t.project === "web");
+        expect(web?.removed.length).toBeGreaterThan(0);
+        expect(web?.deleted).toContain("CheckoutComponent › falls back to the legacy cart when NewCheckout is off");
+        expect(web?.renamed).toContainEqual({
+          from: "CheckoutComponent › places the order through the checkout API when NewCheckout is on",
+          to: "CheckoutComponent › places the order through the checkout API",
+        });
+        expect(web?.deleted.some((n) => n.startsWith("Shop."))).toBe(false);
+        expect(web?.missing).toBe(3);
+        expect(findings(report, "tests")).toContainEqual(
+          expect.stringMatching(/more tests? stopped running than the diff deletes/),
+        );
+      });
+
+      it("only informs about a count drop when a changed test file has data rows", async () => {
+        const cs = (rows: string[]) =>
+          `namespace Web.Tests;\npublic class PriceTests {\n  [Theory]\n${rows.map((r) => `  [InlineData(${r})]`).join("\n")}\n  public void Quote(bool on) {}\n}\n`;
+        const file = path.join(tmp, "frontend", "PriceTests.cs");
+        fs.writeFileSync(file, cs(["true", "false"]));
+        git("add", "-A");
+        git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "rows");
+        log([], 10);
+        await takeBaseline(fromLog, true);
+        applyAfter();
+        fs.writeFileSync(file, cs(["true"]));
+        log([], 6);
+        const report = await verify({ skip: ["build"] }, fromLog);
+        const web = report.tests.find((t) => t.project === "web");
+        expect(web?.missing).toBe(1);
+        expect(web?.missingMayBeRows).toBe(true);
+        const missing = report.checks
+          .find((c) => c.id === "tests")
+          ?.findings.filter((f) => /stopped running than the diff deletes/.test(f.message));
+        expect(missing).toEqual([
+          expect.objectContaining({ severity: "info", message: expect.stringContaining("data rows and .each cases") }),
+        ]);
+        expect(status(report).tests).not.toBe("warn");
+      });
+
+      it("doesn't split failures when the baseline read files and verify the log", async () => {
+        results(junit(testcase(KNOWN, `<failure message="boom"/>`), ON, OFF, OTHER));
+        await takeBaseline(withTests, true);
+        applyAfter();
+        log([KNOWN], 4);
+        const report = await verify({ skip: ["build"] }, fromLog);
+        expect(status(report).tests).toBe("fail");
+        expect(report.tests[0].knownFailures).toEqual([]);
+      });
+
+      it("fails when the log counts a failure but names no test", async () => {
+        results("Tests:       4 passed, 4 total\n");
+        await takeBaseline(fromLog, true);
+        applyAfter();
+        results("Tests:       1 failed, 3 passed, 4 total\n");
+        const unnamed = (config: ToolConfig) => {
+          fromLog(config);
+          const web = config.projects.find((p) => p.name === "web");
+          if (web)
+            web.test = `node -e "process.stdout.write(require('fs').readFileSync('results.src.xml','utf8'));process.exit(1)"`;
+        };
+        const report = await verify({ skip: ["build"] }, unnamed);
+        expect(status(report).tests).toBe("fail");
+      });
+
+      it("shows the log's error lines when it names no failing test", async () => {
+        log([], 4);
+        await takeBaseline(fromLog, true);
+        applyAfter();
+        // A compile error: no test names in the log, and no summary.
+        results("src/app/x.spec.ts(3,1): error TS2304: Cannot find name 'x'.\n");
+        const failing = (config: ToolConfig) => {
+          fromLog(config);
+          const web = config.projects.find((p) => p.name === "web");
+          if (web)
+            web.test = `node -e "process.stdout.write(require('fs').readFileSync('results.src.xml','utf8'));process.exit(1)"`;
+        };
+        const report = await verify({ skip: ["build"] }, failing);
+        const messages = report.checks.find((c) => c.id === "tests")?.findings.map((f) => f.message) ?? [];
+        expect(messages).toContainEqual(expect.stringMatching(/exited with 1/));
+        expect(messages).toContain("src/app/x.spec.ts(3,1): error TS2304: Cannot find name 'x'.");
+      });
+    });
+
     describe("failing tests", () => {
       // Like withTests, but the command exits 1 when the results it copies contain a failure.
       const failing = (config: ToolConfig) => {
