@@ -5,7 +5,9 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
-## Unreleased
+## [Unreleased]
+
+## [0.4.0] - 2026-10-11
 
 ### Added
 
@@ -61,7 +63,7 @@ contain breaking changes.
 
 ### Changed
 
-- JSON schema version 8: `--json`, `baseline.json` and `verify.json` gain
+- **Breaking:** JSON schema version 8: `--json`, `baseline.json` and `verify.json` gain
   the `lint` and `coverage` checks, `lint` runs and `git.dirtyHashes`.
   Version 6 and 7 baselines are still read.
 - The Angular adapter's default test command now writes test results when
@@ -269,6 +271,7 @@ removes the flag through the `flagrm-remove` skill, and flagrm checks the result
   `doctor` warns about an incremental `dotnet build`, which hides existing
   warnings from the dead-code comparison.
 
+[0.4.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.4.0
 [0.3.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.3.0
 [0.2.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.2.0

@@ -8,8 +8,8 @@ Remove feature flags with your AI coding agent, safely.
 flagrm gives Claude Code, GitHub Copilot and Codex a flag-removal skill and the
 guardrails to check the result. It records a baseline before the edit, then
 gates the removal with `flagrm verify`, which fails while the flag is still
-referenced, the build breaks, a test regresses, or the removal leaves unused
-code behind.
+referenced, the build breaks, a test or lint regresses, or the removal leaves
+unused code behind.
 
 The agent does the reasoning and the edits: finding the flag, its aliases and
 wrappers, removing the OFF path, and refactoring methods the flag was passed
@@ -18,7 +18,7 @@ into. flagrm decides when the work is done.
 Angular and .NET projects work out of the box. Any other stack works through the
 generic adapter.
 
-> **Status:** flagrm is at version 0.3. Until 1.0, a minor release may contain
+> **Status:** flagrm is at version 0.4. Until 1.0, a minor release may contain
 > breaking changes.
 
 ## Requirements
@@ -64,6 +64,8 @@ like this (abridged):
 | dead-code | ✅ pass | no new unused-code diagnostics |
 | build | ✅ pass | web, api built successfully |
 | tests | ✅ pass | tests passed (web 24 → 22: 2 deleted, 1 renamed; api 18 → 16: 2 deleted) |
+| lint | ✅ pass | web linted cleanly |
+| coverage | ✅ pass | every changed file is built, tested or linted |
 
 **Files changed since baseline (26):** `backend/src/Shop.Api/Services/CheckoutService.cs`, ...
 
@@ -191,19 +193,21 @@ once karma.conf configures `karma-junit-reporter`. A `test` command of your
 own needs its own `testResults`, and `flagrm doctor` says what to add.
 Without result files, `verify` reads failing test names and counts from the
 test log and deleted tests from the diff, which is coarser: passing tests
-aren't named. `timeout` (seconds) fails a project's build or test command that runs longer, for example
-a test runner left in watch mode. `tools` lists the AI coding tools whose files
-`init` and `update` manage (`claude-code`, `copilot`, `codex`); dropping one
-leaves its files in place, and `init` names them so you can delete them.
+aren't named. `timeout` (seconds) fails a project's build or test command
+that runs longer, for example a test runner left in watch mode. `tools` lists
+the AI coding tools whose files `init` and `update` manage (`claude-code`,
+`copilot`, `codex`); dropping one leaves its files in place, and `init` names
+them so you can delete them.
 
 `lint` is an optional lint or type-check command (no adapter default) that
 `baseline` and `verify` run like `build` and `test`; use it for code the build
 and tests don't reach, such as end-to-end specs. A lint that already fails at
-the baseline only warns, unless the removal adds error lines. flagrm doesn't check formatting: put a formatter's
-check (`npx prettier --check .`) in `lint` if you want it. `covers` lists the
-files (globs relative to `path`) the project's commands check; the `coverage`
-check warns about a changed file no project with a command covers. Without
-`covers`, a project covers everything under its path.
+the baseline only warns, unless the removal adds error lines. flagrm doesn't
+check formatting: put a formatter's check (`npx prettier --check .`) in
+`lint` if you want it. `covers` lists the files (globs relative to `path`) the
+project's commands check; the `coverage` check warns about a changed file no
+project with a command covers. Without `covers`, a project covers everything
+under its path.
 
 Paths matching `exclude` (relative to the config file or a project's path; a
 directory excludes everything under it) and flagrm's own setup files don't
