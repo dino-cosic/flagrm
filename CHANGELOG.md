@@ -7,6 +7,8 @@ contain breaking changes.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-12
+
 ### Security
 
 - Replaced `fast-glob` with `tinyglobby`, which drops the vulnerable `braces`
@@ -285,6 +287,7 @@ removes the flag through the `flagrm-remove` skill, and flagrm checks the result
   `doctor` warns about an incremental `dotnet build`, which hides existing
   warnings from the dead-code comparison.
 
+[0.4.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.4.1
 [0.4.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.4.0
 [0.3.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.3.0
 [0.2.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.2.1
