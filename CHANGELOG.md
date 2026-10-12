@@ -11,6 +11,15 @@ contain breaking changes.
 
 - Replaced `fast-glob` with `tinyglobby`, which drops the vulnerable `braces`
   dependency (GHSA-vfj7-8cjw-p6xm) from installs.
+- The Stop hook no longer lets a removal finish unverified when the config's
+  `exclude` (or anything else it scans) changed since the baseline: widening
+  `exclude` used to hide the removal's edits from the hook.
+- A `git.sha` in `baseline.json` that isn't a commit id is refused, and no
+  revision starting with `-` reaches git, where `--output=<file>` would have
+  written a file.
+- SECURITY.md says what flagrm guarantees and what the Stop hook doesn't:
+  it guards against finishing a removal by accident, not an agent working
+  around it.
 
 ## [0.4.0] - 2026-10-11
 

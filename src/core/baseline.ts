@@ -98,8 +98,18 @@ export function readBaseline(root: string, flag: string): { baseline: Baseline; 
         `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`,
     );
   }
+  const sha = baseline.git?.sha;
+  if (sha != null && !COMMIT_ID.test(sha)) {
+    throw new UsageError(
+      `${file} has git.sha "${sha}", which is not a git commit id. ` +
+        `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`,
+    );
+  }
   return { baseline, file };
 }
+
+/** A full SHA-1 or SHA-256 commit id, as `git rev-parse HEAD` prints it. */
+const COMMIT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /**
  * Run one shell command inside a project, streaming its output to `logFile`

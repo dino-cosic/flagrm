@@ -161,6 +161,22 @@ export function configChanges(before: ConfigSnapshot | undefined, now: ConfigSna
   return changes;
 }
 
+/**
+ * Whether the config file under `root` changed since `before` in what is
+ * scanned or ignored (`exclude`, globs, paths), not just in its commands.
+ * False when `before` recorded no config file.
+ */
+export function scanConfigChanged(before: ConfigSnapshot | undefined, root: string): boolean {
+  if (!before?.file) return false;
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(root, before.file.path), "utf8");
+  } catch {
+    return true;
+  }
+  return withoutCommands(before.file.text) !== withoutCommands(text);
+}
+
 const quote = (text: string | undefined) => (text === undefined ? "(none)" : `\`${text}\``);
 
 function changedFiles(a: CommandSnapshot["files"], b: CommandSnapshot["files"]): string[] {

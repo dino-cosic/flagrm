@@ -5,8 +5,10 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flagDir, verifyPath, writeBaseline } from "../src/core/baseline.js";
 import { changeFilterAt } from "../src/core/change-filter.js";
+import { loadConfig } from "../src/core/config.js";
 import { gitState, treeFingerprint } from "../src/core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "../src/core/hook.js";
+import { resolveProjects } from "../src/core/registry.js";
 
 let tmp: string;
 
@@ -17,6 +19,9 @@ const commit = (message: string) => {
 };
 const edit = (text: string) => fs.writeFileSync(path.join(tmp, "a.txt"), text);
 const baseline = (flag = "NewCheckout") => writeBaseline(tmp, flag, [], gitState(tmp));
+/** A baseline with the config snapshot `flagrm baseline` records, from `flagrm.config.yaml` in `tmp`. */
+const configuredBaseline = (flag = "NewCheckout") =>
+  writeBaseline(tmp, flag, resolveProjects(loadConfig({ quiet: true }, tmp)), gitState(tmp));
 const verified = (status: "pass" | "fail", flag = "NewCheckout", skipped: string[] = []) => {
   fs.mkdirSync(flagDir(tmp, flag), { recursive: true });
   fs.writeFileSync(
@@ -96,6 +101,41 @@ describe("stopDecision", () => {
     edit("b\n");
     verified("pass");
     fs.rmSync(path.join(tmp, "graphify-out", "graph.html"));
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
+  });
+
+  it("blocks when exclude is widened after the baseline to hide the removal's edits", () => {
+    const config = "projects:\n  - {name: svc, adapter: generic, path: .}\n";
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), config);
+    commit("config");
+    configuredBaseline();
+    edit("b\n");
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), `${config}exclude: ['a.txt']\n`);
+    expect(stopDecision(tmp, {})).toEqual({
+      block: true,
+      reason: "flagrm: NewCheckout removal not verified — run flagrm verify NewCheckout --json",
+    });
+  });
+
+  it("allows once verify passed after exclude changed since the baseline", () => {
+    const config = "projects:\n  - {name: svc, adapter: generic, path: .}\n";
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), config);
+    commit("config");
+    configuredBaseline();
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), `${config}exclude: ['graphify-out/**']\n`);
+    verified("pass");
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
+  });
+
+  it("allows a config change after the baseline that only touches commands", () => {
+    const config = "projects:\n  - {name: svc, adapter: generic, path: .}\n";
+    fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), config);
+    commit("config");
+    configuredBaseline();
+    fs.writeFileSync(
+      path.join(tmp, "flagrm.config.yaml"),
+      "projects:\n  - {name: svc, adapter: generic, path: ., test: go test ./...}\n",
+    );
     expect(stopDecision(tmp, {})).toEqual({ block: false });
   });
 
