@@ -63,8 +63,8 @@ export const PROMPT_FILES: Record<(typeof SKILLS)[number], string> = {
 
 /**
  * The Stop hook command. npx runs the project's own flagrm (a dev dependency)
- * and falls back to a global install. `--no-install` matters: the `flagrm` name
- * on npm belongs to an unrelated package, and a hook must never download code.
+ * and falls back to a global install. `--no-install` matters: a hook must never
+ * download code, so without a local or global flagrm it does nothing.
  * No redirects or `||`: Claude Code runs hooks in PowerShell on Windows
  * without Git Bash, so the command must parse in both shells.
  */

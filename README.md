@@ -40,6 +40,10 @@ npm install -D flagrm        # or run everything with npx flagrm
 npx flagrm init              # asks which AI tools; config, skills, Stop hook, .gitignore entry
 ```
 
+No `package.json` (a pure .NET or Go repository)? Install globally with
+`npm install -g flagrm`, or run `npx flagrm`. The Stop hook runs
+`npx --no-install flagrm hook stop`, so it needs a local or a global install.
+
 Fill in the project paths and the build and test commands in
 `flagrm.config.yaml`, check the setup with `npx flagrm doctor`, then ask your
 agent:
@@ -240,6 +244,16 @@ can break others that pass today.
 For .NET, keep `--no-incremental` in `build`. An incremental build skips
 up-to-date projects and prints none of their warnings, so the dead-code check
 would have no baseline warnings to compare against.
+
+## Separate repositories
+
+flagrm works per git repository: the baseline is a commit of one repository,
+and the config, `.flagrm/`, skills and hook live in its root. With the UI and
+the backend in separate repositories, run `flagrm init` in each (the Angular
+adapter in one, .NET in the other) and run `/flagrm-remove <flag>` in each.
+flagrm does not coordinate the two: each repository gets its own verdict, the
+agent has to record the flag's name in each (it may differ between UI and
+API), and the order of the two removals is up to you.
 
 ## Development
 
