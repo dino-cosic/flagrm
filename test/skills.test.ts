@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import fg from "fast-glob";
+import { globSync } from "tinyglobby";
 import { describe, expect, it } from "vitest";
 import { CHECK_IDS } from "../src/core/types.js";
 
@@ -36,7 +36,7 @@ function codeIn(markdown: string): string[] {
   return code;
 }
 
-const files = fg.sync("skills/**/*.md", { cwd: ROOT });
+const files = globSync("skills/**/*.md", { cwd: ROOT });
 
 describe("skills reference only real flagrm commands and options", () => {
   it("finds the skill files and the CLI commands", () => {

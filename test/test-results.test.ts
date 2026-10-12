@@ -110,7 +110,7 @@ describe("hasTestNames", () => {
 describe("collectTestResults", () => {
   let tmp: string;
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "flagrm-results-"));
+    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "flagrm-results-")));
   });
   afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -130,6 +130,21 @@ describe("collectTestResults", () => {
     fs.writeFileSync(path.join(tmp, "coverage.xml"), '<?xml version="1.0"?><coverage line-rate="1"></coverage>');
     fs.writeFileSync(path.join(tmp, "half.trx"), TRX.replace("</TestRun>", ""));
     expect(collectTestResults(path.join(tmp, "*.{xml,trx}"), Date.now() - 5000)).toBeUndefined();
+  });
+
+  it("finds result files when run from a repository whose path contains glob characters", () => {
+    const cwd = process.cwd();
+    try {
+      for (const name of ["p[x]", "p{a}"]) {
+        const root = path.join(tmp, name);
+        fs.mkdirSync(path.join(root, "TestResults"), { recursive: true });
+        fs.writeFileSync(path.join(root, "TestResults", "a.trx"), TRX);
+        process.chdir(root);
+        expect(collectTestResults(path.join(root, "TestResults", "*.trx"), Date.now() - 5000)?.files).toHaveLength(1);
+      }
+    } finally {
+      process.chdir(cwd);
+    }
   });
 
   it("returns undefined when no fresh result file exists", () => {

@@ -7,7 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import fg from "fast-glob";
+import { globSync } from "tinyglobby";
 import type { Workspace } from "./adapter.js";
 import { flagDir, matchingFiles, runChecks } from "./baseline.js";
 import { changeFilter } from "./change-filter.js";
@@ -89,7 +89,12 @@ export function saveRuns(
 
 /** Forget every saved set, of any flag, for this tree: a fresh run on it failed, so they may hide a flaky test or a changed machine. */
 export function dropRuns(root: string, key: string): void {
-  for (const file of fg.sync(".flagrm/*/verify/runs.json", { cwd: root, absolute: true, dot: true })) {
+  for (const file of globSync(".flagrm/*/verify/runs.json", {
+    expandDirectories: false,
+    cwd: root,
+    absolute: true,
+    dot: true,
+  })) {
     if (readJson<SavedRuns>(file)?.key === key) fs.rmSync(file, { force: true });
   }
 }
@@ -100,7 +105,12 @@ export function findRuns(root: string, projects: Workspace, key: string, needed:
   const commands = JSON.stringify(configSnapshot(projects).projects);
   const version = packageVersion();
   let best: FoundRuns | undefined;
-  for (const file of fg.sync(".flagrm/*/verify/runs.json", { cwd: root, absolute: true, dot: true })) {
+  for (const file of globSync(".flagrm/*/verify/runs.json", {
+    expandDirectories: false,
+    cwd: root,
+    absolute: true,
+    dot: true,
+  })) {
     const saved = readJson<SavedRuns>(file);
     if (!saved || !Array.isArray(saved.runs) || typeof saved.createdAt !== "string") continue;
     if (saved.key !== key || saved.schemaVersion !== JSON_SCHEMA_VERSION) continue;

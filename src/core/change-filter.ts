@@ -47,7 +47,7 @@ export function changeFilter(config?: Pick<ToolConfig, "root" | "exclude" | "pro
 }
 
 /**
- * Matches `exclude` the way scanning's fast-glob `ignore` does: a pattern
+ * Matches `exclude` the way scanning's tinyglobby `ignore` does: a pattern
  * that matches a directory (`graphify-out`, `graphify-out/`) excludes
  * everything under it, so test the path and each of its parent directories.
  * `covers` reads the same way.

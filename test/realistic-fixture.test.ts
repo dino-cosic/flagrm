@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import fg from "fast-glob";
+import { globSync } from "tinyglobby";
 import { describe, expect, it } from "vitest";
 
 // Guards the invariants test/fixtures/realistic/README.md promises, so later
@@ -15,7 +15,7 @@ const AFTER = path.join(ROOT, "after");
 const IGNORE = ["**/node_modules/**", "**/bin/**", "**/obj/**"];
 
 function files(root: string): string[] {
-  return fg.sync("**/*", { cwd: root, ignore: IGNORE, dot: false }).sort();
+  return globSync("**/*", { cwd: root, ignore: IGNORE, dot: false }).sort();
 }
 
 function read(root: string, rel: string): string {
@@ -28,15 +28,17 @@ function filesMatching(root: string, pattern: RegExp): string[] {
 
 /** xUnit test cases: each [Fact] plus each [InlineData] row of a [Theory]. */
 function countDotnetTests(root: string): number {
-  return fg
-    .sync("backend/tests/**/*.cs", { cwd: root, ignore: IGNORE })
-    .reduce((n, rel) => n + (read(root, rel).match(/\[(Fact|InlineData)\b/g)?.length ?? 0), 0);
+  return globSync("backend/tests/**/*.cs", { cwd: root, ignore: IGNORE }).reduce(
+    (n, rel) => n + (read(root, rel).match(/\[(Fact|InlineData)\b/g)?.length ?? 0),
+    0,
+  );
 }
 
 function countJasmineSpecs(root: string): number {
-  return fg
-    .sync("frontend/src/**/*.spec.ts", { cwd: root, ignore: IGNORE })
-    .reduce((n, rel) => n + (read(root, rel).match(/^\s*it\(/gm)?.length ?? 0), 0);
+  return globSync("frontend/src/**/*.spec.ts", { cwd: root, ignore: IGNORE }).reduce(
+    (n, rel) => n + (read(root, rel).match(/^\s*it\(/gm)?.length ?? 0),
+    0,
+  );
 }
 
 describe("realistic fixture", () => {

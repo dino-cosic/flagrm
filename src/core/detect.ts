@@ -6,7 +6,7 @@
  */
 
 import path from "node:path";
-import fg from "fast-glob";
+import { globSync } from "tinyglobby";
 import { detectTestRunner, type TestRunner } from "./test-runner.js";
 
 export interface DetectedProject {
@@ -47,7 +47,7 @@ function commonDir(files: string[]): string {
 }
 
 export function detectProjects(cwd: string): DetectedProject[] {
-  const find = (pattern: string) => fg.sync(pattern, { cwd, deep: 4, ignore: IGNORE });
+  const find = (pattern: string) => globSync(pattern, { expandDirectories: false, cwd, deep: 3, ignore: IGNORE });
   const found: Array<Omit<DetectedProject, "name">> = [];
 
   for (const marker of topmost(find("**/angular.json"))) {

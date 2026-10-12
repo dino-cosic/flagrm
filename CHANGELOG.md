@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
 contain breaking changes.
 
+## [Unreleased]
+
+### Security
+
+- Replaced `fast-glob` with `tinyglobby`, which drops the vulnerable `braces`
+  dependency (GHSA-vfj7-8cjw-p6xm) from installs.
+
 ## [0.4.0] - 2026-10-11
 
 ### Added

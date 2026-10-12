@@ -1,5 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
-import fg from "fast-glob";
+import { globSync, isDynamicPattern } from "tinyglobby";
 
 export const BACKEND_GLOBS = [
   "**/*.cs",
@@ -29,11 +30,39 @@ export interface GlobOverrides {
   exclude?: string[];
 }
 
-/** Absolute paths with the platform's separators (fast-glob returns `/` on Windows too), so they match `path.join`. */
+/**
+ * Files matching an absolute path or glob, such as a `testResults` pattern,
+ * as absolute paths with `/`. The leading directories that exist are taken
+ * literally and become the glob's `cwd`, so a repository path containing
+ * glob characters (`/work/p[x]/TestResults/*.trx`) still matches.
+ */
+export function globAbsolute(pattern: string): string[] {
+  const segments = (path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern).split("/");
+  let base = segments[0] === "" ? "/" : `${segments[0]}/`;
+  let i = 1;
+  for (; i < segments.length - 1; i++) {
+    const dir = path.posix.join(base, segments[i]);
+    if (isDynamicPattern(segments[i]) && !isDirectory(dir)) break;
+    base = dir;
+  }
+  return globSync(segments.slice(i).join("/"), { expandDirectories: false, cwd: base, absolute: true, dot: true });
+}
+
+function isDirectory(dir: string): boolean {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Absolute paths with the platform's separators (tinyglobby returns `/` on Windows too), so they match `path.join`. */
 export function listProjectFiles(root: string, globs: string[], overrides?: GlobOverrides): string[] {
   const patterns = [...globs, ...(overrides?.include ?? [])];
   const ignore = [...IGNORE_GLOBS, ...(overrides?.exclude ?? [])];
-  return fg.sync(patterns, { cwd: root, ignore, absolute: true, dot: false }).map((file) => path.normalize(file));
+  return globSync(patterns, { expandDirectories: false, cwd: root, ignore, absolute: true, dot: false }).map((file) =>
+    path.normalize(file),
+  );
 }
 
 export interface ClassifyContext {
