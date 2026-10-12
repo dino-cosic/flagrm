@@ -19,6 +19,9 @@ function git(cwd: string, ...args: string[]): { ok: boolean; stdout: string } {
   return { ok: result.status === 0, stdout: result.stdout ?? "" };
 }
 
+/** Whether git reads `rev` as a revision: one starting with `-` (`--output=<file>`) would be an option. */
+const isRevision = (rev: string) => rev !== "" && !rev.startsWith("-");
+
 /** NUL-separated paths (`-z`), which git never quotes or escapes, whatever the file name. */
 const paths = (text: string) => text.split("\0").filter(Boolean);
 
@@ -68,6 +71,7 @@ export function blobIds(cwd: string, files: string[]): Record<string, string | n
  * diff plus untracked files), without the ones `ignore` names.
  */
 export function changedFilesSince(cwd: string, sha: string, ignore?: ChangeFilter): string[] | undefined {
+  if (!isRevision(sha)) return undefined;
   const diff = git(cwd, "diff", "-z", "--name-only", "--no-renames", "--relative", sha, ...PATHSPEC);
   if (!diff.ok) return undefined;
   const all = [...new Set([...paths(diff.stdout), ...untracked(cwd)])].sort();
@@ -80,6 +84,7 @@ export function changedFilesSince(cwd: string, sha: string, ignore?: ChangeFilte
  * Undefined when git can't tell.
  */
 export function trackedChangesSince(cwd: string, sha: string, ignore?: ChangeFilter): string[] | undefined {
+  if (!isRevision(sha)) return undefined;
   const diff = git(cwd, "diff", "-z", "--name-only", "--no-renames", "--relative", sha, ...PATHSPEC);
   if (!diff.ok) return undefined;
   const all = paths(diff.stdout).sort();
@@ -88,6 +93,7 @@ export function trackedChangesSince(cwd: string, sha: string, ignore?: ChangeFil
 
 /** A file's content at `sha`, or undefined when it did not exist there. */
 export function fileAt(cwd: string, sha: string, relativePath: string): string | undefined {
+  if (!isRevision(sha)) return undefined;
   const result = git(cwd, "show", `${sha}:./${relativePath.split(path.sep).join("/")}`);
   return result.ok ? result.stdout : undefined;
 }
@@ -162,6 +168,7 @@ function dropIgnored(cwd: string, index: string, ignore: ChangeFilter): boolean 
 
 /** The tree id of `cwd` at commit `sha`. */
 export function treeAt(cwd: string, sha: string): string | undefined {
+  if (!isRevision(sha)) return undefined;
   const prefix = repoPrefix(cwd);
   if (prefix === undefined) return undefined;
   const result = git(cwd, "rev-parse", "--verify", "--quiet", `${sha}:${prefix}`);
@@ -176,5 +183,5 @@ export function headSha(cwd: string): string | undefined {
 
 /** Whether `sha` is HEAD or one of its ancestors. */
 export function isAncestor(cwd: string, sha: string): boolean {
-  return git(cwd, "merge-base", "--is-ancestor", sha, "HEAD").ok;
+  return isRevision(sha) && git(cwd, "merge-base", "--is-ancestor", sha, "HEAD").ok;
 }

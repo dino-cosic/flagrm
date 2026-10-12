@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { blobIds, changedFilesSince } from "../src/core/git.js";
+import { blobIds, changedFilesSince, fileAt, isAncestor, trackedChangesSince } from "../src/core/git.js";
 
 let tmp: string;
 
@@ -28,6 +28,17 @@ describe("changedFilesSince", () => {
     fs.writeFileSync(path.join(tmp, "čačak.cs"), "b\n");
     fs.writeFileSync(path.join(tmp, "šuma.cs"), "c\n");
     expect(changedFilesSince(tmp, "HEAD")).toEqual(["šuma.cs", "čačak.cs"].sort());
+  });
+});
+
+describe("revisions", () => {
+  it("never passes a revision starting with - to git, where it would be read as an option", () => {
+    const out = path.join(tmp, "written-by-git");
+    expect(changedFilesSince(tmp, `--output=${out}`)).toBeUndefined();
+    expect(trackedChangesSince(tmp, `--output=${out}`)).toBeUndefined();
+    expect(fileAt(tmp, `--output=${out}`, "čačak.cs")).toBeUndefined();
+    expect(isAncestor(tmp, `--output=${out}`)).toBe(false);
+    expect(fs.existsSync(out)).toBe(false);
   });
 });
 

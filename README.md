@@ -104,7 +104,8 @@ of these reasons is a warning, for the agent to explain in its notes.
    removal is in progress and not verified. In progress means a file git
    tracks changed on top of the baseline commit (untracked files and
    flagrm's own setup files don't count, so a removal paused on a question to
-   the user doesn't block), or the last verify used `--skip`.
+   the user doesn't block), the config changed in what it scans or ignores
+   (such as `exclude`), or the last verify used `--skip`.
 4. **`/flagrm-verify <flag>`** checks a removal later: runs
    `flagrm verify <flag> --md` and adds notes and a commit message.
 

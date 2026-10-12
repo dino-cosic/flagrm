@@ -98,7 +98,7 @@ describe("mergeNames", () => {
 
 describe("addNames", () => {
   it("adds names without touching the git state or checks", async () => {
-    const git = { sha: "abc", dirty: false, dirtyFiles: [] };
+    const git = { sha: "0123456789abcdef0123456789abcdef01234567", dirty: false, dirtyFiles: [] };
     const checks = [{ project: "api", check: "build" as const, command: "x", exitCode: 0, durationMs: 1 }];
     writeBaseline(tmp, FLAG, workspace(), git, checks, await discoverNames(workspace(), FLAG));
     const { baseline } = addNames(tmp, FLAG, [agent("UseNewCheckout")]);

@@ -89,7 +89,7 @@ describe("acceptBaseline", () => {
       tmp,
       "F",
       [{ adapter: genericAdapter, ctx }],
-      { sha: "abc", dirty: false },
+      { sha: "0123456789abcdef0123456789abcdef01234567", dirty: false },
       checks,
       names,
     );
@@ -358,5 +358,13 @@ describe("readBaseline", () => {
     expect(readBaseline(tmp, "F").baseline.schemaVersion).toBe(6);
     fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), schemaVersion: 5 }));
     expect(() => readBaseline(tmp, "F")).toThrow(UsageError);
+  });
+
+  it("refuses a git sha that isn't a commit id, so it can't reach git as an option", () => {
+    const ctx = projectContext("generic", tmp, { name: "svc" });
+    const { file } = writeBaseline(tmp, "F", [{ adapter: dotnetAdapter, ctx }], { sha: null, dirty: false });
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    fs.writeFileSync(file, JSON.stringify({ ...saved, git: { sha: "--output=x", dirty: false } }));
+    expect(() => readBaseline(tmp, "F")).toThrow(/not a git commit id/);
   });
 });
