@@ -7,6 +7,11 @@ contain breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- README: how to install without a `package.json` (globally or with `npx`),
+  and what to do when the UI and the backend are in separate repositories.
+
 ## [0.4.1] - 2026-10-12
 
 ### Security
