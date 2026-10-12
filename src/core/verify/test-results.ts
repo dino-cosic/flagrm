@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { globSync } from "tinyglobby";
+import { globAbsolute } from "../scan.js";
 import type { TestRunResults } from "../types.js";
 
 function attributes(tag: string): Record<string, string> {
@@ -221,11 +221,7 @@ export function collectTestResults(
 ): TestRunResults | undefined {
   // Filesystem timestamps can be coarser than Date.now().
   const cutoff = since - 2000;
-  const files = globSync(path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern, {
-    expandDirectories: false,
-    absolute: true,
-    dot: true,
-  })
+  const files = globAbsolute(pattern)
     .map((file) => ({ file, mtime: fs.statSync(file).mtimeMs }))
     .filter(({ file, mtime }) => mtime >= cutoff && claimed.get(file) !== mtime)
     .sort((a, b) => a.file.localeCompare(b.file));

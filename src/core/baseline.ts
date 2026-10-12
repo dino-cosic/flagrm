@@ -2,13 +2,13 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { globSync } from "tinyglobby";
 import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
 import { type ChangeFilter, changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { environmentProblem } from "./environment.js";
 import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
+import { globAbsolute } from "./scan.js";
 import { withScopeFiles } from "./scope-files.js";
 import {
   type Baseline,
@@ -367,15 +367,7 @@ export function editsSince(
 
 /** The files (relative to `root`) matching absolute paths or globs, such as `testResults` patterns. */
 export function matchingFiles(root: string, patterns: readonly string[]): Set<string> {
-  return new Set(
-    patterns.flatMap((pattern) =>
-      globSync(path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern, {
-        expandDirectories: false,
-        absolute: true,
-        dot: true,
-      }).map((file) => relativePath(root, file)),
-    ),
-  );
+  return new Set(patterns.flatMap((pattern) => globAbsolute(pattern).map((file) => relativePath(root, file))));
 }
 
 /**
