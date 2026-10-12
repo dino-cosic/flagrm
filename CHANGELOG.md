@@ -17,6 +17,9 @@ contain breaking changes.
 - A `git.sha` in `baseline.json` that isn't a commit id is refused, and no
   revision starting with `-` reaches git, where `--output=<file>` would have
   written a file.
+- SECURITY.md says what flagrm guarantees and what the Stop hook doesn't:
+  it guards against finishing a removal by accident, not an agent working
+  around it.
 
 ## [0.4.0] - 2026-10-11
 
