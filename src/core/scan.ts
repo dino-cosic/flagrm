@@ -1,5 +1,5 @@
 import path from "node:path";
-import fg from "fast-glob";
+import { globSync } from "tinyglobby";
 
 export const BACKEND_GLOBS = [
   "**/*.cs",
@@ -29,11 +29,13 @@ export interface GlobOverrides {
   exclude?: string[];
 }
 
-/** Absolute paths with the platform's separators (fast-glob returns `/` on Windows too), so they match `path.join`. */
+/** Absolute paths with the platform's separators (tinyglobby returns `/` on Windows too), so they match `path.join`. */
 export function listProjectFiles(root: string, globs: string[], overrides?: GlobOverrides): string[] {
   const patterns = [...globs, ...(overrides?.include ?? [])];
   const ignore = [...IGNORE_GLOBS, ...(overrides?.exclude ?? [])];
-  return fg.sync(patterns, { cwd: root, ignore, absolute: true, dot: false }).map((file) => path.normalize(file));
+  return globSync(patterns, { expandDirectories: false, cwd: root, ignore, absolute: true, dot: false }).map((file) =>
+    path.normalize(file),
+  );
 }
 
 export interface ClassifyContext {

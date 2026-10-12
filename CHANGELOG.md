@@ -7,6 +7,11 @@ contain breaking changes.
 
 ## [Unreleased]
 
+### Security
+
+- Replaced `fast-glob` with `tinyglobby`, which drops the vulnerable `braces`
+  dependency (GHSA-vfj7-8cjw-p6xm) from installs.
+
 ## [0.4.0] - 2026-10-11
 
 ### Added

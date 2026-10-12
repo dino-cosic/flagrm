@@ -9,7 +9,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import fg from "fast-glob";
+import { globSync } from "tinyglobby";
 import YAML from "yaml";
 import { type SetupProbes, type SolutionSetup, sdkProblem, solutionSetup } from "../adapters/dotnet/setup.js";
 import type { ProjectContext, Workspace } from "./adapter.js";
@@ -94,8 +94,8 @@ function solutionFor(
       return { note: `can't read ${arg}` };
     }
   }
-  const found = fg.sync("*.{sln,slnx}", { cwd: ctx.root, absolute: true });
-  // fast-glob returns forward slashes, also on Windows.
+  const found = globSync("*.{sln,slnx}", { expandDirectories: false, cwd: ctx.root, absolute: true });
+  // tinyglobby returns forward slashes, also on Windows.
   if (found.length === 1) return { solution: path.normalize(found[0]) };
   return { note: found.length ? "several solutions: name one in build/test" : "no solution file found" };
 }

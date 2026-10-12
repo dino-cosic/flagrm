@@ -7,7 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import fg from "fast-glob";
+import { globSync } from "tinyglobby";
 import { readJson, relativePath } from "./util.js";
 
 export type TestRunner =
@@ -44,7 +44,8 @@ function dependencies(root: string): Set<string> {
   return new Set([...Object.keys(pkg?.dependencies ?? {}), ...Object.keys(pkg?.devDependencies ?? {})]);
 }
 
-const hasFile = (root: string, pattern: string) => fg.sync(pattern, { cwd: root, deep: 1 }).length > 0;
+const hasFile = (root: string, pattern: string) =>
+  globSync(pattern, { expandDirectories: false, cwd: root, deep: 1 }).length > 0;
 
 function karma(root: string, options: Record<string, unknown>): TestRunner {
   const conf = path.resolve(root, typeof options.karmaConfig === "string" ? options.karmaConfig : "karma.conf.js");

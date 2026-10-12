@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import fg from "fast-glob";
+import { globSync } from "tinyglobby";
 import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
 import { type ChangeFilter, changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
@@ -369,9 +369,11 @@ export function editsSince(
 export function matchingFiles(root: string, patterns: readonly string[]): Set<string> {
   return new Set(
     patterns.flatMap((pattern) =>
-      fg
-        .sync(path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern, { absolute: true, dot: true })
-        .map((file) => relativePath(root, file)),
+      globSync(path.sep === "\\" ? pattern.replace(/\\/g, "/") : pattern, {
+        expandDirectories: false,
+        absolute: true,
+        dot: true,
+      }).map((file) => relativePath(root, file)),
     ),
   );
 }
