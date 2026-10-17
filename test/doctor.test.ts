@@ -60,6 +60,17 @@ describe("runDoctor", () => {
     expect((await runDoctor(tmp)).status).toBe("ok");
   });
 
+  it("warns, without failing or going online, when launchdarkly's token variable is unset", async () => {
+    fs.appendFileSync(path.join(tmp, "flagrm.config.yaml"), "launchdarkly:\n  project: shop\n  tokenEnv: SHOP_LD\n");
+    commitAll();
+    const report = await runDoctor(tmp, { env: { SHOP_LD: "  " } });
+    expect(report.status).toBe("ok");
+    expect(report.checks.filter((c) => c.status !== "ok").map((c) => c.message)).toEqual([
+      'launchdarkly: SHOP_LD is not set — flagrm stale can\'t read project "shop"',
+    ]);
+    expect(await problems(tmp, { env: { SHOP_LD: "api-123" } })).toEqual([]);
+  });
+
   it("fails without a config file", async () => {
     fs.rmSync(path.join(tmp, "flagrm.config.yaml"));
     expect(await problems()).toContain("fail no flagrm.config.yaml (run flagrm init)");

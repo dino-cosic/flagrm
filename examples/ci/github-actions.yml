@@ -1,0 +1,118 @@
+# Weekly flag cleanup: ask LaunchDarkly which flags are ready to remove, let a
+# headless Claude Code agent remove each one with the flagrm-remove skill, and
+# open a pull request per flag once `flagrm verify` passes. Nothing is merged
+# without a person reviewing it.
+#
+# Copy to .github/workflows/flagrm-stale.yml. It assumes:
+# - flagrm is a devDependency (`npm ci` installs it) and `flagrm init` set up
+#   Claude Code, so the skill and the Stop hook are committed;
+# - the config has a `launchdarkly:` section;
+# - the secrets LD_API_TOKEN (LaunchDarkly, reader role is enough) and
+#   ANTHROPIC_API_KEY.
+# Pull requests opened with GITHUB_TOKEN don't start other workflows; use a
+# GitHub App or fine-grained token for GH_TOKEN if your checks should run on them.
+
+name: flagrm stale flags
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    outputs:
+      flags: ${{ steps.pick.outputs.flags }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+
+      # Exit 0: evaluated (the verdicts are in the JSON). Any other exit fails the
+      # run: 2 is a config problem, 3 means LaunchDarkly was unreachable or
+      # rejected the token, and no agent should start on either.
+      - name: Ask LaunchDarkly which flags are ready
+        env:
+          LD_API_TOKEN: ${{ secrets.LD_API_TOKEN }}
+        run: npx --no-install flagrm stale --json > "$RUNNER_TEMP/stale.json"
+
+      # The code name of each `remove` flag, minus those that already have a
+      # removal branch (an open PR from an earlier run).
+      - name: Pick the flags to remove
+        id: pick
+        run: |
+          flags='[]'
+          for name in $(jq -r '.flags[] | select(.verdict == "remove") | .codeName' "$RUNNER_TEMP/stale.json"); do
+            if [[ ! "$name" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
+              echo "::warning::skipped \"$name\": not a safe branch name"
+            elif git ls-remote --exit-code --heads origin "flagrm/remove-$name" > /dev/null; then
+              echo "::notice::skipped $name: flagrm/remove-$name already exists"
+            else
+              flags=$(jq -c --arg name "$name" '. + [$name]' <<< "$flags")
+            fi
+          done
+          echo "flags=$flags" >> "$GITHUB_OUTPUT"
+          echo "### Flags to remove: $flags" >> "$GITHUB_STEP_SUMMARY"
+
+  remove:
+    needs: stale
+    if: needs.stale.outputs.flags != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        flag: ${{ fromJSON(needs.stale.outputs.flags) }}
+    env:
+      # Through the environment, never interpolated into a script.
+      FLAG: ${{ matrix.flag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The agent runs `flagrm verify`, which builds and tests the project: add
+      # its toolchain here, for example:
+      # - uses: actions/setup-dotnet@v4
+      #   with:
+      #     global-json-file: global.json
+      - run: npm ci
+      - run: npm install -g @anthropic-ai/claude-code
+
+      # The skill re-checks the flag with `flagrm stale <flag> --json`, so it
+      # needs the LaunchDarkly token too. Bash is allowed so the agent can run
+      # flagrm, the build and the tests; the runner is thrown away afterwards.
+      # The Stop hook keeps the agent from finishing before verify passes.
+      - name: Remove the flag with Claude Code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LD_API_TOKEN: ${{ secrets.LD_API_TOKEN }}
+        run: claude -p "/flagrm-remove $FLAG" --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      # The pipeline's own gate: the agent saying it's done is not enough. This
+      # reuses the agent's passing build and test runs on the same tree.
+      - name: Verify the removal
+        run: npx --no-install flagrm verify "$FLAG" --json > "$RUNNER_TEMP/verify.json"
+
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="flagrm/remove-$FLAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A
+          git commit -m "chore: remove $FLAG feature flag"
+          git push origin "$branch"
+          npx --no-install flagrm verify "$FLAG" --md > "$RUNNER_TEMP/pr-body.md"
+          gh pr create --head "$branch" --title "chore: remove $FLAG feature flag" --body-file "$RUNNER_TEMP/pr-body.md"

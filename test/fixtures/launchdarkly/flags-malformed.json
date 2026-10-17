@@ -1,0 +1,58 @@
+{
+  "items": [
+    {
+      "key": "broken-flag",
+      "name": "Broken Flag",
+      "kind": "boolean",
+      "tags": [],
+      "creationDate": 1773532800000,
+      "variations": [
+        {
+          "_id": "a",
+          "value": true
+        },
+        {
+          "_id": "b",
+          "value": false
+        }
+      ],
+      "archived": false,
+      "deprecated": false,
+      "_links": {
+        "self": {
+          "href": "/api/v2/flags/shop/broken-flag",
+          "type": "application/json"
+        }
+      },
+      "environments": {
+        "production": {
+          "on": "yes",
+          "lastModified": 1790726400000
+        },
+        "staging": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1790726400000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": ""
+        }
+      }
+    }
+  ],
+  "totalCount": 1,
+  "_links": {}
+}

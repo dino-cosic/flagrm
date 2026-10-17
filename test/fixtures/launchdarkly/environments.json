@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "key": "production",
+      "name": "Production"
+    },
+    {
+      "key": "staging",
+      "name": "Staging"
+    }
+  ],
+  "totalCount": 2,
+  "_links": {
+    "self": {
+      "href": "/api/v2/projects/shop/environments?limit=100"
+    }
+  }
+}

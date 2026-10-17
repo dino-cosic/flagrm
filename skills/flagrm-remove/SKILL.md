@@ -25,7 +25,7 @@ Several flags (`/flagrm-remove A B C`): read [batch.md](batch.md) first; it runs
   Its doctor reports a missing SDK, `cargo` or Docker: show it. For `cargo`/Docker, offer `flagrm scope`; `--write` only on a yes.
 - `flagrm list --json`: find the flag in `flags[]`. Not there: show the closest names and ask.
 - `state` is `off`, `mixed` or `conditional`: name the environments in `config[]` that change and get a yes, or stop.
-  `unconfigured` (set in a flag service): ask if it is ON everywhere. The removal request is not that answer.
+  `unconfigured` (set in a flag service): with `launchdarkly:` in the config, `flagrm stale <flag> --json`; verdict `remove` confirms ON, another verdict: stop and show its `reasons`. No section, or `stale` exits non-zero (show its message): ask if it is ON everywhere. The removal request is not that answer.
 - Read `CLAUDE.md` or `AGENTS.md` if present, for conventions and build commands.
 
 ## 2. Baseline

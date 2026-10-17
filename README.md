@@ -211,9 +211,10 @@ narrower test command makes "no new failures" mean less.
 | `list` | List every feature flag: definitions, configured state per environment, reference counts | 0 |
 | `baseline <flag>` | Before any edit, record the git commit, build, test and lint results and the flag's names | 0, 2 usage error |
 | `verify <flag>` | Gate the removal with the [checks above](#what-verify-checks) | 0 pass, 1 fail, 2 usage error |
+| `stale [flags...]` | Ask LaunchDarkly which flags are ready to remove from code | 0 evaluated, 2 usage error, 3 LaunchDarkly unreachable or token rejected |
 | `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
 
-`list`, `baseline` and `verify` accept `--json`, `--config <path>`, and
+`list`, `baseline`, `verify` and `stale` accept `--json`, `--config <path>`, and
 `--include` / `--exclude <glob>`.
 
 <details>
@@ -262,6 +263,11 @@ narrower test command makes "no new failures" mean less.
   overview, `--json` the full result, `--skip` skips checks, `--strict` fails
   on warnings. Reuses its own or another flag's passing runs on the same tree
   and commands (`--no-reuse` runs them).
+- **`stale [flags...]`**: reads the config's `launchdarkly:` section
+  (read-only) and sorts every flag, or the LaunchDarkly keys or code names
+  given, into `remove`, `unreferenced` or `keep` with reasons. `--md` prints a
+  markdown summary, `--json` the full result. See
+  [LaunchDarkly and CI](#launchdarkly-and-ci).
 
 </details>
 
@@ -340,6 +346,29 @@ setup files don't count as part of a removal, so generated output such as
 verify or block the Stop hook. `--exclude` on the command line doesn't reach
 the Stop hook.
 
+### LaunchDarkly
+
+An optional `launchdarkly:` section lets `flagrm stale` read the project's
+flags from LaunchDarkly (see [LaunchDarkly and CI](#launchdarkly-and-ci)):
+
+```yaml
+launchdarkly:
+  project: shop                           # required: the LaunchDarkly project key
+  baseUrl: https://app.launchdarkly.com   # default; EU and federal instances use their own
+  tokenEnv: LD_API_TOKEN                  # default; the variable holding the API token
+  environments: [production, staging]     # default: every environment of the project
+  minDaysOn: 30                           # default: days every environment must have served true
+  temporaryOnly: true                     # default: only flags marked temporary qualify
+  tags: { include: [], exclude: [permanent] }   # must have every include tag and no exclude tag
+  map: { checkout-v2: NewCheckout }       # LaunchDarkly key → code name, when the spelling differs
+```
+
+The API token is read only from the variable `tokenEnv` names; a `token` or
+`apiKey` in the file is an error. It is sent only to `baseUrl`, which must use
+`https` (plain `http` only to `localhost`). A reader role is enough: flagrm
+never writes to LaunchDarkly. Without the section nothing changes, and
+`flagrm doctor` warns when the token variable isn't set.
+
 ### When the machine can't build everything
 
 `flagrm init` and `flagrm doctor` check that the .NET SDK `global.json` asks
@@ -362,6 +391,47 @@ can break others that pass today.
 For .NET, keep `--no-incremental` in `build`. An incremental build skips
 up-to-date projects and prints none of their warnings, so the dead-code check
 would have no baseline warnings to compare against.
+
+## LaunchDarkly and CI
+
+With a [`launchdarkly:` section](#launchdarkly) in the config, `flagrm stale`
+reads the project's flags from LaunchDarkly and compares them with the code
+(`flagrm list`'s inventory). Each flag gets one verdict:
+
+| Verdict | Meaning |
+|---|---|
+| `remove` | Meets every condition, and one code name in this repository matches it |
+| `unreferenced` | No code name in this repository matches it. Another repository may still read it, so this is not a suggestion to archive it |
+| `keep` | Anything else, with the reasons: still targeted somewhere, serving `false`, on for too few days, permanent, a tag, an ambiguous name, data flagrm couldn't read, or a code name with no LaunchDarkly flag (archived or deleted: the SDK serves the code's fallback, which may be OFF) |
+
+A flag meets the conditions when it is boolean, every checked environment
+serves `true` to every context (no rules, individual targets, prerequisites or
+rollouts; or targeting off with `true` as the off variation) and has for at
+least `minDaysOn` days, it is marked temporary (unless `temporaryOnly: false`),
+and its tags pass `tags`. The days count from the latest targeting change in
+the audit log; a name, description or tag edit doesn't reset them. Without one,
+they count from the environment's last change of any kind (marked `*`), which
+can only make a flag wait longer. Set `environments` when the project has
+per-developer or short-lived environments: by default every environment must
+serve `true`. A LaunchDarkly key matches a code name through `map`, then by
+exact name, then ignoring case and `-`, `_`, `.` and spaces (`new-checkout`
+matches `NewCheckout`); two possible matches are reported, not guessed.
+
+`stale` exits 0 whenever it could evaluate, whatever the verdicts: read them
+from `--json`. Exit 2 is a usage or config error (no section, no token, an
+unknown environment or flag name), exit 3 means LaunchDarkly couldn't be
+reached or rejected the token. A token with LaunchDarkly's reader role is
+enough; flagrm only sends GET requests.
+
+When the config has `launchdarkly:`, the `flagrm-remove` skill runs
+`flagrm stale <flag> --json` instead of asking whether a flag set only in
+LaunchDarkly is ON everywhere, so a removal can run without anyone there.
+[`examples/ci/github-actions.yml`](examples/ci/github-actions.yml) and
+[`examples/ci/azure-pipelines.yml`](examples/ci/azure-pipelines.yml) run it on
+a weekly schedule: they list the `remove` flags, run a headless Claude Code
+agent per flag, run `flagrm verify` themselves and open a pull request only
+when it passes. The agent job needs the project's build toolchain, and the
+pull request is for a person to review.
 
 ## Separate repositories
 
