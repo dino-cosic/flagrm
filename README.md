@@ -2,18 +2,31 @@
 
 [![CI](https://github.com/dino-cosic/flagrm/actions/workflows/ci.yml/badge.svg)](https://github.com/dino-cosic/flagrm/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/flagrm)](https://www.npmjs.com/package/flagrm)
+[![Node.js](https://img.shields.io/node/v/flagrm)](https://nodejs.org)
+[![License](https://img.shields.io/npm/l/flagrm)](LICENSE)
 
-Remove feature flags with your AI coding agent, safely.
+**Remove feature flags with your AI coding agent, safely.**
 
-flagrm gives Claude Code, GitHub Copilot and Codex a flag-removal skill and the
-guardrails to check the result. It records a baseline before the edit, then
-gates the removal with `flagrm verify`, which fails while the flag is still
-referenced, the build breaks, a test or lint regresses, or the removal leaves
-unused code behind.
+[Website](https://flagrm.com) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Changelog](CHANGELOG.md)
 
-The agent does the reasoning and the edits: finding the flag, its aliases and
-wrappers, removing the OFF path, and refactoring methods the flag was passed
-into. flagrm decides when the work is done.
+Removing a feature flag looks easy: delete the `if`, keep the ON branch. In a
+real codebase the flag hides behind wrappers and aliases, reaches templates and
+config files, has tests for the OFF path, and leaves behind methods nothing
+calls anymore. An AI agent handles most of that well, but it decides on its own
+when it's done, and that's when it misses things.
+
+flagrm gives Claude Code, GitHub Copilot and Codex a flag-removal skill and a
+deterministic definition of "done":
+
+- **The agent does the reasoning and the edits.** It finds the flag, its
+  aliases and wrappers, removes the OFF path, and refactors the code the flag
+  was passed into. flagrm never edits your source code.
+- **flagrm decides when the removal is finished.** It records a baseline before
+  the first edit, then `flagrm verify` fails while the flag is still
+  referenced, the build breaks, a test or lint regresses, or the removal
+  leaves unused code behind.
+- **The agent doesn't stop early.** In Claude Code, a Stop hook keeps the
+  agent from finishing until `verify` passes for the exact files on disk.
 
 Angular and .NET projects work out of the box. Any other stack works through the
 generic adapter.
@@ -21,28 +34,12 @@ generic adapter.
 > **Status:** flagrm is at version 0.4. Until 1.0, a minor release may contain
 > breaking changes.
 
-## Requirements
-
-- Node.js 22 or later
-- git: `baseline` and `verify` compare against the commit the removal started from
-- An AI coding agent that reads skills: Claude Code, GitHub Copilot or Codex
-  (the Stop hook is Claude Code only)
-
-On Windows, the Stop hook runs in Git Bash, or in PowerShell when Git Bash is
-not installed. In PowerShell, `npx` needs an execution policy that allows
-scripts (`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`). Otherwise the
-hook fails and does not guard the removal. `flagrm verify` still works.
-
 ## Quick start
 
 ```sh
 npm install -D flagrm        # or run everything with npx flagrm
 npx flagrm init              # asks which AI tools; config, skills, Stop hook, .gitignore entry
 ```
-
-No `package.json` (a pure .NET or Go repository)? Install globally with
-`npm install -g flagrm`, or run `npx flagrm`. The Stop hook runs
-`npx --no-install flagrm hook stop`, so it needs a local or a global install.
 
 Fill in the project paths and the build and test commands in
 `flagrm.config.yaml`, check the setup with `npx flagrm doctor`, then ask your
@@ -52,12 +49,8 @@ agent:
 /flagrm-remove NewCheckout
 ```
 
-The agent ends with a short overview (checks, changed files, tests deleted or
-renamed) and a proposed commit message; it commits only when you ask. Several
-flags at once: `/flagrm-remove NewCheckout DarkMode` asks the ON question and
-whether to commit each flag once, then removes them one after another. To
-check a removal later, run `/flagrm-verify NewCheckout`. The overview looks
-like this (abridged):
+The agent ends with a short overview and a proposed commit message; it commits
+only when you ask. The overview looks like this (abridged):
 
 ```md
 ### flagrm verify: NewCheckout ✅ pass
@@ -78,32 +71,64 @@ like this (abridged):
 **Tests renamed (1):** `CheckoutComponent › places the order when NewCheckout is on` → `CheckoutComponent › places the order`
 ```
 
-Tests that no longer run are sorted by why: deleted in the diff (the OFF
-path's tests), renamed without the flag in the name, or left out by a test
-command changed since the baseline. Only a test that no longer runs for none
-of these reasons is a warning, for the agent to explain in its notes.
+- **Several flags:** `/flagrm-remove NewCheckout DarkMode` asks once whether
+  they are all ON and whether to commit each, then removes them one after
+  another, one commit each.
+- **Check a removal later:** `/flagrm-verify NewCheckout`.
+- **Tests that no longer run** are sorted by why: deleted in the diff (the OFF
+  path's tests), renamed without the flag in the name, or left out by a test
+  command changed since the baseline. Only a test that no longer runs for none
+  of these reasons is a warning, for the agent to explain in its notes.
+
+### Requirements
+
+- Node.js 22 or later
+- git: `baseline` and `verify` compare against the commit the removal started from
+- An AI coding agent that reads skills: Claude Code, GitHub Copilot or Codex
+  (the Stop hook is Claude Code only)
+
+No `package.json` (a pure .NET or Go repository)? Install globally with
+`npm install -g flagrm`, or run `npx flagrm`. The Stop hook runs
+`npx --no-install flagrm hook stop`, so it needs a local or a global install.
+
+On Windows, the Stop hook runs in Git Bash, or in PowerShell when Git Bash is
+not installed. In PowerShell, `npx` needs an execution policy that allows
+scripts (`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`). Otherwise the
+hook fails and does not guard the removal. `flagrm verify` still works.
 
 ## How it works
 
+```mermaid
+flowchart LR
+    A["flagrm init<br/>once per repository"] --> B["/flagrm-remove flag"]
+    B --> C["flagrm baseline<br/>git commit, build, tests, names"]
+    C --> D["agent edits"]
+    D --> E{"flagrm verify"}
+    E -- fail --> D
+    E -- pass --> F["overview +<br/>commit message"]
+    H["Stop hook"] -. blocks finishing until verify passes .-> E
+```
+
 1. **`flagrm init`** asks which AI coding tools to set up (Claude Code,
    GitHub Copilot, Codex), with the ones the repository already uses
-   pre-selected; `--tool claude-code,codex` answers without asking, and
-   without a terminal it takes the detected tools (all three when none is).
-   It writes `flagrm.config.yaml` for the Angular and .NET projects it finds,
-   with the choice as `tools:`, and adds `.flagrm/` to `.gitignore`. Then per
-   tool: for Claude Code the `flagrm-remove` and `flagrm-verify` skills in
-   `.claude/skills/` and a Stop hook in `.claude/settings.json`; for Copilot
-   the skills in `.github/skills/` and `/flagrm-remove` and `/flagrm-verify`
-   prompt files in `.github/prompts/`; for Codex the skills in
-   `.agents/skills/` and a pointer in `AGENTS.md`.
+   pre-selected. It writes `flagrm.config.yaml` for the Angular and .NET
+   projects it finds, adds `.flagrm/` to `.gitignore`, and installs each
+   tool's files:
+
+   | Tool | Files |
+   |---|---|
+   | Claude Code | `flagrm-remove` and `flagrm-verify` skills in `.claude/skills/`, Stop hook in `.claude/settings.json` |
+   | GitHub Copilot | skills in `.github/skills/`, `/flagrm-remove` and `/flagrm-verify` prompt files in `.github/prompts/` |
+   | Codex | skills in `.agents/skills/`, a pointer in `AGENTS.md` |
+
+   `--tool claude-code,codex` answers without asking; without a terminal it
+   takes the detected tools (all three when none is). The choice is saved as
+   `tools:`. `init` never overwrites or deletes a file.
 2. **`/flagrm-remove <flag>`**: the agent checks that the tree is clean and runs
    `flagrm baseline <flag>`, which records the git commit, the build and test
    results, and the flag's names. It finds every usage with its own search,
    records wrappers and aliases with `flagrm baseline <flag> --name`, removes
-   the flag, and repeats `flagrm verify <flag>` until it passes. It ends with
-   the overview and a commit message. With several flags it asks once whether
-   they are all ON and whether to commit each, then removes them in order,
-   one commit each.
+   the flag, and repeats `flagrm verify <flag>` until it passes.
 3. **The Stop hook** (Claude Code) keeps the agent from finishing while a
    removal is in progress and not verified. In progress means a file git
    tracks changed on top of the baseline commit (untracked files and
@@ -115,32 +140,49 @@ of these reasons is a warning, for the agent to explain in its notes.
 4. **`/flagrm-verify <flag>`** checks a removal later: runs
    `flagrm verify <flag> --md` and adds notes and a commit message.
 
-## Commands
-
-| Command | What it does | Exit codes |
-|---|---|---|
-| `init` | Set up the config and `.gitignore` entry, and each chosen AI tool's files (asks, or `--tool claude-code,copilot,codex`; saved as `tools:`). Never overwrites or deletes | 0, 2 usage error |
-| `doctor` | Check the config, the build, test and lint commands (marking adapter defaults; `--run` runs them and fails when tests write no readable `testResults`), the .NET SDK `global.json` asks for, `cargo` and Docker where projects need them, git, `.gitignore`, installed skills and hook, and abandoned baselines | 0 ok, 1 problems |
-| `scope` | For each .NET project, show what the machine lacks and which projects a solution filter would leave out; `--write` creates `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build and test at it | 0 nothing missing, 1 something missing |
-| `update` | Refresh the installed skills, prompt files, `AGENTS.md` block and hook from this flagrm version, for the config's `tools:` | 0 |
-| `list` | List every feature flag in the project: definitions, configured state per environment, reference counts; flow names include renamed imports of a flag registry (`import { FeatureFlags as AppFeatureFlags }`) and, in Angular, the fields, getters, methods and locals holding a flag and a child component's input bound to one | 0 |
-| `baseline <flag>` | Before any edit, record the git commit, build, test and lint results and the flag's names in `.flagrm/<flag>/baseline.json`. In .NET and Angular code the names include the locals, fields, getters, parameters and methods the flag's value travels through when they name the flag (a local, parameter or field is checked only in its own file, and an Angular component's template); generic or ambiguous ones are listed as `suggestedNames`, with `parameterizedTests` that pass the value as a literal. `--file` (repeatable) limits `--name` entries to those files (and records them as wrappers). `--name X --kind alias\|wrapper` adds names to an existing baseline (a name whose declaration reads only other flags is refused); `--json` prints a summary (test counts, at most 20 failed test names; the file keeps everything); `--force` starts over, but only while the code is unedited since the baseline commit; `--accept config,failures` acknowledges, also mid-removal, a config change or the baseline's failing tests so verify stops warning about them; `--no-checks` skips build, tests and lint; build, test and lint results of a passing verify on the same tree and commands are reused (`--no-reuse` runs them) | 0, 2 usage error |
-| `verify <flag>` | Gate the removal with `leftovers`, `dead-code`, `build`, `tests`, `lint` and `coverage`. Writes `.flagrm/<flag>/verify.json`. `--md` prints the overview, `--json` the full result, `--skip` skips checks, `--strict` fails on warnings; reuses its own or another flag's passing runs on the same tree and commands (`--no-reuse` runs them) | 0 pass, 1 fail, 2 usage error |
-| `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
-
-`list`, `baseline` and `verify` accept `--json`, `--config <path>`, and
-`--include` / `--exclude <glob>`.
-
 ## What `verify` checks
 
 | Check | Fails when |
 |---|---|
-| `leftovers` | A recorded name (the flag literal, its constants, wrappers the agent recorded) is still in code or config. A mention in a comment is a warning, and so is a test that checks text the removal deleted from the code (a test of the OFF path that never names the flag), or deleted text whose replacement on the same line no test checks (lost ON coverage) |
-| `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files. A method, property, field or type the removal left named only where it is declared is a warning (compilers don't report public members) |
+| `leftovers` | A recorded name (the flag literal, its constants, wrappers the agent recorded) is still in code or config |
+| `dead-code` | The compiler reports new unused code (locals, imports, private members) in changed files |
 | `build` | A project's build command fails |
-| `tests` | A test that passed at the baseline fails. Tests that already failed at the baseline are known failures and only warn; without `testResults` they are read from the test log (Karma, Jest, Vitest, `dotnet test`), and count as known only when the log names every failing test. A test that no longer runs though the diff neither deletes nor renames it and the test config is unchanged, and a changed test file none of whose tests ran, are warnings for the agent to account for. Without `testResults`, deleted and renamed tests come from the changed test files, and a test count that dropped by more than the diff deletes is a warning (info when the changed test files use data rows such as `[InlineData]`, `TestCase`, `DataRow` or `.each`, whose cases count separately, or when the test config changed since the baseline) |
-| `lint` | The project's `lint` command fails where it passed at the baseline. A lint that already failed at the baseline only warns, unless its log has error lines the baseline's didn't (line and column numbers ignored); a missing package script or ESLint config is a setup problem and fails |
-| `coverage` | A changed file that no project's build, test or lint command checks (outside every project with a command, or outside its `covers` globs) is a warning, so it fails only with `--strict`. Files already dirty at the baseline and unchanged since don't count, nor do projects whose commands `--skip` left out |
+| `tests` | A test that passed at the baseline fails |
+| `lint` | The project's `lint` command fails where it passed at the baseline |
+| `coverage` | A changed file that no build, test or lint command checks (a warning, so it fails only with `--strict`) |
+
+In typed code, deleting the flag's definition turns every missed reference into
+a compile error, so the build does most of the work. `leftovers` covers what the
+compiler cannot see: config files, templates, comments and wrappers.
+
+<details>
+<summary>Warnings and edge cases per check</summary>
+
+- **`leftovers`**: a mention in a comment is a warning, and so is a test that
+  checks text the removal deleted from the code (a test of the OFF path that
+  never names the flag), or deleted text whose replacement on the same line no
+  test checks (lost ON coverage).
+- **`dead-code`**: a method, property, field or type the removal left named
+  only where it is declared is a warning (compilers don't report public
+  members).
+- **`tests`**: tests that already failed at the baseline are known failures and
+  only warn; without `testResults` they are read from the test log (Karma,
+  Jest, Vitest, `dotnet test`), and count as known only when the log names
+  every failing test. A test that no longer runs though the diff neither
+  deletes nor renames it and the test config is unchanged, and a changed test
+  file none of whose tests ran, are warnings for the agent to account for.
+  Without `testResults`, deleted and renamed tests come from the changed test
+  files, and a test count that dropped by more than the diff deletes is a
+  warning (info when the changed test files use data rows such as
+  `[InlineData]`, `TestCase`, `DataRow` or `.each`, whose cases count
+  separately, or when the test config changed since the baseline).
+- **`lint`**: a lint that already failed at the baseline only warns, unless its
+  log has error lines the baseline's didn't (line and column numbers ignored);
+  a missing package script or ESLint config is a setup problem and fails.
+- **`coverage`**: a file counts as unchecked when it is outside every project
+  with a command, or outside its `covers` globs. Files already dirty at the
+  baseline and unchanged since don't count, nor do projects whose commands
+  `--skip` left out.
 
 The baseline also records the configuration it was taken with: each project's
 resolved build, test and lint commands, the files they name (a `.slnf`, a
@@ -148,9 +190,70 @@ resolved build, test and lint commands, the files they name (a `.slnf`, a
 of it changed since, the check it affects warns and shows the difference: a
 narrower test command makes "no new failures" mean less.
 
-In typed code, deleting the flag's definition turns every missed reference into
-a compile error, so the build does most of the work. `leftovers` covers what the
-compiler cannot see: config files, templates, comments and wrappers.
+</details>
+
+## Commands
+
+| Command | What it does | Exit codes |
+|---|---|---|
+| `init` | Set up the config, `.gitignore` entry and each chosen AI tool's files | 0, 2 usage error |
+| `doctor` | Check the config, commands, toolchain, git setup, installed skills and hook | 0 ok, 1 problems |
+| `scope` | Show which .NET projects this machine can't build and write a solution filter without them | 0 nothing missing, 1 something missing |
+| `update` | Refresh the installed skills, prompt files, `AGENTS.md` block and hook | 0 |
+| `list` | List every feature flag: definitions, configured state per environment, reference counts | 0 |
+| `baseline <flag>` | Before any edit, record the git commit, build, test and lint results and the flag's names | 0, 2 usage error |
+| `verify <flag>` | Gate the removal with the [checks above](#what-verify-checks) | 0 pass, 1 fail, 2 usage error |
+| `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
+
+`list`, `baseline` and `verify` accept `--json`, `--config <path>`, and
+`--include` / `--exclude <glob>`.
+
+<details>
+<summary>Command details and options</summary>
+
+- **`init`**: asks which tools to set up, or `--tool claude-code,copilot,codex`;
+  saved as `tools:`. Never overwrites or deletes.
+- **`doctor`**: checks the build, test and lint commands (marking adapter
+  defaults; `--run` runs them and fails when tests write no readable
+  `testResults`), the .NET SDK `global.json` asks for, `cargo` and Docker
+  where projects need them, git, `.gitignore`, installed skills and hook, and
+  abandoned baselines.
+- **`scope`**: for each .NET project, shows what the machine lacks and which
+  projects a solution filter would leave out; `--write` creates
+  `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build
+  and test at it. See [When the machine can't build everything](#when-the-machine-cant-build-everything).
+- **`update`**: refreshes files from this flagrm version, for the config's
+  `tools:`.
+- **`list`**: flow names include renamed imports of a flag registry
+  (`import { FeatureFlags as AppFeatureFlags }`) and, in Angular, the fields,
+  getters, methods and locals holding a flag and a child component's input
+  bound to one.
+- **`baseline <flag>`**: writes `.flagrm/<flag>/baseline.json`. In .NET and
+  Angular code the names include the locals, fields, getters, parameters and
+  methods the flag's value travels through when they name the flag (a local,
+  parameter or field is checked only in its own file, and an Angular
+  component's template); generic or ambiguous ones are listed as
+  `suggestedNames`, with `parameterizedTests` that pass the value as a
+  literal.
+  - `--name X --kind alias|wrapper` adds names to an existing baseline (a name
+    whose declaration reads only other flags is refused); `--file`
+    (repeatable) limits `--name` entries to those files (and records them as
+    wrappers).
+  - `--json` prints a summary (test counts, at most 20 failed test names; the
+    file keeps everything).
+  - `--force` starts over, but only while the code is unedited since the
+    baseline commit.
+  - `--accept config,failures` acknowledges, also mid-removal, a config change
+    or the baseline's failing tests so verify stops warning about them.
+  - `--no-checks` skips build, tests and lint. Build, test and lint results of
+    a passing verify on the same tree and commands are reused (`--no-reuse`
+    runs them).
+- **`verify <flag>`**: writes `.flagrm/<flag>/verify.json`. `--md` prints the
+  overview, `--json` the full result, `--skip` skips checks, `--strict` fails
+  on warnings. Reuses its own or another flag's passing runs on the same tree
+  and commands (`--no-reuse` runs them).
+
+</details>
 
 ## Configuration
 
@@ -189,38 +292,43 @@ path. `build` and `test` are resolved one at a time:
 | a command | that command |
 | `false` | none, not even the default |
 
-`testResults` (JUnit XML, TRX or Jest JSON; a path or a glob) lets `verify`
-compare individual tests against the baseline. Only files written during
-the run are read, and every matching file is merged, so a sharded run can
-use `./test-results/*.xml`. The default .NET test command writes TRX to
-`.flagrm/test-results/<project>/`. So does the default Angular test command,
-when the workspace's runner can write results without setup: JUnit for
-Angular's Vitest builder and Vitest, Jest JSON for Jest, and JUnit for Karma
-once karma.conf configures `karma-junit-reporter`. A `test` command of your
-own needs its own `testResults`, and `flagrm doctor` says what to add.
-Without result files, `verify` reads failing test names and counts from the
-test log and deleted tests from the diff, which is coarser: passing tests
-aren't named. `timeout` (seconds) fails a project's build or test command
-that runs longer, for example a test runner left in watch mode. `tools` lists
-the AI coding tools whose files `init` and `update` manage (`claude-code`,
-`copilot`, `codex`); dropping one leaves its files in place, and `init` names
-them so you can delete them.
+| Key | What it does |
+|---|---|
+| `testResults` | JUnit XML, TRX or Jest JSON (a path or a glob), so `verify` compares individual tests against the baseline |
+| `lint` | Optional lint or type-check command, run like `build` and `test` |
+| `covers` | Globs (relative to `path`) of the files the project's commands check |
+| `timeout` | Seconds after which a build or test command fails, for example a test runner left in watch mode |
+| `tools` | The AI coding tools whose files `init` and `update` manage (`claude-code`, `copilot`, `codex`) |
+| `exclude` | Paths that don't count as part of a removal |
 
-`lint` is an optional lint or type-check command (no adapter default) that
-`baseline` and `verify` run like `build` and `test`; use it for code the build
-and tests don't reach, such as end-to-end specs. A lint that already fails at
-the baseline only warns, unless the removal adds error lines. flagrm doesn't
-check formatting: put a formatter's check (`npx prettier --check .`) in
-`lint` if you want it. `covers` lists the files (globs relative to `path`) the
-project's commands check; the `coverage` check warns about a changed file no
-project with a command covers. Without `covers`, a project covers everything
-under its path.
+**`testResults`.** Only files written during the run are read, and every
+matching file is merged, so a sharded run can use `./test-results/*.xml`. The
+default .NET test command writes TRX to `.flagrm/test-results/<project>/`. So
+does the default Angular test command, when the workspace's runner can write
+results without setup: JUnit for Angular's Vitest builder and Vitest, Jest JSON
+for Jest, and JUnit for Karma once karma.conf configures
+`karma-junit-reporter`. A `test` command of your own needs its own
+`testResults`, and `flagrm doctor` says what to add. Without result files,
+`verify` reads failing test names and counts from the test log and deleted
+tests from the diff, which is coarser: passing tests aren't named.
 
-Paths matching `exclude` (relative to the config file or a project's path; a
-directory excludes everything under it) and flagrm's own setup files don't
-count as part of a removal, so generated output such as `graphify-out/` that
-changes during a session doesn't invalidate a passing verify or block the Stop
-hook. `--exclude` on the command line doesn't reach the Stop hook.
+**`lint`** has no adapter default. Use it for code the build and tests don't
+reach, such as end-to-end specs. A lint that already fails at the baseline only
+warns, unless the removal adds error lines. flagrm doesn't check formatting:
+put a formatter's check (`npx prettier --check .`) in `lint` if you want it.
+
+**`covers`.** The `coverage` check warns about a changed file no project with a
+command covers. Without `covers`, a project covers everything under its path.
+
+**`tools`.** Dropping a tool leaves its files in place, and `init` names them so
+you can delete them.
+
+**`exclude`.** Paths matching `exclude` (relative to the config file or a
+project's path; a directory excludes everything under it) and flagrm's own
+setup files don't count as part of a removal, so generated output such as
+`graphify-out/` that changes during a session doesn't invalidate a passing
+verify or block the Stop hook. `--exclude` on the command line doesn't reach
+the Stop hook.
 
 ### When the machine can't build everything
 
