@@ -44,6 +44,8 @@ export interface DoctorOptions {
   run?: boolean;
   /** What the machine has (SDKs, `cargo`, Docker); the real machine by default. */
   probes?: SetupProbes;
+  /** Environment variables, for the LaunchDarkly token check; `process.env` by default. */
+  env?: NodeJS.ProcessEnv;
 }
 
 /** How to get test results for a project without `testResults`: .NET writes TRX, JavaScript runners by detection. */
@@ -133,6 +135,12 @@ async function configChecks(
     const config = loadConfig({ config: configFile }, cwd);
     root = config.root;
     projects = resolveProjects(config);
+    // Only `flagrm stale` needs the token, so a missing one warns: removals without LaunchDarkly still work.
+    // No request is made: doctor stays offline.
+    const ld = config.launchdarkly;
+    if (ld && !(options.env ?? process.env)[ld.tokenEnv]?.trim()) {
+      add("warn", `launchdarkly: ${ld.tokenEnv} is not set — flagrm stale can't read project "${ld.project}"`);
+    } else if (ld) add("ok", `launchdarkly: project "${ld.project}", token from ${ld.tokenEnv}`);
   } catch (err) {
     add("fail", `config: ${err instanceof Error ? err.message : String(err)}`);
     return;

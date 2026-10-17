@@ -1,5 +1,7 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,9 +17,9 @@ interface CliResult {
   stderr: string;
 }
 
-function runCli(args: string[], cwd: string, input?: string): CliResult {
+function runCli(args: string[], cwd: string, input?: string, extraEnv: NodeJS.ProcessEnv = {}): CliResult {
   // picocolors colors output whenever `CI` is set (GitHub Actions), even without a TTY.
-  const env = { ...process.env, NO_COLOR: "1" };
+  const env = { ...process.env, NO_COLOR: "1", ...extraEnv };
   const r = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8", env, input });
   return { status: r.status ?? 1, stdout: r.stdout, stderr: r.stderr };
 }
@@ -505,5 +507,141 @@ describe("CLI lint (spawned dist/cli.js)", () => {
     const md = runCli(["verify", "FlagA", "--md"], dir).stdout;
     expect(md).toContain("| lint |");
     expect(md).toContain("| coverage |");
+  });
+});
+
+describe("CLI stale (spawned dist/cli.js)", () => {
+  let dir: string;
+  const config = (launchdarkly: string) =>
+    fs.writeFileSync(
+      path.join(dir, "flagrm.config.yaml"),
+      `frontend: ./frontend\nbackend: ./backend\n${launchdarkly}`,
+      "utf8",
+    );
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-cli-stale-"));
+    fs.cpSync(SAMPLE, dir, { recursive: true });
+  });
+
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("is listed in --help", () => {
+    expect(runCli(["--help"], dir).stdout).toMatch(/^ {2}stale \[options\] \[flags\.\.\.\]/m);
+  });
+
+  it("exits 2 without a launchdarkly section, explaining how to add one", () => {
+    config("");
+    const { status, stderr } = runCli(["stale"], dir);
+    expect(status).toBe(2);
+    expect(stderr).toContain("No launchdarkly: section");
+    expect(stderr).toContain("project: <project key>");
+  });
+
+  it("exits 2 naming the variable when the token is unset, before any request", () => {
+    // An unroutable port: a request would fail with exit 3, not 2.
+    config("launchdarkly:\n  project: shop\n  baseUrl: http://127.0.0.1:9\n  tokenEnv: FLAGRM_TEST_LD_TOKEN\n");
+    const { status, stderr } = runCli(["stale", "--json"], dir, undefined, { FLAGRM_TEST_LD_TOKEN: "" });
+    expect(status).toBe(2);
+    expect(stderr).toContain("FLAGRM_TEST_LD_TOKEN is not set");
+  });
+
+  it("exits 3 when LaunchDarkly can't be reached, without printing the token", () => {
+    config("launchdarkly:\n  project: shop\n  baseUrl: http://127.0.0.1:9\n  tokenEnv: FLAGRM_TEST_LD_TOKEN\n");
+    const token = "api-cli-test-secret";
+    const { status, stdout, stderr } = runCli(["stale", "--json"], dir, undefined, { FLAGRM_TEST_LD_TOKEN: token });
+    expect(status).toBe(3);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("Couldn't reach LaunchDarkly");
+    expect(stderr + stdout).not.toContain(token);
+  });
+
+  it("exits 2 on a token in the config file", () => {
+    config("launchdarkly:\n  project: shop\n  token: api-123\n");
+    const { status, stderr } = runCli(["stale"], dir);
+    expect(status).toBe(2);
+    expect(stderr).toContain("never put the API token in the config file");
+  });
+});
+
+describe("CLI stale against a fake LaunchDarkly (spawned dist/cli.js)", () => {
+  const FIXTURES = path.resolve(HERE, "fixtures");
+  // The fixtures' dates are relative to this instant; the server shifts them to now.
+  const FIXTURE_NOW = Date.UTC(2026, 9, 1);
+  let dir: string;
+  let server: http.Server;
+  let baseUrl: string;
+
+  /** Serve test/fixtures/launchdarkly like the LaunchDarkly API, with every date moved by the same offset. */
+  function fixtureFile(url: URL): string {
+    if (url.pathname.endsWith("/environments")) return "environments.json";
+    if (url.pathname === "/api/v2/flags/shop") {
+      return url.searchParams.get("offset") ? "flags-page2.json" : "flags-page1.json";
+    }
+    const spec = url.searchParams.get("spec") ?? "";
+    if (spec.endsWith(":env/production:flag/new-checkout")) return "auditlog-new-checkout-production.json";
+    if (spec.endsWith(":env/staging:flag/new-checkout")) return "auditlog-new-checkout-staging.json";
+    return "auditlog-empty.json";
+  }
+
+  /** Run the CLI without blocking this process, so the in-process server can answer it. */
+  function runCliAsync(args: string[], env: NodeJS.ProcessEnv): Promise<CliResult> {
+    return new Promise((resolve) => {
+      const child = spawn(process.execPath, [CLI, ...args], {
+        cwd: dir,
+        env: { ...process.env, NO_COLOR: "1", ...env },
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (d) => {
+        stdout += d;
+      });
+      child.stderr.on("data", (d) => {
+        stderr += d;
+      });
+      child.on("close", (status) => resolve({ status: status ?? 1, stdout, stderr }));
+    });
+  }
+
+  beforeAll(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-cli-stale-ld-"));
+    fs.cpSync(path.join(FIXTURES, "realistic", "before"), dir, { recursive: true });
+    const shift = Date.now() - FIXTURE_NOW;
+    server = http.createServer((req, res) => {
+      if (req.headers.authorization !== "test-token") {
+        res.writeHead(401).end("{}");
+        return;
+      }
+      const file = path.join(FIXTURES, "launchdarkly", fixtureFile(new URL(req.url ?? "/", "http://x")));
+      const body = JSON.parse(fs.readFileSync(file, "utf8"), (key, value) =>
+        ["date", "lastModified", "creationDate"].includes(key) ? value + shift : value,
+      );
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(body));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    fs.appendFileSync(path.join(dir, "flagrm.config.yaml"), `launchdarkly:\n  project: shop\n  baseUrl: ${baseUrl}\n`);
+  });
+
+  afterAll(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("exits 0 with work found, listing the remove flag in --json", async () => {
+    const { status, stdout } = await runCliAsync(["stale", "--json"], { LD_API_TOKEN: "test-token" });
+    expect(status).toBe(0);
+    const report = JSON.parse(stdout);
+    const verdicts = Object.fromEntries(report.flags.map((f: { key: string; verdict: string }) => [f.key, f.verdict]));
+    expect(verdicts).toMatchObject({ "new-checkout": "remove", "express-shipping": "keep" });
+  });
+
+  it("exits 0 with nothing to remove", async () => {
+    const { status, stdout } = await runCliAsync(["stale", "ExpressShipping", "--md"], { LD_API_TOKEN: "test-token" });
+    expect(status).toBe(0);
+    expect(stdout).toContain("### flagrm stale: shop — 0 ready to remove");
+    expect(stdout).toContain("`express-shipping`");
   });
 });

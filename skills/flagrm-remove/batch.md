@@ -7,7 +7,7 @@ Each baseline reuses the previous flag's passing verify (seconds) only if the co
 
 1. SKILL.md step 1 preconditions. Find every flag in `flagrm list --json`; for one that's missing, show the closest names and ask.
 2. One table: flag, `state`, and for any not `on` the environments in `config[]` that change.
-   Ask once: "Remove all of these as ON everywhere?" On a no, drop the flags the user names.
+   `unconfigured` flags follow SKILL.md's `flagrm stale` rule. Ask once about the rest: "Remove all of these as ON everywhere?" On a no, drop the flags the user names.
 3. Ask once: "Commit each flag once its verify passes?"
 
 ## Per flag

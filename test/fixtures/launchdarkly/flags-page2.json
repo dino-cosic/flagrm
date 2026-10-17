@@ -1,0 +1,220 @@
+{
+  "items": [
+    {
+      "key": "permanent-banner",
+      "name": "Permanent Banner",
+      "kind": "boolean",
+      "temporary": false,
+      "tags": [],
+      "creationDate": 1773532800000,
+      "variations": [
+        {
+          "_id": "a",
+          "value": true
+        },
+        {
+          "_id": "b",
+          "value": false
+        }
+      ],
+      "archived": false,
+      "deprecated": false,
+      "_links": {
+        "self": {
+          "href": "/api/v2/flags/shop/permanent-banner",
+          "type": "application/json"
+        }
+      },
+      "environments": {
+        "production": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1764892800000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": ""
+        },
+        "staging": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1764892800000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": ""
+        }
+      }
+    },
+    {
+      "key": "recent-search",
+      "name": "Recent Search",
+      "kind": "boolean",
+      "temporary": true,
+      "tags": [],
+      "creationDate": 1773532800000,
+      "variations": [
+        {
+          "_id": "a",
+          "value": true
+        },
+        {
+          "_id": "b",
+          "value": false
+        }
+      ],
+      "archived": false,
+      "deprecated": false,
+      "_links": {
+        "self": {
+          "href": "/api/v2/flags/shop/recent-search",
+          "type": "application/json"
+        }
+      },
+      "environments": {
+        "production": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1789948800000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": ""
+        },
+        "staging": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1787356800000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": ""
+        }
+      }
+    },
+    {
+      "key": "checkout-theme",
+      "name": "Checkout Theme",
+      "kind": "multivariate",
+      "temporary": true,
+      "tags": [],
+      "creationDate": 1773532800000,
+      "variations": [
+        {
+          "_id": "a",
+          "value": "dark"
+        },
+        {
+          "_id": "b",
+          "value": "light"
+        }
+      ],
+      "archived": false,
+      "deprecated": false,
+      "_links": {
+        "self": {
+          "href": "/api/v2/flags/shop/checkout-theme",
+          "type": "application/json"
+        }
+      },
+      "environments": {
+        "production": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1783036800000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": ""
+        },
+        "staging": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1783036800000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": ""
+        }
+      }
+    }
+  ],
+  "totalCount": 5,
+  "_links": {
+    "self": {
+      "href": "/api/v2/flags/shop?summary=0&limit=100&offset=100&env=production&env=staging"
+    }
+  }
+}

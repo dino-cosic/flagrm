@@ -1,0 +1,70 @@
+{
+  "items": [
+    {
+      "_id": "updateDescription-2",
+      "_accountId": "acc",
+      "date": 1790640000000,
+      "kind": "flag",
+      "name": "new-checkout",
+      "description": "",
+      "shortDescription": "",
+      "accesses": [
+        {
+          "action": "updateDescription",
+          "resource": "proj/shop:env/production:flag/new-checkout"
+        }
+      ],
+      "_links": {}
+    },
+    {
+      "_id": "updateTags-3",
+      "_accountId": "acc",
+      "date": 1790553600000,
+      "kind": "flag",
+      "name": "new-checkout",
+      "description": "",
+      "shortDescription": "",
+      "accesses": [
+        {
+          "action": "updateTags",
+          "resource": "proj/shop:env/production:flag/new-checkout"
+        }
+      ],
+      "_links": {}
+    },
+    {
+      "_id": "updateOn-45",
+      "_accountId": "acc",
+      "date": 1786924800000,
+      "kind": "flag",
+      "name": "new-checkout",
+      "description": "",
+      "shortDescription": "",
+      "accesses": [
+        {
+          "action": "updateOn",
+          "resource": "proj/shop:env/production:flag/new-checkout"
+        }
+      ],
+      "_links": {}
+    },
+    {
+      "_id": "updateFallthrough-80",
+      "_accountId": "acc",
+      "date": 1783900800000,
+      "kind": "flag",
+      "name": "new-checkout",
+      "description": "",
+      "shortDescription": "",
+      "accesses": [
+        {
+          "action": "updateFallthrough",
+          "resource": "proj/shop:env/production:flag/new-checkout"
+        }
+      ],
+      "_links": {}
+    }
+  ],
+  "totalCount": 4,
+  "_links": {}
+}
