@@ -104,6 +104,23 @@ jobs:
       - name: Verify the removal
         run: npx --no-install flagrm verify "$FLAG" --json > "$RUNNER_TEMP/verify.json"
 
+      # An independent review by a second agent that didn't make the removal:
+      # a new process, so none of the removal's context. It can't edit the tree:
+      # --tools leaves out Edit and Write, and dontAsk denies any Bash command
+      # outside the allowlist. Advisory: its findings go into the pull request
+      # and never block it. It reuses verify's runs, so it costs no rebuild.
+      - name: Review the removal in a fresh session
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude -p "/flagrm-review $FLAG" --permission-mode dontAsk \
+            --tools "Bash,Read,Glob,Grep" \
+            --allowedTools "Bash(npx --no-install flagrm verify *),Bash(git diff *),Read,Glob,Grep" \
+            > "$RUNNER_TEMP/review.out"
+          mv "$RUNNER_TEMP/review.out" "$RUNNER_TEMP/review.md"
+
       - name: Open a pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -116,4 +133,11 @@ jobs:
           git commit -m "chore: remove $FLAG feature flag"
           git push origin "$branch"
           npx --no-install flagrm verify "$FLAG" --md > "$RUNNER_TEMP/pr-body.md"
+          if [ -s "$RUNNER_TEMP/review.md" ]; then
+            printf '\n<details><summary>Independent review</summary>\n\n' >> "$RUNNER_TEMP/pr-body.md"
+            cat "$RUNNER_TEMP/review.md" >> "$RUNNER_TEMP/pr-body.md"
+            printf '\n\n</details>\n' >> "$RUNNER_TEMP/pr-body.md"
+          else
+            printf '\n_The independent review did not run: see the workflow log._\n' >> "$RUNNER_TEMP/pr-body.md"
+          fi
           gh pr create --head "$branch" --title "chore: remove $FLAG feature flag" --body-file "$RUNNER_TEMP/pr-body.md"

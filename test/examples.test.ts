@@ -19,6 +19,16 @@ const help = (args: string[]) =>
 
 const commands = new Set([...(help([]).split("Commands:")[1] ?? "").matchAll(/^ {2}([a-z][\w-]*)/gm)].map((m) => m[1]));
 
+/** Every mapping in a parsed YAML document: the jobs and steps. */
+function mappings(node: unknown): Record<string, unknown>[] {
+  if (Array.isArray(node)) return node.flatMap(mappings);
+  if (node && typeof node === "object") {
+    const map = node as Record<string, unknown>;
+    return [map, ...Object.values(map).flatMap(mappings)];
+  }
+  return [];
+}
+
 /** Every string value in a parsed YAML document: the scripts and step settings. */
 function strings(node: unknown): string[] {
   if (typeof node === "string") return [node];
@@ -57,6 +67,29 @@ describe("CI examples", () => {
     const text = fs.readFileSync(path.join(ROOT, file), "utf8");
     expect(text).toMatch(/npx --no-install flagrm stale --json/);
     expect(text).not.toMatch(/npx (?!--no-install )flagrm/);
+  });
+
+  it.each(files)("%s reviews the removal in a separate, read-only agent before the pull request", (file) => {
+    const text = fs.readFileSync(path.join(ROOT, file), "utf8");
+    const review = text.indexOf('claude -p "/flagrm-review $FLAG"');
+    expect(review).toBeGreaterThan(text.indexOf('flagrm verify "$FLAG" --json'));
+    expect(review).toBeLessThan(text.indexOf("pr create"));
+    const step = mappings(YAML.parse(text)).find((m) =>
+      strings(m.run ?? m.script)
+        .join("")
+        .includes("/flagrm-review"),
+    );
+    const script = strings(step?.run ?? step?.script).join("");
+    // No edit tools, and nothing outside the allowlist: the reviewer can't change the tree.
+    const tools = /--tools "([^"]*)"/.exec(script)?.[1].split(",");
+    const allowed = /--allowedTools "([^"]*)"/.exec(script)?.[1];
+    expect(tools).toEqual(["Bash", "Read", "Glob", "Grep"]);
+    expect(allowed).toBe("Bash(npx --no-install flagrm verify *),Bash(git diff *),Read,Glob,Grep");
+    expect(script).toContain("--permission-mode dontAsk");
+    // Advisory: a failed review never stops the pull request, which then says so.
+    expect(step?.["continue-on-error"] ?? step?.continueOnError).toBe(true);
+    expect(text).toContain("<details><summary>Independent review</summary>");
+    expect(text).toContain("review did not run");
   });
 
   it.each(files)("%s gates the pull request on the pipeline's own verify", (file) => {

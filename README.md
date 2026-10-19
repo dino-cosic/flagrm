@@ -437,6 +437,14 @@ agent per flag, run `flagrm verify` themselves and open a pull request only
 when it passes. The agent job needs the project's build toolchain, and the
 pull request is for a person to review.
 
+Before the pull request opens, a second agent runs `/flagrm-review` in its own
+process, without the removal's context, as an independent review. It can't
+edit the tree (no Edit or Write tool, and Bash only for `flagrm verify` and
+`git diff`), and it reuses verify's build and test runs, so it costs agent
+tokens but no rebuild. Its findings go into the pull request in a collapsed
+"Independent review" block. The review is advisory: when it fails, the pull
+request still opens and says so. Delete the step if you don't want it.
+
 ## Separate repositories
 
 flagrm works per git repository: the baseline is a commit of one repository,

@@ -109,6 +109,25 @@ stages:
           - script: npx --no-install flagrm verify "$FLAG" --json > "$(Agent.TempDirectory)/verify.json"
             displayName: Verify the removal
 
+          # An independent review by a second agent that didn't make the
+          # removal: a new process, so none of the removal's context. It can't
+          # edit the tree: --tools leaves out Edit and Write, and dontAsk denies
+          # any Bash command outside the allowlist. Advisory: its findings go
+          # into the pull request and never block it. It reuses verify's runs,
+          # so it costs no rebuild.
+          - script: |
+              set -euo pipefail
+              claude -p "/flagrm-review $FLAG" --permission-mode dontAsk \
+                --tools "Bash,Read,Glob,Grep" \
+                --allowedTools "Bash(npx --no-install flagrm verify *),Bash(git diff *),Read,Glob,Grep" \
+                > "$(Agent.TempDirectory)/review.out"
+              mv "$(Agent.TempDirectory)/review.out" "$(Agent.TempDirectory)/review.md"
+            displayName: Review the removal in a fresh session
+            continueOnError: true
+            timeoutInMinutes: 15
+            env:
+              ANTHROPIC_API_KEY: $(ANTHROPIC_API_KEY)
+
           - script: |
               set -euo pipefail
               branch="flagrm/remove-$FLAG"
@@ -118,12 +137,26 @@ stages:
               git add -A
               git commit -m "chore: remove $FLAG feature flag"
               git push origin "$branch"
-              npx --no-install flagrm verify "$FLAG" --md > "$(Agent.TempDirectory)/pr-body.md"
+              body="$(Agent.TempDirectory)/pr-body.md"
+              review="$(Agent.TempDirectory)/review.md"
+              npx --no-install flagrm verify "$FLAG" --md > "$body"
+              # Azure Repos cuts descriptions at 4000 characters: keep the verify
+              # overview whole and shorten only the review to fit.
+              if [ -s "$review" ]; then
+                open=$'\n<details><summary>Independent review</summary>\n\n'
+                close=$'\n\n</details>\n'
+                room=$((4000 - $(wc -c < "$body") - ${#open} - ${#close}))
+                if [ "$room" -gt 0 ]; then
+                  { printf '%s' "$open"; head -c "$room" "$review"; printf '%s' "$close"; } >> "$body"
+                fi
+              else
+                printf '\n_The independent review did not run: see the pipeline log._\n' >> "$body"
+              fi
               az repos pr create \
                 --source-branch "$branch" \
                 --target-branch "$(Build.SourceBranchName)" \
                 --title "chore: remove $FLAG feature flag" \
-                --description "$(head -c 4000 "$(Agent.TempDirectory)/pr-body.md")" \
+                --description "$(head -c 4000 "$body")" \
                 --organization "$(System.CollectionUri)" \
                 --project "$(System.TeamProject)" \
                 --repository "$(Build.Repository.Name)"

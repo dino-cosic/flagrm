@@ -17,7 +17,8 @@ contain breaking changes.
   (rejected token, no access to the project, unknown project key).
   The `flagrm-remove` skill uses it instead of asking whether a flag set in
   LaunchDarkly is ON everywhere; `examples/ci/` has scheduled GitHub Actions
-  and Azure Pipelines workflows that open a removal PR per ready flag.
+  and Azure Pipelines workflows that open a removal PR per ready flag, with
+  an advisory `/flagrm-review` by a second, read-only agent in the PR body.
 - `flagrm doctor` warns while an old `flagrm-verify` skill is still installed.
 
 ### Changed
