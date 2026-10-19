@@ -236,6 +236,83 @@ describe("updateProject", () => {
   });
 });
 
+describe("renamed skills: flagrm-verify became flagrm-review", () => {
+  const OLD_PROMPT = [
+    "---",
+    "description: Check a feature flag removal with flagrm and propose its commit message",
+    "argument-hint: <flag>",
+    "agent: agent",
+    "---",
+    "",
+    "Follow `.github/skills/flagrm-verify/SKILL.md` for the feature flag named after this command.",
+    "",
+  ].join("\n");
+
+  /** A 0.4.1 install: flagrm-remove and a stamped flagrm-verify per tool, the old prompt file and AGENTS.md block. */
+  function installOld(): void {
+    initProject(tmp);
+    for (const dir of AGENT_SKILL_DIRS) {
+      fs.renameSync(path.join(tmp, dir, "flagrm-review"), path.join(tmp, dir, "flagrm-verify"));
+      stampSkill(path.join(tmp, dir, "flagrm-verify", "SKILL.md"), "0.4.1");
+    }
+    fs.rmSync(path.join(tmp, ".github/prompts/flagrm-review.prompt.md"));
+    write(".github/prompts/flagrm-verify.prompt.md", OLD_PROMPT);
+    write("AGENTS.md", `${AGENTS_BLOCK.replace("flagrm-review", "flagrm-verify")}\n`);
+  }
+
+  it("update deletes flagrm's old skill and prompt file and installs their replacements", () => {
+    installOld();
+    const steps = updateProject(tmp);
+    for (const dir of AGENT_SKILL_DIRS) {
+      expect(fs.existsSync(path.join(tmp, dir, "flagrm-verify"))).toBe(false);
+      expect(installedSkillVersion(path.join(tmp, dir, "flagrm-review"))).toBe(packageVersion());
+      expect(steps.find((s) => s.path === `${dir}/flagrm-verify`)?.status).toBe("deleted");
+      expect(steps.find((s) => s.path === `${dir}/flagrm-review`)?.status).toBe("created");
+    }
+    expect(fs.existsSync(path.join(tmp, ".github/prompts/flagrm-verify.prompt.md"))).toBe(false);
+    expect(read(".github/prompts/flagrm-review.prompt.md")).toBe(PROMPT_FILES["flagrm-review"]);
+    expect(steps.find((s) => s.path === ".github/prompts/flagrm-verify.prompt.md")?.status).toBe("deleted");
+    expect(read("AGENTS.md")).toBe(`${AGENTS_BLOCK}\n`);
+  });
+
+  it("update a second time deletes nothing and leaves the review skill unchanged", () => {
+    installOld();
+    updateProject(tmp);
+    const steps = updateProject(tmp);
+    expect(steps.some((s) => s.status === "deleted")).toBe(false);
+    expect(steps.find((s) => s.path === ".claude/skills/flagrm-review")?.status).toBe("unchanged");
+  });
+
+  it("update leaves an old-named skill and prompt file that flagrm didn't write", () => {
+    installOld();
+    write(".claude/skills/flagrm-verify/SKILL.md", "---\nname: flagrm-verify\n---\nOur own.\n");
+    write(".github/prompts/flagrm-verify.prompt.md", "Our own verify prompt.\n");
+    const steps = updateProject(tmp);
+    expect(read(".claude/skills/flagrm-verify/SKILL.md")).toContain("Our own.");
+    expect(read(".github/prompts/flagrm-verify.prompt.md")).toBe("Our own verify prompt.\n");
+    for (const rel of [".claude/skills/flagrm-verify", ".github/prompts/flagrm-verify.prompt.md"]) {
+      const step = steps.find((s) => s.path === rel);
+      expect(step?.status, rel).toBe("skipped");
+      expect(step?.note, rel).toContain("not deleted");
+    }
+    // Nothing replaced there, so update adds nothing new.
+    expect(fs.existsSync(path.join(tmp, ".claude/skills/flagrm-review"))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, ".github/prompts/flagrm-review.prompt.md"))).toBe(false);
+  });
+
+  it("init deletes nothing: it adds the review skill and points at flagrm update", () => {
+    installOld();
+    const steps = initProject(tmp);
+    for (const dir of AGENT_SKILL_DIRS) {
+      expect(installedSkillVersion(path.join(tmp, dir, "flagrm-verify"))).toBe("0.4.1");
+      expect(steps.find((s) => s.path === `${dir}/flagrm-review`)?.status).toBe("created");
+      expect(steps.find((s) => s.path === `${dir}/flagrm-verify`)?.note).toContain("flagrm update");
+    }
+    expect(read(".github/prompts/flagrm-verify.prompt.md")).toBe(OLD_PROMPT);
+    expect(steps.some((s) => s.status === "deleted")).toBe(false);
+  });
+});
+
 describe("prompt files", () => {
   it("lets /flagrm-remove take several flags", () => {
     expect(PROMPT_FILES["flagrm-remove"]).toContain("argument-hint: <flag> [flag...]");

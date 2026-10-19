@@ -8,18 +8,21 @@
 
 import picomatch from "picomatch";
 import { CONFIG_FILENAMES, loadConfig, type ToolConfig } from "./config.js";
-import { AGENT_SKILL_DIRS, SKILLS } from "./install.js";
+import { AGENT_SKILL_DIRS, LEGACY_SKILLS, SKILLS } from "./install.js";
 import { relativePath } from "./util.js";
 
 /** True for a path (relative to the config root, `/`-separated) that is not part of a removal. */
 export type ChangeFilter = (rel: string) => boolean;
 
-/** The files `flagrm init`, `update` and `scope --write` write, relative to the config root. */
+/**
+ * The files `flagrm init`, `update` and `scope --write` write, relative to the
+ * config root. Renamed skills count too: `update` deletes them, possibly mid-removal.
+ */
 export const SETUP_PATTERNS: readonly string[] = [
   ...CONFIG_FILENAMES,
   ".gitignore",
   ".claude/settings.json",
-  ...AGENT_SKILL_DIRS.flatMap((dir) => SKILLS.map((skill) => `${dir}/${skill}/**`)),
+  ...AGENT_SKILL_DIRS.flatMap((dir) => [...SKILLS, ...Object.keys(LEGACY_SKILLS)].map((skill) => `${dir}/${skill}/**`)),
   ".github/prompts/flagrm-*.prompt.md",
   "AGENTS.md",
   "**/flagrm.slnf",

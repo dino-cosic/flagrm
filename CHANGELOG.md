@@ -7,8 +7,21 @@ contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- `flagrm doctor` warns while an old `flagrm-verify` skill is still installed.
+
 ### Changed
 
+- **Breaking:** the `/flagrm-verify` skill is replaced by `/flagrm-review`.
+  Run it in a new session: it runs `flagrm verify`, stops on a failure, and
+  on a pass reviews the diff since the baseline (the ON path kept, deleted
+  tests OFF-path only, nothing unrelated changed, no lost side effects). It
+  reports findings, edits nothing and writes no commit message; that stays
+  with `/flagrm-remove`, which now points to the review. Run `flagrm update`:
+  it deletes the `flagrm-verify` skills and Copilot prompt file that flagrm
+  installed (edits made to them are lost) and installs `flagrm-review`.
+  `flagrm verify` itself is unchanged.
 - README: how to install without a `package.json` (globally or with `npx`),
   and what to do when the UI and the backend are in separate repositories.
 

@@ -71,17 +71,33 @@ describe("skills reference only real flagrm commands and options", () => {
   it("keeps the skills short", () => {
     const lines = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8").split("\n").length;
     expect(lines("skills/flagrm-remove/SKILL.md")).toBeLessThan(110);
-    expect(lines("skills/flagrm-verify/SKILL.md")).toBeLessThan(60);
+    expect(lines("skills/flagrm-review/SKILL.md")).toBeLessThan(60);
   });
 
-  it("gives both skills the same commit message rules", () => {
-    const block = (f: string) =>
-      /<!-- commit-message:start -->([\s\S]*?)<!-- commit-message:end -->/.exec(
-        fs.readFileSync(path.join(ROOT, f), "utf8"),
-      )?.[1];
-    const remove = block("skills/flagrm-remove/SKILL.md");
-    expect(remove).toBeDefined();
-    expect(block("skills/flagrm-verify/SKILL.md")).toBe(remove);
+  it("keeps the commit message rules in the remove skill only: the review writes none", () => {
+    const text = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8");
+    expect(text("skills/flagrm-remove/SKILL.md")).toMatch(
+      /<!-- commit-message:start -->[\s\S]*<!-- commit-message:end -->/,
+    );
+    expect(text("skills/flagrm-review/SKILL.md")).not.toContain("commit-message");
+  });
+
+  it("has the review skill gate on verify, then review the diff since the baseline in a fresh session", () => {
+    const review = fs.readFileSync(path.join(ROOT, "skills/flagrm-review/SKILL.md"), "utf8");
+    expect(review).toContain("`flagrm verify <flag> --json`");
+    expect(review).toContain("baseline.git.sha");
+    expect(review).toContain("changedFiles");
+    expect(review).toContain("ON path");
+    expect(review).toContain("OFF path");
+    expect(review).toContain("new session");
+    expect(review).toContain("**Review**");
+    // Tool-agnostic: Copilot and Codex have no /code-review.
+    expect(review).not.toContain("/code-review");
+  });
+
+  it("points the remove skill's hand-back at the review in a new session", () => {
+    const remove = fs.readFileSync(path.join(ROOT, "skills/flagrm-remove/SKILL.md"), "utf8");
+    expect(remove).toContain("`/flagrm-review <flag>` in a new session");
   });
 
   it("links batch.md from the remove skill, and keeps it short", () => {
@@ -96,7 +112,7 @@ describe("skills reference only real flagrm commands and options", () => {
     for (const file of files) {
       const text = fs.readFileSync(path.join(ROOT, file), "utf8");
       const own = file.split("/")[1];
-      for (const other of ["flagrm-remove", "flagrm-verify"].filter((s) => s !== own)) {
+      for (const other of ["flagrm-remove", "flagrm-review"].filter((s) => s !== own)) {
         if (text.includes(`${other}/`)) problems.push(`${file} references ${other}/`);
       }
     }

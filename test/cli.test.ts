@@ -357,7 +357,7 @@ describe("CLI init (spawned dist/cli.js)", () => {
     expect(status).toBe(0);
     expect(fs.existsSync(path.join(initTmp, "flagrm.config.yaml"))).toBe(true);
     for (const agent of [".github", ".claude", ".agents"]) {
-      for (const skill of ["flagrm-remove", "flagrm-verify"]) {
+      for (const skill of ["flagrm-remove", "flagrm-review"]) {
         expect(fs.existsSync(path.join(initTmp, agent, "skills", skill, "SKILL.md"))).toBe(true);
       }
     }
@@ -379,6 +379,23 @@ describe("CLI init (spawned dist/cli.js)", () => {
     expect(stdout).toMatch(/skipped\s+flagrm\.config\.yaml/);
     expect(stdout).toMatch(/skipped\s+\.agents\/skills\/flagrm-remove/);
     expect(fs.existsSync(path.join(initTmp, ".agents", "skills", "flagrm-remove", "MARKER.txt"))).toBe(true);
+  });
+
+  it("update replaces the flagrm-verify skill of an earlier version with flagrm-review", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-update-rename-"));
+    try {
+      expect(runCli(["init", "--tool", "claude-code"], dir).status).toBe(0);
+      const skills = path.join(dir, ".claude", "skills");
+      fs.renameSync(path.join(skills, "flagrm-review"), path.join(skills, "flagrm-verify"));
+      const { status, stdout } = runCli(["update"], dir);
+      expect(status).toBe(0);
+      expect(stdout).toMatch(/deleted\s+\.claude\/skills\/flagrm-verify — replaced by flagrm-review/);
+      expect(stdout).toMatch(/created\s+\.claude\/skills\/flagrm-review/);
+      expect(fs.existsSync(path.join(skills, "flagrm-verify"))).toBe(false);
+      expect(fs.existsSync(path.join(skills, "flagrm-review", "SKILL.md"))).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("without a terminal, sets up only the tools the repository already uses", () => {

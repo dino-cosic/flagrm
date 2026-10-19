@@ -39,7 +39,7 @@ describe("initProject with tools", () => {
 
   it("installs Copilot's skills and the /flagrm-* prompt files that point at them", () => {
     initProject(tmp, ["copilot"]);
-    expect(exists(".github/skills/flagrm-verify/SKILL.md")).toBe(true);
+    expect(exists(".github/skills/flagrm-review/SKILL.md")).toBe(true);
     expect(read(".github/prompts/flagrm-remove.prompt.md")).toBe(PROMPT_FILES["flagrm-remove"]);
     expect(read(".github/prompts/flagrm-remove.prompt.md")).toContain("`.github/skills/flagrm-remove/SKILL.md`");
     for (const rel of [".claude", ".agents", "AGENTS.md"]) expect(exists(rel)).toBe(false);
@@ -59,11 +59,11 @@ describe("initProject with tools", () => {
     expect(savedTools(tmp)).toEqual(["copilot", "codex"]);
     expect(read("flagrm.config.yaml")).toContain("# keep me");
     expect(steps.find((s) => s.path === "flagrm.config.yaml" && s.status === "updated")).toBeDefined();
-    expect(exists(".github/prompts/flagrm-verify.prompt.md")).toBe(true);
+    expect(exists(".github/prompts/flagrm-review.prompt.md")).toBe(true);
     // Nothing deleted: Claude Code's files are only named.
     expect(exists(".claude/skills/flagrm-remove")).toBe(true);
     const dropped = steps.filter((s) => s.note?.includes("claude-code isn't in tools")).map((s) => s.path);
-    expect(dropped).toEqual([".claude/skills/flagrm-remove", ".claude/skills/flagrm-verify", ".claude/settings.json"]);
+    expect(dropped).toEqual([".claude/skills/flagrm-remove", ".claude/skills/flagrm-review", ".claude/settings.json"]);
   });
 });
 
@@ -141,5 +141,17 @@ describe("doctor with tools", () => {
       `.agents/skills: skills ${JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8")).version}`,
     );
     expect(messages.some((m) => m.startsWith(".claude/skills") || m.includes("Stop hook"))).toBe(false);
+  });
+
+  it("warns about an old flagrm-verify skill until update replaces it", async () => {
+    initProject(tmp, ["codex"]);
+    fs.cpSync(path.join(tmp, ".agents/skills/flagrm-review"), path.join(tmp, ".agents/skills/flagrm-verify"), {
+      recursive: true,
+    });
+    const warning = ".agents/skills/flagrm-verify: replaced by flagrm-review (run flagrm update)";
+    const before = (await runDoctor(tmp)).checks.find((c) => c.message === warning);
+    expect(before?.status).toBe("warn");
+    updateProject(tmp, ["codex"]);
+    expect((await runDoctor(tmp)).checks.some((c) => c.message === warning)).toBe(false);
   });
 });

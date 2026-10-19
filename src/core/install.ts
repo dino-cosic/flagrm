@@ -4,7 +4,8 @@
  * files: for Claude Code the skills and the Stop hook, for GitHub Copilot the
  * skills and `/flagrm-*` prompt files, for Codex the skills and the AGENTS.md
  * pointer. Every step reports what it did; nothing the user wrote is
- * overwritten, and nothing is deleted.
+ * overwritten. The only deletion: `update` replaces a renamed skill that flagrm
+ * installed (see {@link LEGACY_SKILLS}).
  */
 
 import fs from "node:fs";
@@ -25,7 +26,16 @@ import { runnerTestCommands, testResultsHint } from "./test-runner.js";
 import { saveTools } from "./tools.js";
 import { relativePath } from "./util.js";
 
-export const SKILLS = ["flagrm-remove", "flagrm-verify"] as const;
+export const SKILLS = ["flagrm-remove", "flagrm-review"] as const;
+
+type Skill = (typeof SKILLS)[number];
+
+/**
+ * Skills an earlier flagrm installed under another name, and the skill that
+ * replaces each. `update` deletes the old one (only when flagrm's stamp shows
+ * flagrm wrote it) and installs its replacement; `init` deletes nothing.
+ */
+export const LEGACY_SKILLS: Record<string, Skill> = { "flagrm-verify": "flagrm-review" };
 
 /** Where each supported tool discovers repository skills. */
 export const TOOL_SKILL_DIRS: Record<ToolId, string> = {
@@ -37,8 +47,8 @@ export const TOOL_SKILL_DIRS: Record<ToolId, string> = {
 /** Every tool's skills directory: Claude Code, GitHub Copilot, Codex. */
 export const AGENT_SKILL_DIRS = TOOL_IDS.map((t) => TOOL_SKILL_DIRS[t]);
 
-/** GitHub Copilot prompt files: `/flagrm-remove` and `/flagrm-verify` in Copilot Chat, each pointing at its skill. */
-export const PROMPT_FILES: Record<(typeof SKILLS)[number], string> = {
+/** GitHub Copilot prompt files: `/flagrm-remove` and `/flagrm-review` in Copilot Chat, each pointing at its skill. */
+export const PROMPT_FILES: Record<Skill, string> = {
   "flagrm-remove": [
     "---",
     "description: Remove a feature flag with flagrm's guardrails (keep the ON path, verify until it passes)",
@@ -49,14 +59,14 @@ export const PROMPT_FILES: Record<(typeof SKILLS)[number], string> = {
     "Follow `.github/skills/flagrm-remove/SKILL.md` to remove the feature flags named after this command.",
     "",
   ].join("\n"),
-  "flagrm-verify": [
+  "flagrm-review": [
     "---",
-    "description: Check a feature flag removal with flagrm and propose its commit message",
+    "description: Review a feature flag removal in a fresh session (flagrm verify, then the ON path and deleted tests)",
     "argument-hint: <flag>",
     "agent: agent",
     "---",
     "",
-    "Follow `.github/skills/flagrm-verify/SKILL.md` for the feature flag named after this command.",
+    "Follow `.github/skills/flagrm-review/SKILL.md` for the feature flag named after this command.",
     "",
   ].join("\n"),
 };
@@ -80,12 +90,12 @@ export const AGENTS_BLOCK = [
   AGENTS_START,
   "## Feature flag removal (flagrm)",
   "",
-  "To remove one or more feature flags, follow `.agents/skills/flagrm-remove/SKILL.md`. To check a removal",
-  "later, follow `.agents/skills/flagrm-verify/SKILL.md`.",
+  "To remove one or more feature flags, follow `.agents/skills/flagrm-remove/SKILL.md`. To review a removal",
+  "in a new session, follow `.agents/skills/flagrm-review/SKILL.md`.",
   AGENTS_END,
 ].join("\n");
 
-export type StepStatus = "created" | "updated" | "unchanged" | "skipped";
+export type StepStatus = "created" | "updated" | "unchanged" | "skipped" | "deleted";
 
 export interface StepResult {
   /** Path relative to the repository, with `/` separators. */
@@ -197,6 +207,25 @@ export function installSkills(
 ): StepResult[] {
   const results: StepResult[] = [];
   for (const dir of tools.map((t) => TOOL_SKILL_DIRS[t])) {
+    const replaced = new Set<Skill>();
+    for (const [legacy, skill] of Object.entries(LEGACY_SKILLS)) {
+      const target = path.join(cwd, dir, legacy);
+      if (!fs.existsSync(target)) continue;
+      const step = relativePath(cwd, target);
+      if (mode === "init") {
+        results.push({ path: step, status: "skipped", note: `replaced by ${skill}: run flagrm update to delete it` });
+      } else if (installedSkillVersion(target) === undefined) {
+        results.push({
+          path: step,
+          status: "skipped",
+          note: "no flagrm-version stamp, so not deleted: delete it by hand",
+        });
+      } else {
+        fs.rmSync(target, { recursive: true, force: true });
+        results.push({ path: step, status: "deleted", note: `replaced by ${skill}` });
+        replaced.add(skill);
+      }
+    }
     for (const skill of SKILLS) {
       const target = path.join(cwd, dir, skill);
       const exists = fs.existsSync(target);
@@ -204,7 +233,7 @@ export function installSkills(
         results.push({ path: relativePath(cwd, target), status: "skipped" });
         continue;
       }
-      if (mode === "update" && !exists) continue;
+      if (mode === "update" && !exists && !replaced.has(skill)) continue;
       const before = exists ? snapshot(target) : undefined;
       fs.rmSync(target, { recursive: true, force: true });
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -247,18 +276,38 @@ export function installedSkillVersion(skillDir: string): string | undefined {
   }
 }
 
-/** GitHub Copilot's `/flagrm-remove` and `/flagrm-verify` prompt files in `.github/prompts/`. */
+/** GitHub Copilot's `/flagrm-remove` and `/flagrm-review` prompt files in `.github/prompts/`. */
 export function installPrompts(cwd: string, mode: InstallMode): StepResult[] {
   const results: StepResult[] = [];
+  const prompt = (skill: string) => path.join(cwd, ".github", "prompts", `${skill}.prompt.md`);
+  const replaced = new Set<Skill>();
+  for (const [legacy, skill] of Object.entries(LEGACY_SKILLS)) {
+    const file = prompt(legacy);
+    if (!fs.existsSync(file)) continue;
+    const step = relativePath(cwd, file);
+    if (mode === "init") {
+      results.push({ path: step, status: "skipped", note: `replaced by ${skill}: run flagrm update to delete it` });
+    } else if (!fs.readFileSync(file, "utf8").includes(`.github/skills/${legacy}/SKILL.md`)) {
+      results.push({
+        path: step,
+        status: "skipped",
+        note: `doesn't point at flagrm's ${legacy} skill, so not deleted`,
+      });
+    } else {
+      fs.rmSync(file);
+      results.push({ path: step, status: "deleted", note: `replaced by ${skill}` });
+      replaced.add(skill);
+    }
+  }
   for (const skill of SKILLS) {
-    const file = path.join(cwd, ".github", "prompts", `${skill}.prompt.md`);
+    const file = prompt(skill);
     const step = relativePath(cwd, file);
     const exists = fs.existsSync(file);
     if (mode === "init" && exists) {
       results.push({ path: step, status: "skipped" });
       continue;
     }
-    if (mode === "update" && !exists) continue;
+    if (mode === "update" && !exists && !replaced.has(skill)) continue;
     const before = exists ? fs.readFileSync(file, "utf8") : undefined;
     if (before === PROMPT_FILES[skill]) {
       results.push({ path: step, status: "unchanged" });
@@ -432,7 +481,10 @@ export function initProject(root: string, tools: readonly ToolId[] = TOOL_IDS): 
   ];
 }
 
-/** `flagrm update`: refresh what `init` installed in `root` for `tools` from this flagrm version; adds nothing new. */
+/**
+ * `flagrm update`: refresh what `init` installed in `root` for `tools` from this
+ * flagrm version. Adds nothing new, except the replacement of a renamed skill it deletes.
+ */
 export function updateProject(root: string, tools: readonly ToolId[] = TOOL_IDS): StepResult[] {
   return [...tools.flatMap((t) => toolSteps(root, t, "update")), ...deselectedSteps(root, tools)];
 }

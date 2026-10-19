@@ -80,7 +80,7 @@ Exit 2 is a usage or config error: read the message. `--skip build,tests,lint,co
 ## 6. Hand back
 
 1. `flagrm verify <flag> --md` on the final tree (it reuses the passing build, test and lint runs; edit nothing after it): show its output exactly as printed; don't reword it or change its numbers. It must pass: the Stop hook checks it.
-2. **Notes**, 3–5 lines: what you kept on purpose, each remaining warning with its reason, follow-ups in the flag service. If `state` wasn't `on` and nobody confirmed ON, start with "Assumed ON everywhere".
+2. **Notes**, 3–5 lines: what you kept on purpose, each remaining warning with its reason, follow-ups in the flag service. If `state` wasn't `on` and nobody confirmed ON, start with "Assumed ON everywhere". End with: for an independent review, run `/flagrm-review <flag>` in a new session.
 3. The commit message:
 
 <!-- commit-message:start -->
