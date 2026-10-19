@@ -36,7 +36,8 @@ jobs:
 
       # Exit 0: evaluated (the verdicts are in the JSON). Any other exit fails the
       # run: 2 is a config problem, 3 means LaunchDarkly was unreachable or
-      # rejected the token, and no agent should start on either.
+      # refused the request (token, access, project key), and no agent should
+      # start on either.
       - name: Ask LaunchDarkly which flags are ready
         env:
           LD_API_TOKEN: ${{ secrets.LD_API_TOKEN }}

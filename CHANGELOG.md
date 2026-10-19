@@ -13,7 +13,8 @@ contain breaking changes.
   LaunchDarkly project (read-only, token from `LD_API_TOKEN`) and says which
   flags are ready to remove from code (`remove`), not in this repository
   (`unreferenced`) or should stay (`keep`, with reasons), with `--json` and
-  `--md`. Exit 3 when LaunchDarkly can't be reached or rejects the token.
+  `--md`. Exit 3 when LaunchDarkly can't be reached or refuses the request
+  (rejected token, no access to the project, unknown project key).
   The `flagrm-remove` skill uses it instead of asking whether a flag set in
   LaunchDarkly is ON everywhere; `examples/ci/` has scheduled GitHub Actions
   and Azure Pipelines workflows that open a removal PR per ready flag.

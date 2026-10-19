@@ -211,7 +211,7 @@ narrower test command makes "no new failures" mean less.
 | `list` | List every feature flag: definitions, configured state per environment, reference counts | 0 |
 | `baseline <flag>` | Before any edit, record the git commit, build, test and lint results and the flag's names | 0, 2 usage error |
 | `verify <flag>` | Gate the removal with the [checks above](#what-verify-checks) | 0 pass, 1 fail, 2 usage error |
-| `stale [flags...]` | Ask LaunchDarkly which flags are ready to remove from code | 0 evaluated, 2 usage error, 3 LaunchDarkly unreachable or token rejected |
+| `stale [flags...]` | Ask LaunchDarkly which flags are ready to remove from code | 0 evaluated, 2 usage error, 3 LaunchDarkly unreachable or refused the request (token, access, project key) |
 | `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
 
 `list`, `baseline`, `verify` and `stale` accept `--json`, `--config <path>`, and
@@ -419,9 +419,13 @@ matches `NewCheckout`); two possible matches are reported, not guessed.
 
 `stale` exits 0 whenever it could evaluate, whatever the verdicts: read them
 from `--json`. Exit 2 is a usage or config error (no section, no token, an
-unknown environment or flag name), exit 3 means LaunchDarkly couldn't be
-reached or rejected the token. A token with LaunchDarkly's reader role is
-enough; flagrm only sends GET requests.
+unknown environment or flag name). Exit 3 means LaunchDarkly couldn't be
+reached or refused the request: it rejected the token, the token may not read
+the project, or it doesn't know the project key. A wrong project key is
+reported this way because LaunchDarkly gives the same answer when the token
+belongs to another organization or `baseUrl` points at another instance. A
+token with LaunchDarkly's reader role is enough; flagrm only sends GET
+requests.
 
 When the config has `launchdarkly:`, the `flagrm-remove` skill runs
 `flagrm stale <flag> --json` instead of asking whether a flag set only in

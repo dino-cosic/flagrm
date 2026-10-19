@@ -43,7 +43,8 @@ stages:
 
           # Exit 0: evaluated (the verdicts are in the JSON). Any other exit fails
           # the run: 2 is a config problem, 3 means LaunchDarkly was unreachable
-          # or rejected the token, and no agent should start on either.
+          # or refused the request (token, access, project key), and no agent
+          # should start on either.
           - script: npx --no-install flagrm stale --json > "$(Agent.TempDirectory)/stale.json"
             displayName: Ask LaunchDarkly which flags are ready
             env:

@@ -301,7 +301,7 @@ addCommonOptions(
       "ask LaunchDarkly (the config's launchdarkly: section, read-only) which flags are ready to remove from code: " +
         "remove (meets the conditions, in this repository's code), unreferenced (not in this repository) or keep " +
         "(with reasons); flags are LaunchDarkly keys or code names, default all; " +
-        "exit 0 evaluated, 2 usage error, 3 LaunchDarkly unreachable or rejected the token",
+        "exit 0 evaluated, 2 usage error, 3 LaunchDarkly unreachable or refused the request (token, access, project key)",
     ),
 )
   .option("--md", "print a markdown summary (for a pull request or pipeline summary) instead of text")
