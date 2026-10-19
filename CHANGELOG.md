@@ -14,7 +14,7 @@ contain breaking changes.
 ### Changed
 
 - **Breaking:** the `/flagrm-verify` skill is replaced by `/flagrm-review`.
-  Run it in a new session: it runs `flagrm verify`, stops on a failure, and
+  Optional, in a new session: it runs `flagrm verify`, stops on a failure, and
   on a pass reviews the diff since the baseline (the ON path kept, deleted
   tests OFF-path only, nothing unrelated changed, no lost side effects). It
   reports findings, edits nothing and writes no commit message; that stays

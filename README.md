@@ -140,13 +140,13 @@ flowchart LR
    (such as `exclude`), or the last verify used `--skip`. It guards against
    finishing by accident, not an agent working around it: see
    [SECURITY.md](SECURITY.md#what-it-doesnt-guarantee).
-4. **`/flagrm-review <flag>`**, in a new session, reviews the removal: it runs
-   `flagrm verify <flag> --json` and stops on a failure; on a pass it reads
-   the diff since the baseline commit and checks that the ON path was kept,
-   deleted tests covered only the OFF path, and nothing unrelated changed or
-   lost a side effect. Its findings never change the verify result. A new
-   session matters: an agent reviewing its own removal checks its own
-   reasoning.
+4. **`/flagrm-review <flag>`** (optional), in a new session, reviews the
+   removal: it runs `flagrm verify <flag> --json` and stops on a failure; on
+   a pass it reads the diff since the baseline commit and checks that the ON
+   path was kept, deleted tests covered only the OFF path, and nothing
+   unrelated changed or lost a side effect. Its findings never change the
+   verify result. A new session matters: an agent reviewing its own removal
+   checks its own reasoning.
 
 ## What `verify` checks
 
