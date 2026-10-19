@@ -74,7 +74,10 @@ only when you ask. The overview looks like this (abridged):
 - **Several flags:** `/flagrm-remove NewCheckout DarkMode` asks once whether
   they are all ON and whether to commit each, then removes them one after
   another, one commit each.
-- **Check a removal later:** `/flagrm-verify NewCheckout`.
+- **Independent review:** `/flagrm-review NewCheckout` in a new session runs
+  `flagrm verify`, then checks what it can't: that the ON path is the code
+  that stayed and that each deleted test covered only the OFF path. It
+  reports findings and edits nothing.
 - **Tests that no longer run** are sorted by why: deleted in the diff (the OFF
   path's tests), renamed without the flag in the name, or left out by a test
   command changed since the baseline. Only a test that no longer runs for none
@@ -117,8 +120,8 @@ flowchart LR
 
    | Tool | Files |
    |---|---|
-   | Claude Code | `flagrm-remove` and `flagrm-verify` skills in `.claude/skills/`, Stop hook in `.claude/settings.json` |
-   | GitHub Copilot | skills in `.github/skills/`, `/flagrm-remove` and `/flagrm-verify` prompt files in `.github/prompts/` |
+   | Claude Code | `flagrm-remove` and `flagrm-review` skills in `.claude/skills/`, Stop hook in `.claude/settings.json` |
+   | GitHub Copilot | skills in `.github/skills/`, `/flagrm-remove` and `/flagrm-review` prompt files in `.github/prompts/` |
    | Codex | skills in `.agents/skills/`, a pointer in `AGENTS.md` |
 
    `--tool claude-code,codex` answers without asking; without a terminal it
@@ -137,8 +140,13 @@ flowchart LR
    (such as `exclude`), or the last verify used `--skip`. It guards against
    finishing by accident, not an agent working around it: see
    [SECURITY.md](SECURITY.md#what-it-doesnt-guarantee).
-4. **`/flagrm-verify <flag>`** checks a removal later: runs
-   `flagrm verify <flag> --md` and adds notes and a commit message.
+4. **`/flagrm-review <flag>`** (optional), in a new session, reviews the
+   removal: it runs `flagrm verify <flag> --json` and stops on a failure; on
+   a pass it reads the diff since the baseline commit and checks that the ON
+   path was kept, deleted tests covered only the OFF path, and nothing
+   unrelated changed or lost a side effect. Its findings never change the
+   verify result. A new session matters: an agent reviewing its own removal
+   checks its own reasoning.
 
 ## What `verify` checks
 
@@ -223,7 +231,9 @@ narrower test command makes "no new failures" mean less.
   `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build
   and test at it. See [When the machine can't build everything](#when-the-machine-cant-build-everything).
 - **`update`**: refreshes files from this flagrm version, for the config's
-  `tools:`.
+  `tools:`. It replaces the `flagrm-verify` skill and prompt file of earlier
+  versions with `flagrm-review`, deleting them only when flagrm installed
+  them.
 - **`list`**: flow names include renamed imports of a flag registry
   (`import { FeatureFlags as AppFeatureFlags }`) and, in Angular, the fields,
   getters, methods and locals holding a flag and a child component's input

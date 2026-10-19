@@ -13,7 +13,7 @@ import { changeFilter, changeFilterAt } from "./change-filter.js";
 import { findConfigFile, loadConfig, TOOL_IDS, type ToolId } from "./config.js";
 import { projectCommands } from "./config-snapshot.js";
 import { gitState, isAncestor } from "./git.js";
-import { installedSkillVersion, SKILLS, stopHookState, TOOL_SKILL_DIRS } from "./install.js";
+import { installedSkillVersion, LEGACY_SKILLS, SKILLS, stopHookState, TOOL_SKILL_DIRS } from "./install.js";
 import { packageVersion } from "./package.js";
 import { resolveProjects } from "./registry.js";
 import { setupReport } from "./scope.js";
@@ -104,6 +104,11 @@ export async function runDoctor(cwd: string, options: DoctorOptions = {}): Promi
       const found = versions.find((v) => v !== version) ?? "missing";
       add("warn", `${dir}: skills from flagrm ${found}, this is ${version} (run flagrm update)`);
     } else add("ok", `${dir}: skills ${version}`);
+    for (const [legacy, skill] of Object.entries(LEGACY_SKILLS)) {
+      if (fs.existsSync(path.join(root, dir, legacy))) {
+        add("warn", `${dir}/${legacy}: replaced by ${skill} (run flagrm update)`);
+      }
+    }
   }
 
   const hook = tools.includes("claude-code") ? stopHookState(root) : undefined;

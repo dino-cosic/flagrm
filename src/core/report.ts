@@ -172,6 +172,7 @@ const STEP_STYLE: Record<StepStatus, (s: string) => string> = {
   updated: pc.green,
   unchanged: pc.dim,
   skipped: pc.dim,
+  deleted: pc.yellow,
 };
 
 /** One line per `init`/`update` step: `created   .claude/skills/flagrm-remove`. */
