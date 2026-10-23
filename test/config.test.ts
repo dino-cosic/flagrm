@@ -271,3 +271,90 @@ describe("loadConfig — commands", () => {
     spy.mockRestore();
   });
 });
+
+describe("loadConfig — launchdarkly", () => {
+  const withLd = (lines: string[]) => writeConfig(["backend: ./backend", "launchdarkly:", ...lines].join("\n"));
+
+  it("leaves launchdarkly undefined when the section is absent", () => {
+    writeConfig("backend: ./backend\n");
+    expect(loadConfig({}, tmp).launchdarkly).toBeUndefined();
+  });
+
+  it("applies the defaults to a minimal section", () => {
+    withLd(["  project: shop"]);
+    expect(loadConfig({}, tmp).launchdarkly).toEqual({
+      project: "shop",
+      baseUrl: "https://app.launchdarkly.com",
+      tokenEnv: "LD_API_TOKEN",
+      minDaysOn: 30,
+      temporaryOnly: true,
+      tags: { include: [], exclude: [] },
+      map: {},
+    });
+  });
+
+  it("reads every key", () => {
+    withLd([
+      "  project: shop",
+      "  baseUrl: https://app.eu.launchdarkly.com/",
+      "  tokenEnv: SHOP_LD_TOKEN",
+      "  environments: [production, staging]",
+      "  minDaysOn: 14",
+      "  temporaryOnly: false",
+      "  tags: { include: [cleanup], exclude: [permanent] }",
+      "  map: { checkout-v2: NewCheckout }",
+    ]);
+    expect(loadConfig({}, tmp).launchdarkly).toEqual({
+      project: "shop",
+      baseUrl: "https://app.eu.launchdarkly.com",
+      tokenEnv: "SHOP_LD_TOKEN",
+      environments: ["production", "staging"],
+      minDaysOn: 14,
+      temporaryOnly: false,
+      tags: { include: ["cleanup"], exclude: ["permanent"] },
+      map: { "checkout-v2": "NewCheckout" },
+    });
+  });
+
+  it("requires a project", () => {
+    withLd(["  minDaysOn: 30"]);
+    expect(() => loadConfig({}, tmp)).toThrow(/launchdarkly\.project is required/);
+  });
+
+  it.each(["token", "apiKey"])("rejects a %s in the file, pointing at tokenEnv", (key) => {
+    withLd(["  project: shop", `  ${key}: api-123`]);
+    expect(() => loadConfig({}, tmp)).toThrow(/tokenEnv/);
+    expect(() => loadConfig({}, tmp)).not.toThrow(/api-123/);
+  });
+
+  it("warns about unknown keys in the section and in tags", () => {
+    withLd(["  project: shop", "  minDays: 30", "  tags: { exlude: [x] }"]);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    loadConfig({}, tmp);
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('unknown key "minDays" in "launchdarkly"'));
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('unknown key "exlude" in "launchdarkly.tags"'));
+    spy.mockRestore();
+  });
+
+  it.each([
+    ["temporaryOnly: yes please", "launchdarkly.temporaryOnly must be true or false."],
+    ["minDaysOn: 2.5", "launchdarkly.minDaysOn must be a positive whole number of days."],
+    ["minDaysOn: 0", "launchdarkly.minDaysOn must be a positive whole number of days."],
+    ["environments: production", "launchdarkly.environments must be a list of strings."],
+    ["environments: []", "launchdarkly.environments must name at least one environment."],
+    ["map: { checkout-v2: 3 }", "launchdarkly.map must map LaunchDarkly keys to code names (strings)."],
+    ["tags: [permanent]", "launchdarkly.tags must be an object"],
+  ])("rejects %s", (line, message) => {
+    withLd(["  project: shop", `  ${line}`]);
+    expect(() => loadConfig({}, tmp)).toThrow(message);
+  });
+
+  it("rejects an http baseUrl except on a loopback host", () => {
+    withLd(["  project: shop", "  baseUrl: http://ld.example.com"]);
+    expect(() => loadConfig({}, tmp)).toThrow("launchdarkly.baseUrl must use https");
+    for (const host of ["127.0.0.1:9", "localhost:8080", "[::1]"]) {
+      withLd(["  project: shop", `  baseUrl: http://${host}`]);
+      expect(loadConfig({}, tmp).launchdarkly?.baseUrl).toBe(`http://${host}`);
+    }
+  });
+});

@@ -18,14 +18,14 @@ import {
   writeBaseline,
 } from "./core/baseline.js";
 import { changeFilter } from "./core/change-filter.js";
-import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
+import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolConfig, type ToolId } from "./core/config.js";
 import { projectCommands } from "./core/config-snapshot.js";
 import { runDoctor } from "./core/doctor.js";
 import { blobIds, gitState } from "./core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
 import { buildInventory } from "./core/inventory.js";
-import { verifyMarkdown } from "./core/markdown.js";
+import { staleMarkdown, verifyMarkdown } from "./core/markdown.js";
 import { assertOwnNames } from "./core/name-owner.js";
 import { packageVersion } from "./core/package.js";
 import { resolveProjects } from "./core/registry.js";
@@ -34,14 +34,18 @@ import {
   printDoctor,
   printInventory,
   printScope,
+  printStale,
   printSteps,
   printVerifyReport,
 } from "./core/report.js";
 import { baselineRuns } from "./core/run-cache.js";
 import { setupReport, writeScope } from "./core/scope.js";
 import { withScopeFiles } from "./core/scope-files.js";
+import { LaunchDarklySource } from "./core/sources/launchdarkly.js";
+import { SourceError } from "./core/sources/types.js";
+import { evaluateStale, needsHistory } from "./core/stale.js";
 import { askTools, detectTools, savedTools, TOOL_LABELS } from "./core/tools.js";
-import { CHECK_IDS, type RecordedName } from "./core/types.js";
+import { CHECK_IDS, type RecordedName, type StaleReport } from "./core/types.js";
 import { onPath, relativePath } from "./core/util.js";
 import { parseSkip, verifyFlag } from "./core/verify/index.js";
 
@@ -55,7 +59,8 @@ program
   .name("flagrm")
   .description(
     "Guardrails for removing feature flags with an AI coding agent: set up the skills and hook (init, update, " +
-      "doctor), find flags (list), record the state before a removal (baseline) and gate the result (verify).",
+      "doctor), find flags (list) and those LaunchDarkly says are ready to remove (stale), record the state before a " +
+      "removal (baseline) and gate the result (verify).",
   )
   .version(packageVersion());
 
@@ -286,6 +291,60 @@ addCommonOptions(
     printInventory(report);
   }
 });
+
+// --- stale -------------------------------------------------------------------
+
+addCommonOptions(
+  program
+    .command("stale [flags...]")
+    .description(
+      "ask LaunchDarkly (the config's launchdarkly: section, read-only) which flags are ready to remove from code: " +
+        "remove (meets the conditions, in this repository's code), unreferenced (not in this repository) or keep " +
+        "(with reasons); flags are LaunchDarkly keys or code names, default all; " +
+        "exit 0 evaluated, 2 usage error, 3 LaunchDarkly unreachable or refused the request (token, access, project key)",
+    ),
+)
+  .option("--md", "print a markdown summary (for a pull request or pipeline summary) instead of text")
+  .action(async (flags: string[], opts: CommonOptions & { md?: boolean }) => {
+    if (opts.md && opts.json) fail(new Error("--md and --json can't be combined."));
+    let config: ToolConfig;
+    let projects: Workspace;
+    try {
+      config = loadConfig(opts);
+      projects = resolveProjects(config);
+    } catch (err) {
+      fail(err);
+    }
+    const ld = config.launchdarkly;
+    if (!ld) {
+      fail(
+        new Error(
+          `No launchdarkly: section in ${config.file ?? "the config"}. Add one with your LaunchDarkly project key:\n` +
+            "  launchdarkly:\n    project: <project key>\n" +
+            "and set LD_API_TOKEN to an API token (reader role is enough). See the README's LaunchDarkly section.",
+        ),
+      );
+    }
+    // Checked before any request: nothing goes out without a token.
+    const token = process.env[ld.tokenEnv]?.trim();
+    if (!token)
+      fail(new Error(`${ld.tokenEnv} is not set: set it to a LaunchDarkly API token (reader role is enough).`));
+    const codeNames = (await buildInventory(projects)).flags.map((f) => f.flag);
+    let report: StaleReport;
+    try {
+      const read = await new LaunchDarklySource(ld, { token }).read((f) => needsHistory(f, ld, codeNames));
+      report = evaluateStale({ project: ld.project, read, codeNames, config: ld, now: new Date(), only: flags });
+    } catch (err) {
+      if (!(err instanceof SourceError)) fail(err);
+      console.error(pc.red(err.message));
+      process.exitCode = 3;
+      return;
+    }
+    if (opts.json) console.log(JSON.stringify(report, null, 2));
+    else if (opts.md) process.stdout.write(`${staleMarkdown(report)}\n`);
+    else printStale(report);
+    process.exitCode = 0;
+  });
 
 // --- hook --------------------------------------------------------------------
 

@@ -52,6 +52,28 @@ export interface ProjectConfig {
   attributes: string[];
 }
 
+/** The `launchdarkly:` section, defaults applied: where `flagrm stale` reads flags and when one is ready to remove. */
+export interface LaunchDarklyConfig {
+  /** LaunchDarkly project key. */
+  project: string;
+  /** API base URL without a trailing slash; `https` unless the host is loopback. */
+  baseUrl: string;
+  /** Name of the environment variable holding the API token (never the token itself). */
+  tokenEnv: string;
+  /** Environment keys to check; undefined checks every environment of the project. */
+  environments?: string[];
+  /** Days every checked environment must have served `true`. */
+  minDaysOn: number;
+  /** Only flags marked temporary in LaunchDarkly qualify. */
+  temporaryOnly: boolean;
+  tags: { include: string[]; exclude: string[] };
+  /** LaunchDarkly key → code name, for keys that don't match a code name by spelling. */
+  map: Record<string, string>;
+}
+
+export const DEFAULT_LAUNCHDARKLY_BASE_URL = "https://app.launchdarkly.com";
+export const DEFAULT_LAUNCHDARKLY_TOKEN_ENV = "LD_API_TOKEN";
+
 export interface ToolConfig {
   /** Directory of the config file (or the working directory without one); `.flagrm/` lives here. */
   root: string;
@@ -64,6 +86,8 @@ export interface ToolConfig {
   exclude: string[];
   /** Additional glob patterns to include, on top of the built-in language globs. */
   include: string[];
+  /** The `launchdarkly:` section; undefined when the config has none. */
+  launchdarkly?: LaunchDarklyConfig;
 }
 
 export const DEFAULT_FRONTEND_METHODS = ["isEnabled", "isFeatureEnabled", "hasFeature", "getFlag", "isOn"];
@@ -118,6 +142,7 @@ interface ConfigFileShape {
   backendAttributes?: string[];
   exclude?: string[];
   include?: string[];
+  launchdarkly?: unknown;
 }
 
 export const CONFIG_FILENAMES = ["flagrm.config.yaml", "flagrm.config.yml", "flagrm.config.json"];
@@ -133,6 +158,18 @@ const KNOWN_CONFIG_KEYS = [
   "backendAttributes",
   "exclude",
   "include",
+  "launchdarkly",
+];
+
+const KNOWN_LAUNCHDARKLY_KEYS = [
+  "project",
+  "baseUrl",
+  "tokenEnv",
+  "environments",
+  "minDaysOn",
+  "temporaryOnly",
+  "tags",
+  "map",
 ];
 
 const KNOWN_PROJECT_KEYS = [
@@ -248,12 +285,94 @@ function optionalPositiveNumber(value: unknown, where: string): number | undefin
   return value;
 }
 
+function optionalBoolean(value: unknown, where: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new Error(`${where} must be true or false.`);
+  return value;
+}
+
+function optionalPositiveDays(value: unknown, where: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`${where} must be a positive whole number of days.`);
+  }
+  return value;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function optionalStringMap(value: unknown, where: string): Record<string, string> | undefined {
+  if (value === undefined) return undefined;
+  if (!isObject(value) || !Object.values(value).every((v) => typeof v === "string" && v.trim())) {
+    throw new Error(`${where} must map LaunchDarkly keys to code names (strings).`);
+  }
+  return value as Record<string, string>;
+}
+
 function optionalStringList(value: unknown, where: string): string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) {
     throw new Error(`${where} must be a list of strings.`);
   }
   return value;
+}
+
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+
+/** The `launchdarkly:` section with defaults applied; undefined when absent. */
+function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const where = "launchdarkly";
+  if (!isObject(raw)) throw new Error(`${where} must be an object with at least a "project".`);
+  for (const key of ["token", "apiKey"]) {
+    if (key in raw) {
+      throw new Error(
+        `${where}.${key}: never put the API token in the config file. Remove it and set the environment ` +
+          `variable named by ${where}.tokenEnv (default ${DEFAULT_LAUNCHDARKLY_TOKEN_ENV}) instead.`,
+      );
+    }
+  }
+  if (!quiet) warnOnUnknownKeys(raw, KNOWN_LAUNCHDARKLY_KEYS, `"${where}"`);
+  const project = optionalString(raw.project, `${where}.project`);
+  if (!project) throw new Error(`${where}.project is required: the LaunchDarkly project key.`);
+
+  const baseUrl = (optionalString(raw.baseUrl, `${where}.baseUrl`) ?? DEFAULT_LAUNCHDARKLY_BASE_URL).replace(
+    /\/+$/,
+    "",
+  );
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error(`${where}.baseUrl is not a URL: ${baseUrl}`);
+  }
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && LOOPBACK_HOSTS.includes(url.hostname))) {
+    throw new Error(`${where}.baseUrl must use https: the API token is sent to it.`);
+  }
+
+  if (raw.tags !== undefined && !isObject(raw.tags)) {
+    throw new Error(`${where}.tags must be an object with "include" and/or "exclude" lists.`);
+  }
+  const tags = (raw.tags ?? {}) as Record<string, unknown>;
+  if (!quiet) warnOnUnknownKeys(tags, ["include", "exclude"], `"${where}.tags"`);
+
+  const environments = optionalStringList(raw.environments, `${where}.environments`);
+  if (environments?.length === 0) throw new Error(`${where}.environments must name at least one environment.`);
+  return {
+    project,
+    baseUrl,
+    tokenEnv: optionalString(raw.tokenEnv, `${where}.tokenEnv`) ?? DEFAULT_LAUNCHDARKLY_TOKEN_ENV,
+    ...(environments ? { environments } : {}),
+    minDaysOn: optionalPositiveDays(raw.minDaysOn, `${where}.minDaysOn`) ?? 30,
+    temporaryOnly: optionalBoolean(raw.temporaryOnly, `${where}.temporaryOnly`) ?? true,
+    tags: {
+      include: optionalStringList(tags.include, `${where}.tags.include`) ?? [],
+      exclude: optionalStringList(tags.exclude, `${where}.tags.exclude`) ?? [],
+    },
+    map: optionalStringMap(raw.map, `${where}.map`) ?? {},
+  };
 }
 
 /** Per-adapter defaults for `methods`/`attributes`; the legacy top-level keys override the built-ins. */
@@ -383,6 +502,7 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
   }
 
   const tools = parseTools(file.tools);
+  const launchdarkly = parseLaunchDarkly(file.launchdarkly, cli.quiet);
   return {
     root: fileDir,
     file: configPath && fs.existsSync(configPath) ? configPath : undefined,
@@ -390,5 +510,6 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
     projects,
     exclude: [...(file.exclude ?? []), ...(cli.exclude ?? [])],
     include: [...(file.include ?? []), ...(cli.include ?? [])],
+    ...(launchdarkly ? { launchdarkly } : {}),
   };
 }

@@ -23,6 +23,8 @@ import type { AdapterId } from "./config.js";
  * - 8: `lint` runs (`check: "lint"`) and the `lint` and `coverage` checks;
  *   `baseline.json` gains the config's `lint` commands and `git.dirtyHashes`.
  *   Both are optional, so version 6 and 7 files are still read.
+ *
+ * `stale --json` ({@link StaleReport}) was added at 8: a new payload, so no bump.
  */
 export const JSON_SCHEMA_VERSION = 8;
 
@@ -395,4 +397,51 @@ export interface VerifyReport {
   /** Build/test commands this verify ran. */
   runs: VerifyRun[];
   tests: TestComparison[];
+}
+
+/** `flagrm stale`'s verdict on one flag. */
+export type StaleVerdict = "remove" | "unreferenced" | "keep";
+
+export interface StaleEnvironment {
+  environment: string;
+  serves: "fixed" | "targeted";
+  /** The variation every context gets, for `fixed`. */
+  value?: unknown;
+  /** Why it is `targeted`: "2 rule(s)", "a percentage rollout", ... */
+  detail?: string;
+  /** ISO 8601 UTC, for `fixed`: since when it has served `value`. */
+  since?: string;
+  sinceSource?: "audit" | "lastModified";
+  /** Whole days from `since` to the report's `evaluatedAt`, rounded down. */
+  days?: number;
+}
+
+export interface StaleFlag {
+  /** The LaunchDarkly key; absent for a code name asked for by argument that no LaunchDarkly flag matches. */
+  key?: string;
+  /** The code name in `flagrm list`'s inventory the key matched, if any. */
+  codeName?: string;
+  verdict: StaleVerdict;
+  /** Why the flag isn't `remove` (at least one for `keep`). */
+  reasons: string[];
+  environments: StaleEnvironment[];
+}
+
+export interface StaleConditions {
+  /** The environments checked. */
+  environments: string[];
+  minDaysOn: number;
+  temporaryOnly: boolean;
+  tags: { include: string[]; exclude: string[] };
+}
+
+export interface StaleReport {
+  schemaVersion: number;
+  /** The LaunchDarkly project key. */
+  project: string;
+  /** ISO 8601 UTC: the instant `days` are counted to. */
+  evaluatedAt: string;
+  conditions: StaleConditions;
+  /** Sorted by key (code name for entries without one). */
+  flags: StaleFlag[];
 }

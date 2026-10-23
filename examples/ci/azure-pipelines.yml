@@ -1,0 +1,165 @@
+# Weekly flag cleanup for Azure Pipelines: ask LaunchDarkly which flags are
+# ready to remove, let a headless Claude Code agent remove each one with the
+# flagrm-remove skill, and open a pull request per flag once `flagrm verify`
+# passes. Nothing is merged without a person reviewing it.
+#
+# It assumes:
+# - flagrm is a devDependency (`npm ci` installs it) and `flagrm init` set up
+#   Claude Code, so the skill and the Stop hook are committed;
+# - the config has a `launchdarkly:` section;
+# - a variable group `flagrm` with the secrets LD_API_TOKEN (LaunchDarkly,
+#   reader role is enough) and ANTHROPIC_API_KEY;
+# - the build service account may contribute, create branches and create pull
+#   requests in this repository.
+
+trigger: none
+pr: none
+
+schedules:
+  - cron: "0 6 * * 1" # Mondays 06:00 UTC
+    displayName: Weekly flag cleanup
+    branches:
+      include: [main]
+    always: true
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: flagrm
+
+stages:
+  - stage: stale
+    jobs:
+      - job: stale
+        steps:
+          - checkout: self
+            persistCredentials: true
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 22.x
+          - script: npm ci
+            displayName: npm ci
+
+          # Exit 0: evaluated (the verdicts are in the JSON). Any other exit fails
+          # the run: 2 is a config problem, 3 means LaunchDarkly was unreachable
+          # or refused the request (token, access, project key), and no agent
+          # should start on either.
+          - script: npx --no-install flagrm stale --json > "$(Agent.TempDirectory)/stale.json"
+            displayName: Ask LaunchDarkly which flags are ready
+            env:
+              LD_API_TOKEN: $(LD_API_TOKEN)
+
+          # A matrix of the `remove` flags' code names, minus those that already
+          # have a removal branch (an open PR from an earlier run).
+          - script: |
+              set -euo pipefail
+              matrix='{}'
+              for name in $(jq -r '.flags[] | select(.verdict == "remove") | .codeName' "$(Agent.TempDirectory)/stale.json"); do
+                if [[ ! "$name" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
+                  echo "##vso[task.logissue type=warning]skipped \"$name\": not a safe branch name"
+                elif git ls-remote --exit-code --heads origin "flagrm/remove-$name" > /dev/null; then
+                  echo "skipped $name: flagrm/remove-$name already exists"
+                else
+                  leg=$(echo "$name" | tr -c 'A-Za-z0-9_\n' '_')
+                  matrix=$(jq -c --arg leg "$leg" --arg name "$name" '. + {($leg): {FLAG: $name}}' <<< "$matrix")
+                fi
+              done
+              echo "Flags to remove: $matrix"
+              echo "##vso[task.setvariable variable=flags;isOutput=true]$matrix"
+            name: pick
+            displayName: Pick the flags to remove
+
+  - stage: remove
+    dependsOn: stale
+    condition: and(succeeded(), ne(dependencies.stale.outputs['stale.pick.flags'], '{}'))
+    jobs:
+      - job: remove
+        timeoutInMinutes: 120
+        strategy:
+          matrix: $[ stageDependencies.stale.stale.outputs['pick.flags'] ]
+          maxParallel: 2
+        steps:
+          - checkout: self
+            persistCredentials: true
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 22.x
+          # The agent runs `flagrm verify`, which builds and tests the project: add
+          # its toolchain here, for example:
+          # - task: UseDotNet@2
+          #   inputs:
+          #     useGlobalJson: true
+          - script: npm ci && npm install -g @anthropic-ai/claude-code
+            displayName: Install flagrm and Claude Code
+
+          # The skill re-checks the flag with `flagrm stale <flag> --json`, so it
+          # needs the LaunchDarkly token too. Bash is allowed so the agent can run
+          # flagrm, the build and the tests; the agent machine is thrown away
+          # afterwards. The Stop hook keeps the agent from finishing before
+          # verify passes. FLAG comes from the matrix, through the environment.
+          - script: claude -p "/flagrm-remove $FLAG" --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+            displayName: Remove the flag with Claude Code
+            env:
+              ANTHROPIC_API_KEY: $(ANTHROPIC_API_KEY)
+              LD_API_TOKEN: $(LD_API_TOKEN)
+
+          # The pipeline's own gate: the agent saying it's done is not enough.
+          # This reuses the agent's passing build and test runs on the same tree.
+          - script: npx --no-install flagrm verify "$FLAG" --json > "$(Agent.TempDirectory)/verify.json"
+            displayName: Verify the removal
+
+          # An independent review by a second agent that didn't make the
+          # removal: a new process, so none of the removal's context. It can't
+          # edit the tree: --tools leaves out Edit and Write, and dontAsk denies
+          # any Bash command outside the allowlist. Advisory: its findings go
+          # into the pull request and never block it. It reuses verify's runs,
+          # so it costs no rebuild.
+          - script: |
+              set -euo pipefail
+              claude -p "/flagrm-review $FLAG" --permission-mode dontAsk \
+                --tools "Bash,Read,Glob,Grep" \
+                --allowedTools "Bash(npx --no-install flagrm verify *),Bash(git diff *),Read,Glob,Grep" \
+                > "$(Agent.TempDirectory)/review.out"
+              mv "$(Agent.TempDirectory)/review.out" "$(Agent.TempDirectory)/review.md"
+            displayName: Review the removal in a fresh session
+            continueOnError: true
+            timeoutInMinutes: 15
+            env:
+              ANTHROPIC_API_KEY: $(ANTHROPIC_API_KEY)
+
+          - script: |
+              set -euo pipefail
+              branch="flagrm/remove-$FLAG"
+              git config user.name "flagrm pipeline"
+              git config user.email "flagrm-pipeline@users.noreply.dev.azure.com"
+              git switch -c "$branch"
+              git add -A
+              git commit -m "chore: remove $FLAG feature flag"
+              git push origin "$branch"
+              body="$(Agent.TempDirectory)/pr-body.md"
+              review="$(Agent.TempDirectory)/review.md"
+              npx --no-install flagrm verify "$FLAG" --md > "$body"
+              # Azure Repos cuts descriptions at 4000 characters: keep the verify
+              # overview whole and shorten only the review to fit.
+              if [ -s "$review" ]; then
+                open=$'\n<details><summary>Independent review</summary>\n\n'
+                close=$'\n\n</details>\n'
+                room=$((4000 - $(wc -c < "$body") - ${#open} - ${#close}))
+                if [ "$room" -gt 0 ]; then
+                  { printf '%s' "$open"; head -c "$room" "$review"; printf '%s' "$close"; } >> "$body"
+                fi
+              else
+                printf '\n_The independent review did not run: see the pipeline log._\n' >> "$body"
+              fi
+              az repos pr create \
+                --source-branch "$branch" \
+                --target-branch "$(Build.SourceBranchName)" \
+                --title "chore: remove $FLAG feature flag" \
+                --description "$(head -c 4000 "$body")" \
+                --organization "$(System.CollectionUri)" \
+                --project "$(System.TeamProject)" \
+                --repository "$(Build.Repository.Name)"
+            displayName: Open a pull request
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)

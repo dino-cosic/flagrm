@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "_id": "updateOn-50",
+      "_accountId": "acc",
+      "date": 1786492800000,
+      "kind": "flag",
+      "name": "new-checkout",
+      "description": "",
+      "shortDescription": "",
+      "accesses": [
+        {
+          "action": "updateOn",
+          "resource": "proj/shop:env/staging:flag/new-checkout"
+        }
+      ],
+      "_links": {}
+    }
+  ],
+  "totalCount": 1,
+  "_links": {}
+}

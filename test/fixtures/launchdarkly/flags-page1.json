@@ -1,0 +1,171 @@
+{
+  "items": [
+    {
+      "key": "new-checkout",
+      "name": "New Checkout",
+      "kind": "boolean",
+      "temporary": true,
+      "tags": [],
+      "creationDate": 1773532800000,
+      "variations": [
+        {
+          "_id": "a",
+          "value": true
+        },
+        {
+          "_id": "b",
+          "value": false
+        }
+      ],
+      "archived": false,
+      "deprecated": false,
+      "_links": {
+        "self": {
+          "href": "/api/v2/flags/shop/new-checkout",
+          "type": "application/json"
+        }
+      },
+      "environments": {
+        "production": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1790640000000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": "Production"
+        },
+        "staging": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1785628800000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": "Staging"
+        }
+      }
+    },
+    {
+      "key": "express-shipping",
+      "name": "Express Shipping",
+      "kind": "boolean",
+      "temporary": true,
+      "tags": [],
+      "creationDate": 1773532800000,
+      "variations": [
+        {
+          "_id": "a",
+          "value": true
+        },
+        {
+          "_id": "b",
+          "value": false
+        }
+      ],
+      "archived": false,
+      "deprecated": false,
+      "_links": {
+        "self": {
+          "href": "/api/v2/flags/shop/express-shipping",
+          "type": "application/json"
+        }
+      },
+      "environments": {
+        "production": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1790726400000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [
+            {
+              "_id": "r1",
+              "variation": 0,
+              "clauses": [
+                {
+                  "attribute": "country",
+                  "op": "in",
+                  "values": [
+                    "US"
+                  ],
+                  "contextKind": "user",
+                  "negate": false
+                }
+              ],
+              "trackEvents": false
+            }
+          ],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": "Production"
+        },
+        "staging": {
+          "on": true,
+          "archived": false,
+          "salt": "x",
+          "sel": "x",
+          "lastModified": 1790726400000,
+          "version": 3,
+          "targets": [],
+          "contextTargets": [],
+          "rules": [],
+          "fallthrough": {
+            "variation": 0
+          },
+          "offVariation": 1,
+          "prerequisites": [],
+          "_site": {
+            "href": "/x",
+            "type": "text/html"
+          },
+          "_environmentName": "Staging"
+        }
+      }
+    }
+  ],
+  "totalCount": 5,
+  "_links": {
+    "self": {
+      "href": "/api/v2/flags/shop?summary=0&limit=100&env=production&env=staging"
+    },
+    "next": {
+      "href": "/api/v2/flags/shop?summary=0&limit=100&offset=100&env=production&env=staging",
+      "type": "application/json"
+    }
+  }
+}

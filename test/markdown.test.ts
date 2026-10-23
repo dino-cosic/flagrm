@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { verifyMarkdown } from "../src/core/markdown.js";
-import type { TestComparison, VerifyReport } from "../src/core/types.js";
+import { staleMarkdown, verifyMarkdown } from "../src/core/markdown.js";
+import type { StaleReport, TestComparison, VerifyReport } from "../src/core/types.js";
 
 function tests(c: Partial<TestComparison>): TestComparison {
   return {
@@ -157,6 +157,84 @@ describe("verifyMarkdown", () => {
     );
     expect(md).toContain(
       "_build and tests reused from NewCheckout's verify (same tree and commands, 2 min ago; --no-reuse to run them)_",
+    );
+  });
+});
+
+describe("staleMarkdown", () => {
+  const report: StaleReport = {
+    schemaVersion: 8,
+    project: "shop",
+    evaluatedAt: "2026-10-01T00:00:00.000Z",
+    conditions: {
+      environments: ["production", "staging"],
+      minDaysOn: 30,
+      temporaryOnly: true,
+      tags: { include: [], exclude: ["permanent"] },
+    },
+    flags: [
+      {
+        key: "express-shipping",
+        codeName: "ExpressShipping",
+        verdict: "keep",
+        reasons: ["production: targeted (1 rule(s))"],
+        environments: [
+          { environment: "production", serves: "targeted", detail: "1 rule(s)" },
+          {
+            environment: "staging",
+            serves: "fixed",
+            value: true,
+            since: "2026-09-30T00:00:00.000Z",
+            sinceSource: "lastModified",
+            days: 1,
+          },
+        ],
+      },
+      {
+        key: "new-checkout",
+        codeName: "NewCheckout",
+        verdict: "remove",
+        reasons: [],
+        environments: [
+          {
+            environment: "production",
+            serves: "fixed",
+            value: true,
+            since: "2026-08-17T00:00:00.000Z",
+            sinceSource: "audit",
+            days: 45,
+          },
+        ],
+      },
+      { key: "old-banner", verdict: "unreferenced", reasons: [], environments: [] },
+    ],
+  };
+
+  it("groups flags by verdict with their environments and reasons", () => {
+    expect(staleMarkdown(report)).toBe(
+      [
+        "### flagrm stale: shop — 1 ready to remove",
+        "",
+        "_Conditions: boolean, true in production, staging for 30+ days; temporary; not tagged permanent. Evaluated 2026-10-01T00:00:00.000Z._",
+        "",
+        "**Ready to remove (1)**",
+        "",
+        "| Flag | Code name | Environments |",
+        "|---|---|---|",
+        "| `new-checkout` | `NewCheckout` | production true 45d |",
+        "",
+        "**Keep (1)**",
+        "",
+        "| Flag | Code name | Environments | Reasons |",
+        "|---|---|---|---|",
+        "| `express-shipping` | `ExpressShipping` | production targeted (1 rule(s)), staging true 1d* | production: targeted (1 rule(s)) |",
+        "",
+        "**Not referenced in this repository (1):** `old-banner`",
+        "",
+        "_Another repository may still read these; flagrm doesn't recommend archiving them._",
+        "",
+        "_\\* days since the environment last changed: the audit log had no targeting change to date._",
+      ].join("\n"),
     );
   });
 });

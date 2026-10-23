@@ -1,9 +1,19 @@
 import pc from "picocolors";
 import type { DoctorReport, DoctorStatus } from "./doctor.js";
 import type { StepResult, StepStatus } from "./install.js";
+import { staleConditionsText, staleEnvironmentText } from "./markdown.js";
 import { reusedNote } from "./run-cache.js";
 import type { ProjectSetup } from "./scope.js";
-import type { Baseline, CheckStatus, ConfigState, FlagInventoryEntry, ListReport, VerifyReport } from "./types.js";
+import type {
+  Baseline,
+  CheckStatus,
+  ConfigState,
+  FlagInventoryEntry,
+  ListReport,
+  StaleReport,
+  StaleVerdict,
+  VerifyReport,
+} from "./types.js";
 import { plural, relativePath } from "./util.js";
 
 /** A path relative to the working directory, with `/` separators on every platform. */
@@ -227,5 +237,32 @@ export function printScope(setups: ProjectSetup[], root: string, written: boolea
       );
     }
     if (s.sdk) console.log(pc.dim("  A solution filter can't help here: install the SDK or change global.json."));
+  }
+}
+
+const STALE_STYLE: Record<StaleVerdict, { title: string; color: (s: string) => string }> = {
+  remove: { title: "Ready to remove", color: pc.green },
+  keep: { title: "Keep", color: pc.yellow },
+  unreferenced: { title: "Not referenced in this repository (another may still read them)", color: pc.dim },
+};
+
+/** `flagrm stale`: the flags grouped by verdict, each with its environments and reasons. */
+export function printStale(report: StaleReport): void {
+  console.log(pc.bold(`LaunchDarkly project ${report.project}`) + pc.dim(` — ${staleConditionsText(report)}`));
+  for (const verdict of ["remove", "keep", "unreferenced"] as const) {
+    const flags = report.flags.filter((f) => f.verdict === verdict);
+    if (!flags.length) continue;
+    const { title, color } = STALE_STYLE[verdict];
+    console.log(`\n${color(pc.bold(`${title} (${flags.length})`))}`);
+    for (const f of flags) {
+      const name = f.key && f.codeName && f.key !== f.codeName ? `${f.key} → ${f.codeName}` : (f.key ?? f.codeName);
+      const envs = f.environments.map(staleEnvironmentText).join(", ");
+      console.log(`  ${name}${envs ? pc.dim(`  ${envs}`) : ""}`);
+      for (const reason of verdict === "unreferenced" ? [] : f.reasons) console.log(pc.dim(`      ${reason}`));
+    }
+  }
+  if (report.flags.length === 0) console.log(pc.dim("\nNo flags."));
+  if (report.flags.some((f) => f.environments.some((e) => e.sinceSource === "lastModified"))) {
+    console.log(pc.dim("\n* days since the environment last changed: the audit log had no targeting change to date."));
   }
 }
