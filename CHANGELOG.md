@@ -7,6 +7,8 @@ contain breaking changes.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-23
+
 ### Added
 
 - `flagrm stale [flags...]` and the `launchdarkly:` config section: reads a
@@ -315,6 +317,7 @@ removes the flag through the `flagrm-remove` skill, and flagrm checks the result
   `doctor` warns about an incremental `dotnet build`, which hides existing
   warnings from the dead-code comparison.
 
+[0.5.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.5.0
 [0.4.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.4.1
 [0.4.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.4.0
 [0.3.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.3.0
