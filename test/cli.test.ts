@@ -29,7 +29,11 @@ let tmp: string;
 beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-cli-"));
   fs.cpSync(SAMPLE, tmp, { recursive: true });
-  fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), "frontend: ./frontend\nbackend: ./backend\n", "utf8");
+  fs.writeFileSync(
+    path.join(tmp, "flagrm.config.yaml"),
+    "projects:\n  - { name: frontend, adapter: angular, path: ./frontend }\n  - { name: backend, adapter: dotnet, path: ./backend }\n",
+    "utf8",
+  );
 });
 
 afterAll(() => {
@@ -532,7 +536,7 @@ describe("CLI stale (spawned dist/cli.js)", () => {
   const config = (launchdarkly: string) =>
     fs.writeFileSync(
       path.join(dir, "flagrm.config.yaml"),
-      `frontend: ./frontend\nbackend: ./backend\n${launchdarkly}`,
+      `projects:\n  - { name: frontend, adapter: angular, path: ./frontend }\n  - { name: backend, adapter: dotnet, path: ./backend }\n${launchdarkly}`,
       "utf8",
     );
 

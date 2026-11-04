@@ -78,8 +78,6 @@ function addGlobOptions(cmd: Command): Command {
 function addCommonOptions(cmd: Command): Command {
   return addGlobOptions(
     cmd
-      .option("--frontend <path>", "path to an Angular project (adds or replaces the project named 'frontend')")
-      .option("--backend <path>", "path to a .NET project (adds or replaces the project named 'backend')")
       .option(
         "--config <path>",
         "path to a config file (default: the nearest flagrm.config.yaml up to the git repository root)",
