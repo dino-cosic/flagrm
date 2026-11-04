@@ -4,8 +4,7 @@
  * files: for Claude Code the skills and the Stop hook, for GitHub Copilot the
  * skills and `/flagrm-*` prompt files, for Codex the skills and the AGENTS.md
  * pointer. Every step reports what it did; nothing the user wrote is
- * overwritten. The only deletion: `update` replaces a renamed skill that flagrm
- * installed (see {@link LEGACY_SKILLS}).
+ * overwritten or deleted.
  */
 
 import fs from "node:fs";
@@ -29,13 +28,6 @@ import { relativePath } from "./util.js";
 export const SKILLS = ["flagrm-remove", "flagrm-review"] as const;
 
 type Skill = (typeof SKILLS)[number];
-
-/**
- * Skills an earlier flagrm installed under another name, and the skill that
- * replaces each. `update` deletes the old one (only when flagrm's stamp shows
- * flagrm wrote it) and installs its replacement; `init` deletes nothing.
- */
-export const LEGACY_SKILLS: Record<string, Skill> = { "flagrm-verify": "flagrm-review" };
 
 /** Where each supported tool discovers repository skills. */
 export const TOOL_SKILL_DIRS: Record<ToolId, string> = {
@@ -95,7 +87,7 @@ export const AGENTS_BLOCK = [
   AGENTS_END,
 ].join("\n");
 
-export type StepStatus = "created" | "updated" | "unchanged" | "skipped" | "deleted";
+export type StepStatus = "created" | "updated" | "unchanged" | "skipped";
 
 export interface StepResult {
   /** Path relative to the repository, with `/` separators. */
@@ -207,25 +199,6 @@ export function installSkills(
 ): StepResult[] {
   const results: StepResult[] = [];
   for (const dir of tools.map((t) => TOOL_SKILL_DIRS[t])) {
-    const replaced = new Set<Skill>();
-    for (const [legacy, skill] of Object.entries(LEGACY_SKILLS)) {
-      const target = path.join(cwd, dir, legacy);
-      if (!fs.existsSync(target)) continue;
-      const step = relativePath(cwd, target);
-      if (mode === "init") {
-        results.push({ path: step, status: "skipped", note: `replaced by ${skill}: run flagrm update to delete it` });
-      } else if (installedSkillVersion(target) === undefined) {
-        results.push({
-          path: step,
-          status: "skipped",
-          note: "no flagrm-version stamp, so not deleted: delete it by hand",
-        });
-      } else {
-        fs.rmSync(target, { recursive: true, force: true });
-        results.push({ path: step, status: "deleted", note: `replaced by ${skill}` });
-        replaced.add(skill);
-      }
-    }
     for (const skill of SKILLS) {
       const target = path.join(cwd, dir, skill);
       const exists = fs.existsSync(target);
@@ -233,7 +206,7 @@ export function installSkills(
         results.push({ path: relativePath(cwd, target), status: "skipped" });
         continue;
       }
-      if (mode === "update" && !exists && !replaced.has(skill)) continue;
+      if (mode === "update" && !exists) continue;
       const before = exists ? snapshot(target) : undefined;
       fs.rmSync(target, { recursive: true, force: true });
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -280,25 +253,6 @@ export function installedSkillVersion(skillDir: string): string | undefined {
 export function installPrompts(cwd: string, mode: InstallMode): StepResult[] {
   const results: StepResult[] = [];
   const prompt = (skill: string) => path.join(cwd, ".github", "prompts", `${skill}.prompt.md`);
-  const replaced = new Set<Skill>();
-  for (const [legacy, skill] of Object.entries(LEGACY_SKILLS)) {
-    const file = prompt(legacy);
-    if (!fs.existsSync(file)) continue;
-    const step = relativePath(cwd, file);
-    if (mode === "init") {
-      results.push({ path: step, status: "skipped", note: `replaced by ${skill}: run flagrm update to delete it` });
-    } else if (!fs.readFileSync(file, "utf8").includes(`.github/skills/${legacy}/SKILL.md`)) {
-      results.push({
-        path: step,
-        status: "skipped",
-        note: `doesn't point at flagrm's ${legacy} skill, so not deleted`,
-      });
-    } else {
-      fs.rmSync(file);
-      results.push({ path: step, status: "deleted", note: `replaced by ${skill}` });
-      replaced.add(skill);
-    }
-  }
   for (const skill of SKILLS) {
     const file = prompt(skill);
     const step = relativePath(cwd, file);
@@ -307,7 +261,7 @@ export function installPrompts(cwd: string, mode: InstallMode): StepResult[] {
       results.push({ path: step, status: "skipped" });
       continue;
     }
-    if (mode === "update" && !exists && !replaced.has(skill)) continue;
+    if (mode === "update" && !exists) continue;
     const before = exists ? fs.readFileSync(file, "utf8") : undefined;
     if (before === PROMPT_FILES[skill]) {
       results.push({ path: step, status: "unchanged" });

@@ -21,8 +21,6 @@ describe("changeFilter", () => {
       ".claude/settings.json",
       ".claude/skills/flagrm-remove/SKILL.md",
       ".github/skills/flagrm-review/SKILL.md",
-      ".github/skills/flagrm-verify/SKILL.md",
-      ".github/prompts/flagrm-verify.prompt.md",
       ".agents/skills/flagrm-remove/patterns.md",
       ".github/prompts/flagrm-remove.prompt.md",
       "AGENTS.md",
