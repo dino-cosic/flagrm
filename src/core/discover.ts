@@ -4,7 +4,7 @@
  * This is a UX aid: false negatives (a flag it misses) are fine — the agent
  * can still remove a flag by name. False positives are mildly annoying but
  * harmless since nothing is written. So the heuristics here are intentionally
- * simpler/looser than the scan code path.
+ * loose.
  */
 
 import path from "node:path";
