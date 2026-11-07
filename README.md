@@ -312,7 +312,11 @@ path. `build` and `test` are resolved one at a time:
 | `lint` | Optional lint or type-check command, run like `build` and `test` |
 | `covers` | Globs (relative to `path`) of the files the project's commands check |
 | `timeout` | Seconds after which a build or test command fails, for example a test runner left in watch mode |
+| `globs` | Globs (relative to `path`) of the files to scan for flags, replacing the adapter's default language globs |
+| `methods` | Method names that evaluate a flag (`isEnabled`, `IsEnabledAsync`, ...), replacing the adapter's defaults |
+| `attributes` | .NET attributes that gate code on a flag, replacing the defaults `FeatureGate` and `Feature` |
 | `tools` | The AI coding tools whose files `init` and `update` manage (`claude-code`, `copilot`, `codex`) |
+| `include` | Extra globs (relative to each project's path) to scan, on top of the language globs, such as `**/*.razor.cs` |
 | `exclude` | Paths that don't count as part of a removal |
 
 **`testResults`.** Only files written during the run are read, and every
