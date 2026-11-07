@@ -3,6 +3,9 @@
 Thanks for helping. Bug reports, flag patterns flagrm misses and pull requests
 are all welcome.
 
+Everyone taking part is expected to follow the
+[code of conduct](CODE_OF_CONDUCT.md).
+
 ## Reporting a bug
 
 Open an issue with:
