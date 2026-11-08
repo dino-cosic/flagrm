@@ -6,19 +6,21 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm provenance and trusted publishing
+  id-token: write # npm trusted publishing and provenance
 
 jobs:
-  publish:
+  stage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      # No dependency cache: a release must not restore files from a cache other workflows can write.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: npm
 
       - name: Check the tag matches package.json
         run: |
@@ -30,9 +32,9 @@ jobs:
 
       - run: npm ci
 
-      # prepublishOnly runs `npm run ci` (typecheck, lint, build, tests).
-      - name: Publish
-        run: npm publish --provenance --access public
-        env:
-          # Not needed once trusted publishing is set up for this workflow on npmjs.com.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm run ci
+
+      # Authenticates through trusted publishing (OIDC), so there is no token.
+      # The version goes live only when a maintainer approves it with 2FA on npmjs.com.
+      - name: Stage on npm
+        run: npm stage publish --provenance

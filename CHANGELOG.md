@@ -13,8 +13,8 @@ contain breaking changes.
 - README "Versioning" section: from 1.0, commands, options, exit codes,
   config keys, `--json` output, the `.flagrm/` files, the skill names and the
   Stop hook command stay compatible within a major version.
-- Releases are published to npm from a `v*` tag by GitHub Actions, with
-  provenance.
+- Releases are staged on npm from a `v*` tag by GitHub Actions, with
+  provenance, and go live only after a maintainer approves them with 2FA.
 
 ### Fixed
 

@@ -50,4 +50,4 @@ Flow: `init` installs config + skills + Stop hook → agent runs `/flagrm-remove
 - Conventional Commits (`feat:`, `fix:`, `docs:`, ...).
 - User-facing changes get a line under "Unreleased" in `CHANGELOG.md`.
 - Semver since 1.0: the README's "Versioning" section lists what a minor release must not break.
-- Releases: bump `package.json`/`package-lock.json` and date the CHANGELOG entry in a `chore: release X.Y.Z` PR, then push a `vX.Y.Z` tag; `.github/workflows/release.yml` publishes to npm.
+- Releases: bump `package.json`/`package-lock.json` and date the CHANGELOG entry in a `chore: release X.Y.Z` PR, then push a `vX.Y.Z` tag; `.github/workflows/release.yml` stages it on npm (`npm stage publish`, trusted publishing), a maintainer approves it with 2FA on npmjs.com, and the GitHub Release is created after that.
