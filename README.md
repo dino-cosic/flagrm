@@ -31,8 +31,8 @@ deterministic definition of "done":
 Angular and .NET projects work out of the box. Any other stack works through the
 generic adapter.
 
-> **Status:** flagrm is at version 0.4. Until 1.0, a minor release may contain
-> breaking changes.
+> **Status:** flagrm follows semantic versioning from 1.0. See
+> [Versioning](#versioning) for what a minor release won't break.
 
 ## Quick start
 
@@ -232,9 +232,7 @@ narrower test command makes "no new failures" mean less.
   `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build
   and test at it. See [When the machine can't build everything](#when-the-machine-cant-build-everything).
 - **`update`**: refreshes files from this flagrm version, for the config's
-  `tools:`. It replaces the `flagrm-verify` skill and prompt file of earlier
-  versions with `flagrm-review`, deleting them only when flagrm installed
-  them.
+  `tools:`.
 - **`list`**: flow names include renamed imports of a flag registry
   (`import { FeatureFlags as AppFeatureFlags }`) and, in Angular, the fields,
   getters, methods and locals holding a flag and a child component's input
@@ -314,7 +312,11 @@ path. `build` and `test` are resolved one at a time:
 | `lint` | Optional lint or type-check command, run like `build` and `test` |
 | `covers` | Globs (relative to `path`) of the files the project's commands check |
 | `timeout` | Seconds after which a build or test command fails, for example a test runner left in watch mode |
+| `globs` | Globs (relative to `path`) of the files to scan for flags, replacing the adapter's default language globs |
+| `methods` | Method names that evaluate a flag (`isEnabled`, `IsEnabledAsync`, ...), replacing the adapter's defaults |
+| `attributes` | .NET attributes that gate code on a flag, replacing the defaults `FeatureGate` and `Feature` |
 | `tools` | The AI coding tools whose files `init` and `update` manage (`claude-code`, `copilot`, `codex`) |
+| `include` | Extra globs (relative to each project's path) to scan, on top of the language globs, such as `**/*.razor.cs` |
 | `exclude` | Paths that don't count as part of a removal |
 
 **`testResults`.** Only files written during the run are read, and every
@@ -454,6 +456,22 @@ adapter in one, .NET in the other) and run `/flagrm-remove <flag>` in each.
 flagrm does not coordinate the two: each repository gets its own verdict, the
 agent has to record the flag's name in each (it may differ between UI and
 API), and the order of the two removals is up to you.
+
+## Versioning
+
+flagrm follows [semantic versioning](https://semver.org/). Within 1.x, these
+stay compatible:
+
+- commands, their options and exit codes;
+- `flagrm.config.yaml` keys and their meaning;
+- `--json` output and the `.flagrm/` files: fields may be added, none removed
+  or changed, and a baseline recorded by 1.x is read by every later 1.x;
+- the skill names (`/flagrm-remove`, `/flagrm-review`) and the Stop hook
+  command `init` installs.
+
+Not covered: the text and markdown output, the wording of the skills, and
+detection itself. A minor release may find more flag usages or unused code,
+so a removal that passed `verify` before can fail it after an upgrade.
 
 ## Development
 

@@ -214,9 +214,6 @@ function withoutCommands(text: string): string {
     // Only says which agents `init` sets up; never changes what is scanned.
     delete config.tools;
     if (Array.isArray(config.projects)) config.projects = config.projects.map(strip);
-    for (const legacy of ["frontend", "backend"]) {
-      if (config[legacy] && typeof config[legacy] === "object") config[legacy] = strip(config[legacy]);
-    }
     return JSON.stringify(config);
   }
   return JSON.stringify(parsed);

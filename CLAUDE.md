@@ -28,10 +28,10 @@ Flow: `init` installs config + skills + Stop hook → agent runs `/flagrm-remove
 ## Architecture
 
 - `src/cli.ts`: commander entry point for every command; output formatting lives in `src/core/report.ts` (and `markdown.ts` for `verify --md`).
-- `src/core/types.ts`: the shared vocabulary. `CHECK_IDS` lists the verify checks; **bump `JSON_SCHEMA_VERSION` when a `--json` / `baseline.json` / `verify.json` shape changes incompatibly.**
+- `src/core/types.ts`: the shared vocabulary. `CHECK_IDS` lists the verify checks; **bump `JSON_SCHEMA_VERSION` when a `--json` / `baseline.json` / `verify.json` shape changes incompatibly**, which since 1.0 means a major release (README "Versioning"); adding fields doesn't need a bump.
 - `src/core/verify/`: `index.ts` orchestrates four checks against the baseline: `leftovers` (recorded names still in code/config; comment mentions are warnings), `dead-code` (new compiler unused-diagnostics in changed files, delegated to the adapter), `build` and `tests` (`commands.ts`, with per-test comparison from TRX/JUnit via `test-results.ts`). Exit codes: 0 pass, 1 fail, 2 usage error.
 - `src/core/hook.ts` + `git.ts`: the Stop hook compares a *tree fingerprint* (git tree id of the working dir as it would be committed, ignoring `.flagrm/`, computed without touching the real index) against the one stored in `verify.json`. The hook always exits 0 and signals blocking via its output.
-- Text analysis layer: `scan.ts`, `mentions.ts`, `discover.ts`, `inventory.ts`, `source-text.ts` (lexical masking of strings/comments). Comments mentioning a "scan code path" are remnants of a removed deterministic rewrite engine.
+- Text analysis layer: `scan.ts`, `mentions.ts`, `discover.ts`, `inventory.ts`, `source-text.ts` (lexical masking of strings/comments).
 - `src/adapters/{angular,dotnet,generic}`: implement the `Adapter` interface in `core/adapter.ts` (`defaultGlobs`, `discover`, optional `defaultCommands` and `unusedDiagnostics`). A new adapter must be registered in `core/registry.ts` and added to `ADAPTER_IDS` in `core/config.ts`.
 - `src/core/install.ts` + `tools.ts`: what `init`/`update` write, per AI tool in the config's `tools:` (`TOOL_IDS` in `config.ts`): Claude Code gets skills in `.claude/skills/` and the `.claude/settings.json` Stop hook, Copilot skills in `.github/skills/` and `.github/prompts/*.prompt.md`, Codex skills in `.agents/skills/` and an `AGENTS.md` block; skills are stamped with `metadata.flagrm-version`; plus the `.gitignore` entry. `init` asks which tools (or `--tool`) and never overwrites or deletes.
 - `src/core/scope.ts` + `adapters/dotnet/setup.ts`: machine setup checks (SDK vs global.json, `cargo`, Docker) used by `doctor` and `flagrm scope`, which writes `flagrm.slnf` and edits the config's commands in place (yaml Document API). Probes are injectable for tests.
@@ -49,4 +49,5 @@ Flow: `init` installs config + skills + Stop hook → agent runs `/flagrm-remove
 
 - Conventional Commits (`feat:`, `fix:`, `docs:`, ...).
 - User-facing changes get a line under "Unreleased" in `CHANGELOG.md`.
-- Pre-1.0: minor releases may break things.
+- Semver since 1.0: the README's "Versioning" section lists what a minor release must not break.
+- Releases: bump `package.json`/`package-lock.json` and date the CHANGELOG entry in a `chore: release X.Y.Z` PR, then push a `vX.Y.Z` tag; `.github/workflows/release.yml` stages it on npm (`npm stage publish`, trusted publishing), a maintainer approves it with 2FA on npmjs.com, and the GitHub Release is created after that.

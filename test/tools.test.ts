@@ -142,16 +142,4 @@ describe("doctor with tools", () => {
     );
     expect(messages.some((m) => m.startsWith(".claude/skills") || m.includes("Stop hook"))).toBe(false);
   });
-
-  it("warns about an old flagrm-verify skill until update replaces it", async () => {
-    initProject(tmp, ["codex"]);
-    fs.cpSync(path.join(tmp, ".agents/skills/flagrm-review"), path.join(tmp, ".agents/skills/flagrm-verify"), {
-      recursive: true,
-    });
-    const warning = ".agents/skills/flagrm-verify: replaced by flagrm-review (run flagrm update)";
-    const before = (await runDoctor(tmp)).checks.find((c) => c.message === warning);
-    expect(before?.status).toBe("warn");
-    updateProject(tmp, ["codex"]);
-    expect((await runDoctor(tmp)).checks.some((c) => c.message === warning)).toBe(false);
-  });
 });

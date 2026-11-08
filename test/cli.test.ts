@@ -29,7 +29,11 @@ let tmp: string;
 beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-cli-"));
   fs.cpSync(SAMPLE, tmp, { recursive: true });
-  fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), "frontend: ./frontend\nbackend: ./backend\n", "utf8");
+  fs.writeFileSync(
+    path.join(tmp, "flagrm.config.yaml"),
+    "projects:\n  - { name: frontend, adapter: angular, path: ./frontend }\n  - { name: backend, adapter: dotnet, path: ./backend }\n",
+    "utf8",
+  );
 });
 
 afterAll(() => {
@@ -37,6 +41,22 @@ afterAll(() => {
 });
 
 describe("CLI end-to-end (spawned dist/cli.js)", () => {
+  it.each([
+    [["list", "--frontend", "./frontend"], /unknown option '--frontend'/],
+    [["verify"], /missing required argument 'flag'/],
+    [["nosuch"], /unknown command 'nosuch'/],
+  ])("exits 2 on a usage error commander finds: %j", (args, message) => {
+    const { status, stderr } = runCli(args, tmp);
+    expect(status).toBe(2);
+    expect(stderr).toMatch(message);
+  });
+
+  it("exits 0 for --help, help <command> and --version", () => {
+    for (const args of [["--help"], ["help", "verify"], ["verify", "--help"], ["--version"]]) {
+      expect(runCli(args, tmp).status, args.join(" ")).toBe(0);
+    }
+  });
+
   it("list --json inventories the flags and exits 0", () => {
     const { status, stdout } = runCli(["list", "--json"], tmp);
     expect(status).toBe(0);
@@ -383,23 +403,6 @@ describe("CLI init (spawned dist/cli.js)", () => {
     expect(fs.existsSync(path.join(initTmp, ".agents", "skills", "flagrm-remove", "MARKER.txt"))).toBe(true);
   });
 
-  it("update replaces the flagrm-verify skill of an earlier version with flagrm-review", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-update-rename-"));
-    try {
-      expect(runCli(["init", "--tool", "claude-code"], dir).status).toBe(0);
-      const skills = path.join(dir, ".claude", "skills");
-      fs.renameSync(path.join(skills, "flagrm-review"), path.join(skills, "flagrm-verify"));
-      const { status, stdout } = runCli(["update"], dir);
-      expect(status).toBe(0);
-      expect(stdout).toMatch(/deleted\s+\.claude\/skills\/flagrm-verify — replaced by flagrm-review/);
-      expect(stdout).toMatch(/created\s+\.claude\/skills\/flagrm-review/);
-      expect(fs.existsSync(path.join(skills, "flagrm-verify"))).toBe(false);
-      expect(fs.existsSync(path.join(skills, "flagrm-review", "SKILL.md"))).toBe(true);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
   it("without a terminal, sets up only the tools the repository already uses", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffr-init-detect-"));
     try {
@@ -532,7 +535,7 @@ describe("CLI stale (spawned dist/cli.js)", () => {
   const config = (launchdarkly: string) =>
     fs.writeFileSync(
       path.join(dir, "flagrm.config.yaml"),
-      `frontend: ./frontend\nbackend: ./backend\n${launchdarkly}`,
+      `projects:\n  - { name: frontend, adapter: angular, path: ./frontend }\n  - { name: backend, adapter: dotnet, path: ./backend }\n${launchdarkly}`,
       "utf8",
     );
 

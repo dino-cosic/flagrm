@@ -2,10 +2,47 @@
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
-[Semantic Versioning](https://semver.org/). Before 1.0, a minor version may
+[Semantic Versioning](https://semver.org/); the README's "Versioning" section
+says what a minor release won't break. Before 1.0, a minor version could
 contain breaking changes.
 
 ## [Unreleased]
+
+### Added
+
+- README "Versioning" section: from 1.0, commands, options, exit codes,
+  config keys, `--json` output, the `.flagrm/` files, the skill names and the
+  Stop hook command stay compatible within a major version.
+- Releases are staged on npm from a `v*` tag by GitHub Actions, with
+  provenance, and go live only after a maintainer approves them with 2FA.
+
+### Fixed
+
+- A usage error found while parsing the command line (unknown option or
+  command, missing argument) exits 2, as documented, instead of 1, which
+  `verify` uses for a failed removal.
+
+### Removed
+
+- **Breaking:** the `--frontend` and `--backend` options, and the top-level
+  `frontend:`, `backend:`, `frontendMethods:`, `backendMethods:` and
+  `backendAttributes:` config keys. List each project under `projects:`
+  instead, with `methods:` and `attributes:` on the project. A config that
+  still has one of these keys is rejected with a message naming its
+  replacement:
+
+  ```yaml
+  projects:
+    - { name: frontend, adapter: angular, path: ./frontend }
+    - { name: backend, adapter: dotnet, path: ./backend }
+  ```
+
+- **Breaking:** `flagrm update` no longer replaces the `flagrm-verify` skill
+  and prompt file of flagrm 0.4 and earlier, and `doctor` no longer warns
+  about them. Coming from 0.4 or earlier, run `flagrm update` with flagrm 0.5
+  first, or run `flagrm init` (it adds `flagrm-review`) and delete the
+  `flagrm-verify` skill directories and `.github/prompts/flagrm-verify.prompt.md`
+  by hand.
 
 ## [0.5.0] - 2026-10-23
 

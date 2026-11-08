@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { Command } from "commander";
+import { Command, CommanderError } from "commander";
 import pc from "picocolors";
 import { realProbes } from "./adapters/dotnet/setup.js";
 import type { Workspace } from "./core/adapter.js";
@@ -62,7 +62,9 @@ program
       "doctor), find flags (list) and those LaunchDarkly says are ready to remove (stale), record the state before a " +
       "removal (baseline) and gate the result (verify).",
   )
-  .version(packageVersion());
+  .version(packageVersion())
+  // Throw instead of exiting, so a usage error commander finds (unknown option, missing argument) exits 2 too.
+  .exitOverride();
 
 /** Accumulate repeatable options (`--exclude a --exclude b`) into an array. */
 function collect(value: string, previous: string[]): string[] {
@@ -78,8 +80,6 @@ function addGlobOptions(cmd: Command): Command {
 function addCommonOptions(cmd: Command): Command {
   return addGlobOptions(
     cmd
-      .option("--frontend <path>", "path to an Angular project (adds or replaces the project named 'frontend')")
-      .option("--backend <path>", "path to a .NET project (adds or replaces the project named 'backend')")
       .option(
         "--config <path>",
         "path to a config file (default: the nearest flagrm.config.yaml up to the git repository root)",
@@ -490,8 +490,14 @@ addCommonOptions(
   });
 
 // exitCode, not exit(): exit() can cut off output still being flushed to a pipe.
-program.parseAsync().catch((err: unknown) => {
-  if (!(err instanceof CliError)) throw err;
-  console.error(pc.red(err.message));
-  process.exitCode = 2;
-});
+try {
+  await program.parseAsync();
+} catch (err) {
+  if (err instanceof CommanderError) {
+    // Commander printed the message already; --help and --version end with 0.
+    process.exitCode = err.exitCode === 0 ? 0 : 2;
+  } else if (err instanceof CliError) {
+    console.error(pc.red(err.message));
+    process.exitCode = 2;
+  } else throw err;
+}

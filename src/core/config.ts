@@ -27,7 +27,7 @@ export function parseTools(value: unknown, where = "tools"): ToolId[] | undefine
 
 /** One configured project, fully resolved (absolute paths, defaults applied). */
 export interface ProjectConfig {
-  /** Unique name, used to label every reference and result (`"frontend"`/`"backend"` for legacy configs). */
+  /** Unique name, used to label every reference and result. */
   name: string;
   adapter: AdapterId;
   /** Absolute path to the project root. */
@@ -104,10 +104,6 @@ export const DEFAULT_BACKEND_METHODS = [
 export const DEFAULT_BACKEND_ATTRIBUTES = ["FeatureGate", "Feature"];
 
 export interface CliPathOptions {
-  /** Legacy shortcut: adds (or replaces) an Angular project named `frontend`. */
-  frontend?: string;
-  /** Legacy shortcut: adds (or replaces) a .NET project named `backend`. */
-  backend?: string;
   config?: string;
   /** Additional glob patterns to exclude (unioned with the config file's `exclude`). */
   exclude?: string[];
@@ -135,11 +131,6 @@ interface ProjectFileShape {
 interface ConfigFileShape {
   projects?: unknown;
   tools?: unknown;
-  frontend?: string;
-  backend?: string;
-  frontendMethods?: string[];
-  backendMethods?: string[];
-  backendAttributes?: string[];
   exclude?: string[];
   include?: string[];
   launchdarkly?: unknown;
@@ -148,18 +139,7 @@ interface ConfigFileShape {
 export const CONFIG_FILENAMES = ["flagrm.config.yaml", "flagrm.config.yml", "flagrm.config.json"];
 
 /** Known top-level `flagrm.config.yaml` keys — anything else is likely a typo. */
-const KNOWN_CONFIG_KEYS = [
-  "projects",
-  "tools",
-  "frontend",
-  "backend",
-  "frontendMethods",
-  "backendMethods",
-  "backendAttributes",
-  "exclude",
-  "include",
-  "launchdarkly",
-];
+const KNOWN_CONFIG_KEYS = ["projects", "tools", "exclude", "include", "launchdarkly"];
 
 const KNOWN_LAUNCHDARKLY_KEYS = [
   "project",
@@ -187,6 +167,15 @@ const KNOWN_PROJECT_KEYS = [
   "attributes",
 ];
 
+/** Top-level keys removed in 1.0, with what replaces them. */
+const REMOVED_CONFIG_KEYS: Record<string, string> = {
+  frontend: "a `projects:` entry with `adapter: angular`",
+  backend: "a `projects:` entry with `adapter: dotnet`",
+  frontendMethods: "`methods:` on the angular project",
+  backendMethods: "`methods:` on the dotnet project",
+  backendAttributes: "`attributes:` on the dotnet project",
+};
+
 const PROJECT_NAME = /^[A-Za-z0-9][\w.-]*$/;
 
 function readConfigFile(configPath: string): ConfigFileShape {
@@ -196,9 +185,11 @@ function readConfigFile(configPath: string): ConfigFileShape {
     throw new Error(`Config file ${configPath} does not contain an object.`);
   }
   const file = parsed as Record<string, unknown>;
+  for (const [key, replacement] of Object.entries(REMOVED_CONFIG_KEYS)) {
+    if (key in file) throw new Error(`${configPath}: "${key}" was removed in flagrm 1.0; use ${replacement}.`);
+  }
   // Checked here so a YAML string (`exclude: "**/gen/**"`) fails instead of being spread into characters.
-  for (const key of ["frontend", "backend"] as const) optionalString(file[key], key);
-  for (const key of ["frontendMethods", "backendMethods", "backendAttributes", "exclude", "include"] as const) {
+  for (const key of ["exclude", "include"] as const) {
     optionalStringList(file[key], key);
   }
   return file as ConfigFileShape;
@@ -375,23 +366,17 @@ function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | un
   };
 }
 
-/** Per-adapter defaults for `methods`/`attributes`; the legacy top-level keys override the built-ins. */
-function adapterDefaults(adapter: AdapterId, file: ConfigFileShape): { methods: string[]; attributes: string[] } {
-  const frontend = file.frontendMethods?.length ? file.frontendMethods : DEFAULT_FRONTEND_METHODS;
-  const backend = file.backendMethods?.length ? file.backendMethods : DEFAULT_BACKEND_METHODS;
-  const attributes = file.backendAttributes?.length ? file.backendAttributes : DEFAULT_BACKEND_ATTRIBUTES;
-  if (adapter === "angular") return { methods: frontend, attributes: [] };
-  if (adapter === "dotnet") return { methods: backend, attributes };
-  return { methods: [...new Set([...frontend, ...backend])], attributes };
+/** Per-adapter defaults for `methods`/`attributes`. */
+function adapterDefaults(adapter: AdapterId): { methods: string[]; attributes: string[] } {
+  if (adapter === "angular") return { methods: DEFAULT_FRONTEND_METHODS, attributes: [] };
+  if (adapter === "dotnet") return { methods: DEFAULT_BACKEND_METHODS, attributes: DEFAULT_BACKEND_ATTRIBUTES };
+  return {
+    methods: [...new Set([...DEFAULT_FRONTEND_METHODS, ...DEFAULT_BACKEND_METHODS])],
+    attributes: DEFAULT_BACKEND_ATTRIBUTES,
+  };
 }
 
-function parseProject(
-  raw: unknown,
-  index: number,
-  file: ConfigFileShape,
-  fileDir: string,
-  quiet = false,
-): ProjectConfig {
+function parseProject(raw: unknown, index: number, fileDir: string, quiet = false): ProjectConfig {
   const where = `projects[${index}]`;
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error(`${where} must be an object with name, adapter and path.`);
@@ -411,7 +396,7 @@ function parseProject(
   const adapter = p.adapter as AdapterId;
   if (typeof p.path !== "string" || !p.path) throw new Error(`${where} ("${name}") is missing a "path".`);
 
-  const defaults = adapterDefaults(adapter, file);
+  const defaults = adapterDefaults(adapter);
   const testResults = optionalString(p.testResults, `${where}.testResults`);
   const project: ProjectConfig = {
     name,
@@ -437,10 +422,7 @@ function parseProject(
 /**
  * Merge CLI options with an optional config file and validate everything.
  *
- * Projects come from `projects:` plus the legacy `frontend:`/`backend:` keys,
- * which become an `angular` project named `frontend` and a `dotnet` project
- * named `backend`. `--frontend`/`--backend` on the CLI replace the project of
- * that name (or add it).
+ * Projects come from the config file's `projects:` list.
  */
 export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig {
   let file: ConfigFileShape = {};
@@ -460,21 +442,8 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
     throw new Error(`"projects" must be a list of { name, adapter, path } entries.`);
   }
   const projects = ((file.projects as unknown[] | undefined) ?? []).map((raw, i) =>
-    parseProject(raw, i, file, fileDir, cli.quiet),
+    parseProject(raw, i, fileDir, cli.quiet),
   );
-
-  const legacyProject = (name: "frontend" | "backend", adapter: AdapterId, dir: string): ProjectConfig => ({
-    name,
-    adapter,
-    path: dir,
-    ...adapterDefaults(adapter, file),
-  });
-  if (file.frontend) {
-    projects.push(legacyProject("frontend", "angular", resolveProjectDir(fileDir, file.frontend, "Frontend")));
-  }
-  if (file.backend) {
-    projects.push(legacyProject("backend", "dotnet", resolveProjectDir(fileDir, file.backend, "Backend")));
-  }
 
   const seen = new Set<string>();
   for (const p of projects) {
@@ -482,23 +451,8 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
     seen.add(p.name);
   }
 
-  // CLI shortcuts replace a same-named project (keeping its position) or append one.
-  for (const [name, adapter, raw] of [
-    ["frontend", "angular", cli.frontend],
-    ["backend", "dotnet", cli.backend],
-  ] as const) {
-    if (!raw) continue;
-    const label = name === "frontend" ? "Frontend" : "Backend";
-    const project = legacyProject(name, adapter, resolveProjectDir(cwd, raw, label));
-    const existing = projects.findIndex((p) => p.name === name);
-    if (existing === -1) projects.push(project);
-    else projects[existing] = project;
-  }
-
   if (projects.length === 0) {
-    throw new Error(
-      "No projects configured. Add a `projects:` list to flagrm.config.yaml, or pass --frontend and/or --backend.",
-    );
+    throw new Error("No projects configured. Add a `projects:` list to flagrm.config.yaml (`flagrm init` writes one).");
   }
 
   const tools = parseTools(file.tools);
