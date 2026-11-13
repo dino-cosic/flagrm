@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 says what a minor release won't break. Before 1.0, a minor version could
 contain breaking changes.
 
+## [Unreleased]
+
+### Fixed
+
+- On macOS and Linux, a build or test command that hits `timeout` is now
+  killed with everything it started. Before, only the shell was killed and
+  the real command (a watch-mode test runner, say) kept running. Ctrl-C on
+  `flagrm baseline` or `verify` stops the running command too.
+
 ## [1.0.0] - 2026-11-08
 
 ### Added
