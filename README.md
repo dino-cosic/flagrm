@@ -214,6 +214,10 @@ narrower test command makes "no new failures" mean less.
 | `stale [flags...]` | Ask LaunchDarkly which flags are ready to remove from code | 0 evaluated, 2 usage error, 3 LaunchDarkly unreachable or refused the request (token, access, project key) |
 | `hook stop` | The Claude Code Stop hook installed by `init` | always 0 |
 
+Every command except `hook stop` exits 4 on an unexpected error, a likely
+bug in flagrm, and prints the stack trace. Exit 2 is kept for mistakes the
+user can fix: options, the config, a missing or unreadable baseline.
+
 `list`, `baseline`, `verify` and `stale` accept `--json`, `--config <path>`, and
 `--include` / `--exclude <glob>`.
 

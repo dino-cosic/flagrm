@@ -6,6 +6,7 @@
  */
 
 import type { LaunchDarklyConfig } from "../config.js";
+import { UsageError } from "../errors.js";
 import { type FlagSource, type Served, SourceError, type SourceFlag, type SourceRead } from "./types.js";
 
 export const LD_API_VERSION = "20240415";
@@ -103,7 +104,7 @@ export class LaunchDarklySource implements FlagSource {
     if (!wanted) return keys;
     const unknown = wanted.filter((e) => !keys.includes(e));
     if (unknown.length) {
-      throw new Error(
+      throw new UsageError(
         `launchdarkly.environments: ${unknown.map((e) => `"${e}"`).join(", ")} not in LaunchDarkly project ` +
           `"${this.config.project}". Its environments: ${keys.join(", ") || "none"}.`,
       );

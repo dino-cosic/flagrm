@@ -6,6 +6,7 @@
  */
 
 import type { LaunchDarklyConfig } from "./config.js";
+import { UsageError } from "./errors.js";
 import type { SourceFlag, SourceRead } from "./sources/types.js";
 import {
   JSON_SCHEMA_VERSION,
@@ -176,7 +177,7 @@ export interface StaleInput {
 }
 
 /** A name in `only` that neither a LaunchDarkly flag nor a code name matches: a usage error. */
-export class UnknownFlagError extends Error {}
+export class UnknownFlagError extends UsageError {}
 
 export function evaluateStale(input: StaleInput): StaleReport {
   const { read, codeNames, config, now } = input;

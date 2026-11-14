@@ -14,6 +14,12 @@ contain breaking changes.
   killed with everything it started. Before, only the shell was killed and
   the real command (a watch-mode test runner, say) kept running. Ctrl-C on
   `flagrm baseline` or `verify` stops the running command too.
+- An unexpected error (a bug in flagrm) now exits 4 and prints the stack
+  trace. Before, `baseline`, `verify`, `stale`, `init` and `update` reported
+  it as a one-line usage error with exit 2, so an agent would retry with
+  different arguments. A config file with a YAML or JSON syntax error, or a
+  `baseline.json` that isn't valid JSON, is still exit 2 and now names the
+  file.
 
 ## [1.0.0] - 2026-11-08
 

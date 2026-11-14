@@ -6,6 +6,7 @@ import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
 import { type ChangeFilter, changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { environmentProblem } from "./environment.js";
+import { UsageError } from "./errors.js";
 import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
 import { globAbsolute } from "./scan.js";
@@ -80,9 +81,6 @@ export function baselineSummary(baseline: Baseline, file: string): Record<string
   };
 }
 
-/** A problem with how flagrm was run (missing baseline, stale schema) rather than with the code under check. */
-export class UsageError extends Error {}
-
 /** Read `.flagrm/<flag>/baseline.json`, which `flagrm baseline <flag>` writes. */
 export function readBaseline(root: string, flag: string): { baseline: Baseline; file: string } {
   const file = baselinePath(root, flag);
@@ -91,7 +89,15 @@ export function readBaseline(root: string, flag: string): { baseline: Baseline; 
       `No baseline for ${flag} at ${file}. Run \`flagrm baseline ${flag}\` before changing the code.`,
     );
   }
-  const baseline = JSON.parse(fs.readFileSync(file, "utf8")) as Baseline;
+  let baseline: Baseline;
+  try {
+    baseline = JSON.parse(fs.readFileSync(file, "utf8")) as Baseline;
+  } catch (err) {
+    throw new UsageError(
+      `${file} is not valid JSON (${(err as Error).message}). ` +
+        `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`,
+    );
+  }
   if (!READABLE_BASELINE_VERSIONS.includes(baseline.schemaVersion)) {
     throw new UsageError(
       `${file} was written by schema version ${baseline.schemaVersion}; this flagrm expects ${JSON_SCHEMA_VERSION}. ` +

@@ -15,10 +15,10 @@ import {
   readBaseline,
   runCheck,
   runChecks,
-  UsageError,
   writeBaseline,
 } from "../src/core/baseline.js";
 import { changeFilter } from "../src/core/change-filter.js";
+import { UsageError } from "../src/core/errors.js";
 import { gitState } from "../src/core/git.js";
 import { JSON_SCHEMA_VERSION } from "../src/core/types.js";
 import { projectContext } from "./support/projects.js";

@@ -26,6 +26,7 @@ check your own reasoning. Tell the user to run `/flagrm-review <flag>` in a new 
 - Exit 2: show the message and stop. A missing baseline has to come from the code before
   the removal: never create one on the edited code. Tell the user to start over with
   `/flagrm-remove` from the pre-removal commit.
+- Exit 4: a bug in flagrm. Show the error and stop.
 
 ## 3. Review the diff
 

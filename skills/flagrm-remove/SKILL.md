@@ -75,7 +75,7 @@ Read `patterns.md` in this skill's directory when a case is unclear.
 | `lint` | Fix what your edit caused. An already-failing lint fails only on new error lines: fix those; other new lines it lists only warn |
 | `coverage` | Tell the user which changed files no command checks; don't add or change commands yourself |
 
-Exit 2 is a usage or config error: read the message. `--skip build,tests,lint,coverage` is fine for a quick check in between; only a full run counts, and the Stop hook won't let you finish on one with `--skip`. After three failed attempts on one check, show the user the findings. Don't run code generators or formatters after the passing verify; if you must, verify again.
+Exit 2 is a usage or config error: read the message. Exit 4 is a bug in flagrm: show the user the error and stop. `--skip build,tests,lint,coverage` is fine for a quick check in between; only a full run counts, and the Stop hook won't let you finish on one with `--skip`. After three failed attempts on one check, show the user the findings. Don't run code generators or formatters after the passing verify; if you must, verify again.
 
 ## 6. Hand back
 

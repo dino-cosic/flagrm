@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
+import { UsageError } from "./errors.js";
 
 export const ADAPTER_IDS = ["angular", "dotnet", "generic"] as const;
 
@@ -15,11 +16,11 @@ export type ToolId = (typeof TOOL_IDS)[number];
 export function parseTools(value: unknown, where = "tools"): ToolId[] | undefined {
   if (value === undefined || value === null) return undefined;
   const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : undefined;
-  if (!list) throw new Error(`${where} must be a list of ${TOOL_IDS.join(", ")}.`);
+  if (!list) throw new UsageError(`${where} must be a list of ${TOOL_IDS.join(", ")}.`);
   const tools = list.map((t) => String(t).trim()).filter(Boolean);
   for (const t of tools) {
     if (!(TOOL_IDS as readonly string[]).includes(t)) {
-      throw new Error(`${where}: "${t}" is not one of ${TOOL_IDS.join(", ")}.`);
+      throw new UsageError(`${where}: "${t}" is not one of ${TOOL_IDS.join(", ")}.`);
     }
   }
   return TOOL_IDS.filter((t) => tools.includes(t));
@@ -178,15 +179,25 @@ const REMOVED_CONFIG_KEYS: Record<string, string> = {
 
 const PROJECT_NAME = /^[A-Za-z0-9][\w.-]*$/;
 
+/** A config file's YAML or JSON; a syntax error is the user's to fix and names the file. */
+export function parseConfigText(configPath: string, text: string): unknown {
+  try {
+    return configPath.endsWith(".json") ? JSON.parse(text) : YAML.parse(text);
+  } catch (err) {
+    throw new UsageError(
+      `${configPath} is not valid ${configPath.endsWith(".json") ? "JSON" : "YAML"}: ${(err as Error).message}`,
+    );
+  }
+}
+
 function readConfigFile(configPath: string): ConfigFileShape {
-  const raw = fs.readFileSync(configPath, "utf8");
-  const parsed = configPath.endsWith(".json") ? JSON.parse(raw) : YAML.parse(raw);
+  const parsed = parseConfigText(configPath, fs.readFileSync(configPath, "utf8"));
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`Config file ${configPath} does not contain an object.`);
+    throw new UsageError(`Config file ${configPath} does not contain an object.`);
   }
   const file = parsed as Record<string, unknown>;
   for (const [key, replacement] of Object.entries(REMOVED_CONFIG_KEYS)) {
-    if (key in file) throw new Error(`${configPath}: "${key}" was removed in flagrm 1.0; use ${replacement}.`);
+    if (key in file) throw new UsageError(`${configPath}: "${key}" was removed in flagrm 1.0; use ${replacement}.`);
   }
   // Checked here so a YAML string (`exclude: "**/gen/**"`) fails instead of being spread into characters.
   for (const key of ["exclude", "include"] as const) {
@@ -249,14 +260,14 @@ export function findDefaultConfigFile(cwd: string): string | undefined {
 function resolveProjectDir(base: string, raw: string, label: string): string {
   const abs = path.resolve(base, raw);
   if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) {
-    throw new Error(`${label} path does not exist or is not a directory: ${abs}`);
+    throw new UsageError(`${label} path does not exist or is not a directory: ${abs}`);
   }
   return abs;
 }
 
 function optionalString(value: unknown, where: string): string | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || !value.trim()) throw new Error(`${where} must be a non-empty string.`);
+  if (typeof value !== "string" || !value.trim()) throw new UsageError(`${where} must be a non-empty string.`);
   return value;
 }
 
@@ -264,28 +275,28 @@ function optionalString(value: unknown, where: string): string | undefined {
 function optionalCommand(value: unknown, where: string): string | false | undefined {
   if (value === false) return false;
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || !value.trim()) throw new Error(`${where} must be a non-empty string or false.`);
+  if (typeof value !== "string" || !value.trim()) throw new UsageError(`${where} must be a non-empty string or false.`);
   return value;
 }
 
 function optionalPositiveNumber(value: unknown, where: string): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    throw new Error(`${where} must be a positive number of seconds.`);
+    throw new UsageError(`${where} must be a positive number of seconds.`);
   }
   return value;
 }
 
 function optionalBoolean(value: unknown, where: string): boolean | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "boolean") throw new Error(`${where} must be true or false.`);
+  if (typeof value !== "boolean") throw new UsageError(`${where} must be true or false.`);
   return value;
 }
 
 function optionalPositiveDays(value: unknown, where: string): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new Error(`${where} must be a positive whole number of days.`);
+    throw new UsageError(`${where} must be a positive whole number of days.`);
   }
   return value;
 }
@@ -297,7 +308,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function optionalStringMap(value: unknown, where: string): Record<string, string> | undefined {
   if (value === undefined) return undefined;
   if (!isObject(value) || !Object.values(value).every((v) => typeof v === "string" && v.trim())) {
-    throw new Error(`${where} must map LaunchDarkly keys to code names (strings).`);
+    throw new UsageError(`${where} must map LaunchDarkly keys to code names (strings).`);
   }
   return value as Record<string, string>;
 }
@@ -305,7 +316,7 @@ function optionalStringMap(value: unknown, where: string): Record<string, string
 function optionalStringList(value: unknown, where: string): string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) {
-    throw new Error(`${where} must be a list of strings.`);
+    throw new UsageError(`${where} must be a list of strings.`);
   }
   return value;
 }
@@ -316,10 +327,10 @@ const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | undefined {
   if (raw === undefined || raw === null) return undefined;
   const where = "launchdarkly";
-  if (!isObject(raw)) throw new Error(`${where} must be an object with at least a "project".`);
+  if (!isObject(raw)) throw new UsageError(`${where} must be an object with at least a "project".`);
   for (const key of ["token", "apiKey"]) {
     if (key in raw) {
-      throw new Error(
+      throw new UsageError(
         `${where}.${key}: never put the API token in the config file. Remove it and set the environment ` +
           `variable named by ${where}.tokenEnv (default ${DEFAULT_LAUNCHDARKLY_TOKEN_ENV}) instead.`,
       );
@@ -327,7 +338,7 @@ function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | un
   }
   if (!quiet) warnOnUnknownKeys(raw, KNOWN_LAUNCHDARKLY_KEYS, `"${where}"`);
   const project = optionalString(raw.project, `${where}.project`);
-  if (!project) throw new Error(`${where}.project is required: the LaunchDarkly project key.`);
+  if (!project) throw new UsageError(`${where}.project is required: the LaunchDarkly project key.`);
 
   const baseUrl = (optionalString(raw.baseUrl, `${where}.baseUrl`) ?? DEFAULT_LAUNCHDARKLY_BASE_URL).replace(
     /\/+$/,
@@ -337,20 +348,20 @@ function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | un
   try {
     url = new URL(baseUrl);
   } catch {
-    throw new Error(`${where}.baseUrl is not a URL: ${baseUrl}`);
+    throw new UsageError(`${where}.baseUrl is not a URL: ${baseUrl}`);
   }
   if (url.protocol !== "https:" && !(url.protocol === "http:" && LOOPBACK_HOSTS.includes(url.hostname))) {
-    throw new Error(`${where}.baseUrl must use https: the API token is sent to it.`);
+    throw new UsageError(`${where}.baseUrl must use https: the API token is sent to it.`);
   }
 
   if (raw.tags !== undefined && !isObject(raw.tags)) {
-    throw new Error(`${where}.tags must be an object with "include" and/or "exclude" lists.`);
+    throw new UsageError(`${where}.tags must be an object with "include" and/or "exclude" lists.`);
   }
   const tags = (raw.tags ?? {}) as Record<string, unknown>;
   if (!quiet) warnOnUnknownKeys(tags, ["include", "exclude"], `"${where}.tags"`);
 
   const environments = optionalStringList(raw.environments, `${where}.environments`);
-  if (environments?.length === 0) throw new Error(`${where}.environments must name at least one environment.`);
+  if (environments?.length === 0) throw new UsageError(`${where}.environments must name at least one environment.`);
   return {
     project,
     baseUrl,
@@ -379,22 +390,22 @@ function adapterDefaults(adapter: AdapterId): { methods: string[]; attributes: s
 function parseProject(raw: unknown, index: number, fileDir: string, quiet = false): ProjectConfig {
   const where = `projects[${index}]`;
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`${where} must be an object with name, adapter and path.`);
+    throw new UsageError(`${where} must be an object with name, adapter and path.`);
   }
   const p = raw as ProjectFileShape;
-  if (typeof p.name !== "string" || !p.name) throw new Error(`${where} is missing a "name".`);
+  if (typeof p.name !== "string" || !p.name) throw new UsageError(`${where} is missing a "name".`);
   const name = p.name;
   if (!PROJECT_NAME.test(name)) {
-    throw new Error(
+    throw new UsageError(
       `${where}: name "${name}" must start with a letter or digit and contain only letters, digits, _ . -`,
     );
   }
   if (!quiet) warnOnUnknownKeys(p, KNOWN_PROJECT_KEYS, `project "${name}"`);
   if (typeof p.adapter !== "string" || !(ADAPTER_IDS as readonly string[]).includes(p.adapter)) {
-    throw new Error(`${where}: adapter "${String(p.adapter)}" is not one of ${ADAPTER_IDS.join(", ")}.`);
+    throw new UsageError(`${where}: adapter "${String(p.adapter)}" is not one of ${ADAPTER_IDS.join(", ")}.`);
   }
   const adapter = p.adapter as AdapterId;
-  if (typeof p.path !== "string" || !p.path) throw new Error(`${where} ("${name}") is missing a "path".`);
+  if (typeof p.path !== "string" || !p.path) throw new UsageError(`${where} ("${name}") is missing a "path".`);
 
   const defaults = adapterDefaults(adapter);
   const testResults = optionalString(p.testResults, `${where}.testResults`);
@@ -430,7 +441,7 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
   // Without --config, the nearest config up to the repository root is the workspace, as it is for the Stop hook.
   const configPath = cli.config ? path.resolve(cwd, cli.config) : findConfigFile(cwd);
   if (cli.config && !fs.existsSync(configPath!)) {
-    throw new Error(`Config file not found: ${configPath}`);
+    throw new UsageError(`Config file not found: ${configPath}`);
   }
   if (configPath && fs.existsSync(configPath)) {
     file = readConfigFile(configPath);
@@ -439,7 +450,7 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
   }
 
   if (file.projects !== undefined && !Array.isArray(file.projects)) {
-    throw new Error(`"projects" must be a list of { name, adapter, path } entries.`);
+    throw new UsageError(`"projects" must be a list of { name, adapter, path } entries.`);
   }
   const projects = ((file.projects as unknown[] | undefined) ?? []).map((raw, i) =>
     parseProject(raw, i, fileDir, cli.quiet),
@@ -447,12 +458,14 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
 
   const seen = new Set<string>();
   for (const p of projects) {
-    if (seen.has(p.name)) throw new Error(`Duplicate project name "${p.name}" in ${configPath ?? "config"}.`);
+    if (seen.has(p.name)) throw new UsageError(`Duplicate project name "${p.name}" in ${configPath ?? "config"}.`);
     seen.add(p.name);
   }
 
   if (projects.length === 0) {
-    throw new Error("No projects configured. Add a `projects:` list to flagrm.config.yaml (`flagrm init` writes one).");
+    throw new UsageError(
+      "No projects configured. Add a `projects:` list to flagrm.config.yaml (`flagrm init` writes one).",
+    );
   }
 
   const tools = parseTools(file.tools);
