@@ -13,7 +13,8 @@ const commitAll = () => {
   git("add", "-A");
   git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "setup");
 };
-const config = (build: string, test?: string, testResults?: string, lint?: string) =>
+/** A generic project; with a test command, also a `timeout` (doctor warns without one). */
+const config = (build: string, test?: string, testResults?: string, lint?: string, timeout = 600) =>
   fs.writeFileSync(
     path.join(tmp, "flagrm.config.yaml"),
     [
@@ -23,7 +24,7 @@ const config = (build: string, test?: string, testResults?: string, lint?: strin
       "    path: .",
       "    globs: ['**/*.txt']",
       `    build: ${JSON.stringify(build)}`,
-      ...(test ? [`    test: ${JSON.stringify(test)}`] : []),
+      ...(test ? [`    test: ${JSON.stringify(test)}`, `    timeout: ${timeout}`] : []),
       ...(testResults ? [`    testResults: ${testResults}`] : []),
       ...(lint ? [`    lint: ${JSON.stringify(lint)}`] : []),
       "",
@@ -125,6 +126,19 @@ describe("runDoctor", () => {
     }
   });
 
+  it("warns about a test command without a timeout, and says how to set one", async () => {
+    fs.writeFileSync(
+      path.join(tmp, "flagrm.config.yaml"),
+      'projects:\n  - name: svc\n    adapter: generic\n    path: .\n    build: node -e ""\n    test: node -e ""\n',
+    );
+    commitAll();
+    const check = (await runDoctor(tmp)).checks.find((c) => c.message.startsWith("svc: no timeout"));
+    expect(check?.status).toBe("warn");
+    expect(check?.details).toEqual([
+      "fix: add `timeout: <seconds>` to the svc project, well above how long its tests take",
+    ]);
+  });
+
   it("fails on a project path that doesn't exist", async () => {
     fs.writeFileSync(
       path.join(tmp, "flagrm.config.yaml"),
@@ -220,8 +234,7 @@ describe("runDoctor", () => {
   });
 
   it("fails with --run when lint is cut short", async () => {
-    config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml", 'node -e "setInterval(() => {}, 1000)"');
-    fs.appendFileSync(path.join(tmp, "flagrm.config.yaml"), "    timeout: 1\n");
+    config('node -e ""', testWriting("<testsuite/>"), "./.flagrm/r.xml", 'node -e "setInterval(() => {}, 1000)"', 1);
     commitAll();
     const lint = (await runDoctor(tmp, { run: true })).checks.find((c) => c.message.includes("setInterval"));
     expect(lint?.status).toBe("fail");

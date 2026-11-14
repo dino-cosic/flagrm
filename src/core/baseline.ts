@@ -9,6 +9,7 @@ import { environmentProblem } from "./environment.js";
 import { UsageError } from "./errors.js";
 import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
+import { formatDuration, progress } from "./progress.js";
 import { globAbsolute } from "./scan.js";
 import { withScopeFiles } from "./scope-files.js";
 import {
@@ -134,6 +135,7 @@ export async function runCheck(
   testResults?: string,
 ): Promise<CheckRun> {
   const started = Date.now();
+  progress.write(`${ctx.name} ${check}: \`${command}\` …`);
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   fs.writeFileSync(logFile, `$ ${command}\n`, "utf8");
   const fd = fs.openSync(logFile, "a");
@@ -154,6 +156,10 @@ export async function runCheck(
     log: logFile,
   };
   if (reason) run.interrupted = reason;
+  progress.write(
+    `${ctx.name} ${check}: ${reason ?? (run.exitCode === 0 ? "passed" : `failed (exit ${run.exitCode})`)} ` +
+      `in ${formatDuration(run.durationMs)}`,
+  );
   if (run.exitCode !== 0) {
     const problem = environmentProblem(fs.readFileSync(logFile, "utf8"), ctx.root);
     if (problem) run.failure = { kind: "environment", message: problem };

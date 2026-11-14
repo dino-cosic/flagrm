@@ -8,6 +8,14 @@ contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- `baseline`, `verify` and `doctor --run` print a progress line to stderr as
+  each build, test and lint command starts and ends, with how long it took,
+  so a slow run can be told from a hung one. stdout is unchanged.
+- `doctor` warns when a project has a test command but no `timeout`: a test
+  runner left in watch mode would keep `baseline` and `verify` waiting forever.
+
 ### Fixed
 
 - On macOS and Linux, a build or test command that hits `timeout` is now
