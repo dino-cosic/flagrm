@@ -35,6 +35,20 @@ afterEach(() => {
 
 const git = (...args: string[]) => execFileSync("git", args, { cwd: tmp, encoding: "utf8" }).trim();
 
+/** Whether process `pid` is gone within `ms` (a killed process may take a moment to be reaped). */
+async function exitsWithin(pid: number, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return false;
+}
+
 describe("gitState", () => {
   it("returns a null sha outside a git repository", () => {
     expect(gitState(tmp)).toEqual({ sha: null, dirty: false });
@@ -235,6 +249,17 @@ describe("runCheck", () => {
     // Killed well before the command's own 10s; taskkill is slow on a loaded Windows runner.
     expect(run.durationMs).toBeLessThan(9000);
     expect(fs.readFileSync(log, "utf8")).toContain("flagrm: error: timed out after 0.5s");
+  });
+
+  it("kills the command the shell started on timeout, not only the shell", async () => {
+    const ctx = projectContext("generic", tmp, { name: "svc", timeout: 1 });
+    const pidFile = path.join(tmp, "child.pid");
+    // `&&` keeps the shell alive as the node process's parent instead of exec'ing it.
+    const command = `node -e "require('fs').writeFileSync('child.pid', String(process.pid)); setTimeout(() => {}, 30000)" && echo done`;
+    const run = await runCheck(ctx, "test", command, path.join(tmp, "orphan.log"));
+    expect(run.interrupted).toContain("timed out");
+    const pid = Number(fs.readFileSync(pidFile, "utf8"));
+    expect(await exitsWithin(pid, 3000)).toBe(true);
   });
 
   it("reads the JUnit results a test command writes into testResults", async () => {

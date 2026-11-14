@@ -10,6 +10,10 @@ contain breaking changes.
 
 ### Fixed
 
+- On macOS and Linux, a build or test command that hits `timeout` is now
+  killed with everything it started. Before, only the shell was killed and
+  the real command (a watch-mode test runner, say) kept running. Ctrl-C on
+  `flagrm baseline` or `verify` stops the running command too.
 - An unexpected error (a bug in flagrm) now exits 4 and prints the stack
   trace. Before, `baseline`, `verify`, `stale`, `init` and `update` reported
   it as a one-line usage error with exit 2, so an agent would retry with
