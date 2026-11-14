@@ -66,7 +66,7 @@ describe("parseDotnetUnused", () => {
   it("counts occurrences against the baseline: a second identical warning is new", () => {
     const warning = (line: number) =>
       `/src/Api/A.cs(${line},9): warning CS0168: The variable 'ex' is declared but never used [/src/Api/Api.csproj]`;
-    const input = { changedFiles: ["/src/Api/A.cs"], baselineBuildLog: warning(10) };
+    const input = { changedFiles: ["/src/Api/A.cs"], baselineText: () => undefined, baselineBuildLog: warning(10) };
     expect(dotnetUnusedDiagnostics({ ...input, buildLog: warning(12) })?.diagnostics).toEqual([]);
     expect(dotnetUnusedDiagnostics({ ...input, buildLog: `${warning(12)}\n${warning(30)}` })?.diagnostics).toEqual([
       expect.objectContaining({ code: "CS0168", line: 30 }),
