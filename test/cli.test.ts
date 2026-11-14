@@ -516,10 +516,15 @@ describe("CLI lint (spawned dist/cli.js)", () => {
   });
 
   it("verify fails on a lint error the edit caused, --skip lint passes, and --md lists both new checks", () => {
-    expect(runCli(["baseline", "FlagA", "--json"], dir).status).toBe(0);
+    const base = runCli(["baseline", "FlagA", "--json"], dir);
+    expect(base.status).toBe(0);
+    // Progress goes to stderr, one line as each command starts and ends; stdout stays parseable.
+    expect(JSON.parse(base.stdout).flag).toBe("FlagA");
+    expect(base.stderr).toMatch(/^flagrm: app lint: `node lint\.cjs` …\nflagrm: app lint: passed in \d+m?s\n$/);
     fs.writeFileSync(path.join(dir, "app.txt"), "bad\n");
     const failed = runCli(["verify", "FlagA", "--json"], dir);
     expect(failed.status).toBe(1);
+    expect(failed.stderr).toContain("flagrm: app lint: failed (exit 1) in ");
     const report = JSON.parse(failed.stdout);
     expect(report.checks.find((c: { id: string }) => c.id === "lint")).toMatchObject({ status: "fail" });
     expect(report.checks.find((c: { id: string }) => c.id === "coverage")).toMatchObject({ status: "pass" });

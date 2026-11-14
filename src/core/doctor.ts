@@ -177,6 +177,13 @@ async function configChecks(
           [`fix: ${missingResultsFix(adapter.id, ctx, root)}`],
         );
       }
+      if (check === "test" && ctx.project.timeout === undefined) {
+        add(
+          "warn",
+          `${ctx.name}: no timeout — a test runner left in watch mode keeps baseline and verify waiting forever`,
+          [`fix: add \`timeout: <seconds>\` to the ${ctx.name} project, well above how long its tests take`],
+        );
+      }
       if (!options.run) {
         const source = commands.defaults.includes(check) ? " (adapter default)" : "";
         add("ok", `${ctx.name}: ${check} command \`${command}\`${source}`);

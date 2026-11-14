@@ -20,6 +20,7 @@ import {
 } from "../src/core/baseline.js";
 import { changeFilter } from "../src/core/change-filter.js";
 import { gitState } from "../src/core/git.js";
+import { formatDuration, progress } from "../src/core/progress.js";
 import { JSON_SCHEMA_VERSION } from "../src/core/types.js";
 import { projectContext } from "./support/projects.js";
 
@@ -215,6 +216,44 @@ describe("runChecks with overlapping testResults patterns", () => {
       ["test"],
     );
     expect(names(runs)).toEqual({ a: ["a"], b: ["b"] });
+  });
+});
+
+describe("formatDuration", () => {
+  it.each([
+    [850, "850ms"],
+    [12_400, "12s"],
+    [134_000, "2m14s"],
+    [3_780_000, "1h03m"],
+  ])("formats %d ms as %s", (ms, text) => {
+    expect(formatDuration(ms)).toBe(text);
+  });
+});
+
+describe("runCheck progress", () => {
+  let lines: string[];
+  const write = progress.write;
+  beforeEach(() => {
+    lines = [];
+    progress.write = (line) => lines.push(line);
+  });
+  afterEach(() => {
+    progress.write = write;
+  });
+
+  it("reports each command as it starts and how it ended", async () => {
+    const ctx = projectContext("generic", tmp, { name: "svc", timeout: 0.5 });
+    await runCheck(ctx, "build", `node -e ""`, path.join(tmp, "ok.log"));
+    await runCheck(ctx, "test", `node -e "process.exit(3)"`, path.join(tmp, "bad.log"));
+    await runCheck(ctx, "lint", `node -e "setTimeout(() => {}, 10000)"`, path.join(tmp, "slow.log"));
+    expect(lines).toEqual([
+      'svc build: `node -e ""` …',
+      expect.stringMatching(/^svc build: passed in \d+m?s$/),
+      'svc test: `node -e "process.exit(3)"` …',
+      expect.stringMatching(/^svc test: failed \(exit 3\) in \d+m?s$/),
+      'svc lint: `node -e "setTimeout(() => {}, 10000)"` …',
+      expect.stringMatching(/^svc lint: timed out after 0\.5s .* in \d+m?s$/),
+    ]);
   });
 });
 

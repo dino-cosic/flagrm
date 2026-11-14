@@ -217,6 +217,10 @@ narrower test command makes "no new failures" mean less.
 `list`, `baseline`, `verify` and `stale` accept `--json`, `--config <path>`, and
 `--include` / `--exclude <glob>`.
 
+`baseline`, `verify` and `doctor --run` print a line to stderr as each build,
+test and lint command starts and ends (`flagrm: api test: passed in 2m14s`),
+so stdout keeps only the `--json` or `--md` output.
+
 <details>
 <summary>Command details and options</summary>
 
@@ -311,7 +315,7 @@ path. `build` and `test` are resolved one at a time:
 | `testResults` | JUnit XML, TRX or Jest JSON (a path or a glob), so `verify` compares individual tests against the baseline |
 | `lint` | Optional lint or type-check command, run like `build` and `test` |
 | `covers` | Globs (relative to `path`) of the files the project's commands check |
-| `timeout` | Seconds after which a build or test command fails, for example a test runner left in watch mode |
+| `timeout` | Seconds after which a build or test command fails, for example a test runner left in watch mode. No limit by default; `doctor` warns when a project with a test command has none |
 | `globs` | Globs (relative to `path`) of the files to scan for flags, replacing the adapter's default language globs |
 | `methods` | Method names that evaluate a flag (`isEnabled`, `IsEnabledAsync`, ...), replacing the adapter's defaults |
 | `attributes` | .NET attributes that gate code on a flag, replacing the defaults `FeatureGate` and `Feature` |
