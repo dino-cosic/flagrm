@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 says what a minor release won't break. Before 1.0, a minor version could
 contain breaking changes.
 
+## [Unreleased]
+
+### Fixed
+
+- An unexpected error (a bug in flagrm) now exits 4 and prints the stack
+  trace. Before, `baseline`, `verify`, `stale`, `init` and `update` reported
+  it as a one-line usage error with exit 2, so an agent would retry with
+  different arguments. A config file with a YAML or JSON syntax error, or a
+  `baseline.json` that isn't valid JSON, is still exit 2 and now names the
+  file.
+
 ## [1.0.0] - 2026-11-08
 
 ### Added

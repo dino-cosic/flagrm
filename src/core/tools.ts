@@ -8,7 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
 import YAML from "yaml";
-import { findDefaultConfigFile, parseTools, TOOL_IDS, type ToolId } from "./config.js";
+import { findDefaultConfigFile, parseConfigText, parseTools, TOOL_IDS, type ToolId } from "./config.js";
+import { UsageError } from "./errors.js";
 import { relativePath } from "./util.js";
 
 export const TOOL_LABELS: Record<ToolId, string> = {
@@ -32,8 +33,7 @@ export function detectTools(root: string): ToolId[] {
 export function savedTools(root: string): ToolId[] | undefined {
   const file = findDefaultConfigFile(root);
   if (!file) return undefined;
-  const text = fs.readFileSync(file, "utf8");
-  const raw = file.endsWith(".json") ? JSON.parse(text) : YAML.parse(text);
+  const raw = parseConfigText(file, fs.readFileSync(file, "utf8")) as { tools?: unknown } | null;
   return parseTools(raw?.tools, `${path.basename(file)}: tools`);
 }
 
@@ -94,7 +94,9 @@ export async function askTools(
         answer = (await rl.question(`Numbers, comma-separated [${defaults}]: `)).trim();
       } catch {
         // Ctrl+D or Ctrl+C: nothing was chosen.
-        throw new Error(`Cancelled: no tools chosen. Run flagrm init again, or pass --tool ${TOOL_IDS.join(",")}.`);
+        throw new UsageError(
+          `Cancelled: no tools chosen. Run flagrm init again, or pass --tool ${TOOL_IDS.join(",")}.`,
+        );
       }
       if (!answer) return fallback;
       const picks = answer.split(/[\s,]+/).map(Number);

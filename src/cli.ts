@@ -18,9 +18,10 @@ import {
   writeBaseline,
 } from "./core/baseline.js";
 import { changeFilter } from "./core/change-filter.js";
-import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolConfig, type ToolId } from "./core/config.js";
+import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
 import { projectCommands } from "./core/config-snapshot.js";
 import { runDoctor } from "./core/doctor.js";
+import { UsageError } from "./core/errors.js";
 import { blobIds, gitState } from "./core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
@@ -88,21 +89,15 @@ function addCommonOptions(cmd: Command): Command {
   );
 }
 
-/** Print a usage or config error and end the command with exit code 2. */
-class CliError extends Error {}
-
-function fail(err: unknown): never {
-  throw new CliError(err instanceof Error ? err.message : String(err));
+/** End the command with `message` and exit code 2. */
+function usage(message: string): never {
+  throw new UsageError(message);
 }
 
-/** Load the config and pair every project with its adapter, exiting with code 2 on any config error. */
+/** Load the config and pair every project with its adapter; a config error exits 2. */
 function loadWorkspace(opts: CliPathOptions): { root: string; projects: Workspace } {
-  try {
-    const config = loadConfig(opts);
-    return { root: config.root, projects: resolveProjects(config) };
-  } catch (err) {
-    fail(err);
-  }
+  const config = loadConfig(opts);
+  return { root: config.root, projects: resolveProjects(config) };
 }
 
 // --- baseline ------------------------------------------------------------------
@@ -155,18 +150,11 @@ addCommonOptions(
       const { root, projects } = loadWorkspace(opts);
       if (opts.accept !== undefined) {
         if (opts.force || opts.name.length || opts.file.length || opts.kind || !opts.checks || !opts.reuse) {
-          fail(
-            new Error(
-              "--accept only records an acknowledgement; run it without --force, --name, --file, --kind, --no-checks and --no-reuse.",
-            ),
+          usage(
+            "--accept only records an acknowledgement; run it without --force, --name, --file, --kind, --no-checks and --no-reuse.",
           );
         }
-        let accepted: ReturnType<typeof acceptBaseline>;
-        try {
-          accepted = acceptBaseline(root, flag, projects, parseAccept(opts.accept));
-        } catch (err) {
-          fail(err);
-        }
+        const accepted = acceptBaseline(root, flag, projects, parseAccept(opts.accept));
         if (opts.json) console.log(JSON.stringify(baselineSummary(accepted.baseline, accepted.file), null, 2));
         else printBaseline(accepted.baseline, accepted.file);
         return;
@@ -174,16 +162,16 @@ addCommonOptions(
       // Only wrappers are matched per file: a name scoped with --file is a local, parameter or field.
       const kind = opts.kind ?? (opts.file.length ? "wrapper" : "alias");
       if (kind !== "alias" && kind !== "wrapper") {
-        fail(new Error(`--kind must be alias or wrapper, not "${kind}".`));
+        usage(`--kind must be alias or wrapper, not "${kind}".`);
       }
-      if (!opts.checks && !opts.reuse) fail(new Error("--no-reuse has nothing to reuse with --no-checks."));
-      if (opts.file.length && opts.name.length === 0) fail(new Error("--file scopes --name entries; pass --name too."));
-      if (opts.file.length && kind !== "wrapper") fail(new Error("--file scopes wrapper names; drop --kind alias."));
+      if (!opts.checks && !opts.reuse) usage("--no-reuse has nothing to reuse with --no-checks.");
+      if (opts.file.length && opts.name.length === 0) usage("--file scopes --name entries; pass --name too.");
+      if (opts.file.length && kind !== "wrapper") usage("--file scopes wrapper names; drop --kind alias.");
       const scopes = [
         ...new Set(
           opts.file.flatMap((file) => {
             const rel = relativePath(root, path.resolve(file));
-            if (rel.startsWith("..")) fail(new Error(`--file ${file} is outside ${root}.`));
+            if (rel.startsWith("..")) usage(`--file ${file} is outside ${root}.`);
             return withScopeFiles(projects, root, rel);
           }),
         ),
@@ -199,28 +187,24 @@ addCommonOptions(
         ),
       );
       let result: ReturnType<typeof writeBaseline>;
-      try {
-        validateAgentNames(projects, added);
-        await assertOwnNames(root, projects, flag, added);
-        const exists = fs.existsSync(baselinePath(root, flag));
-        if (exists && opts.force) {
-          const testResults = projects.flatMap(({ adapter, ctx }) => projectCommands(adapter, ctx).testResults ?? []);
-          assertNoEditsSinceBaseline(root, flag, testResults, changeFilter(projects[0]?.ctx.config));
+      validateAgentNames(projects, added);
+      await assertOwnNames(root, projects, flag, added);
+      const exists = fs.existsSync(baselinePath(root, flag));
+      if (exists && opts.force) {
+        const testResults = projects.flatMap(({ adapter, ctx }) => projectCommands(adapter, ctx).testResults ?? []);
+        assertNoEditsSinceBaseline(root, flag, testResults, changeFilter(projects[0]?.ctx.config));
+      }
+      if (exists && !opts.force) {
+        if (added.length === 0) {
+          usage(`Baseline for ${flag} already exists; pass --name to add names, or --force to start over.`);
         }
-        if (exists && !opts.force) {
-          if (added.length === 0) {
-            throw new Error(`Baseline for ${flag} already exists; pass --name to add names, or --force to start over.`);
-          }
-          result = addNames(root, flag, added);
-        } else {
-          const git = gitState(root);
-          if (git.dirtyFiles?.length) git.dirtyHashes = blobIds(root, git.dirtyFiles);
-          const checks = opts.checks ? await baselineRuns(root, flag, projects, opts.reuse) : undefined;
-          const { names, ...flow } = await discoverFlag(projects, flag);
-          result = writeBaseline(root, flag, projects, git, checks, mergeNames(names, added), flow);
-        }
-      } catch (err) {
-        fail(err);
+        result = addNames(root, flag, added);
+      } else {
+        const git = gitState(root);
+        if (git.dirtyFiles?.length) git.dirtyHashes = blobIds(root, git.dirtyFiles);
+        const checks = opts.checks ? await baselineRuns(root, flag, projects, opts.reuse) : undefined;
+        const { names, ...flow } = await discoverFlag(projects, flag);
+        result = writeBaseline(root, flag, projects, git, checks, mergeNames(names, added), flow);
       }
       if (opts.json) {
         console.log(JSON.stringify(baselineSummary(result.baseline, result.file), null, 2));
@@ -249,18 +233,13 @@ addCommonOptions(
   )
   .action(
     async (flag: string, opts: CommonOptions & { skip?: string; strict?: boolean; md?: boolean; reuse: boolean }) => {
-      if (opts.md && opts.json) fail(new Error("--md and --json can't be combined."));
+      if (opts.md && opts.json) usage("--md and --json can't be combined.");
       const { root, projects } = loadWorkspace(opts);
-      let result: Awaited<ReturnType<typeof verifyFlag>>;
-      try {
-        result = await verifyFlag(root, projects, flag, {
-          skip: parseSkip(opts.skip),
-          strict: opts.strict,
-          reuse: opts.reuse,
-        });
-      } catch (err) {
-        fail(err);
-      }
+      const result = await verifyFlag(root, projects, flag, {
+        skip: parseSkip(opts.skip),
+        strict: opts.strict,
+        reuse: opts.reuse,
+      });
       if (opts.json) {
         console.log(JSON.stringify({ ...result.report, verifyFile: result.file }, null, 2));
       } else if (opts.md) {
@@ -306,36 +285,27 @@ addCommonOptions(
 )
   .option("--md", "print a markdown summary (for a pull request or pipeline summary) instead of text")
   .action(async (flags: string[], opts: CommonOptions & { md?: boolean }) => {
-    if (opts.md && opts.json) fail(new Error("--md and --json can't be combined."));
-    let config: ToolConfig;
-    let projects: Workspace;
-    try {
-      config = loadConfig(opts);
-      projects = resolveProjects(config);
-    } catch (err) {
-      fail(err);
-    }
+    if (opts.md && opts.json) usage("--md and --json can't be combined.");
+    const config = loadConfig(opts);
+    const projects = resolveProjects(config);
     const ld = config.launchdarkly;
     if (!ld) {
-      fail(
-        new Error(
-          `No launchdarkly: section in ${config.file ?? "the config"}. Add one with your LaunchDarkly project key:\n` +
-            "  launchdarkly:\n    project: <project key>\n" +
-            "and set LD_API_TOKEN to an API token (reader role is enough). See the README's LaunchDarkly section.",
-        ),
+      usage(
+        `No launchdarkly: section in ${config.file ?? "the config"}. Add one with your LaunchDarkly project key:\n` +
+          "  launchdarkly:\n    project: <project key>\n" +
+          "and set LD_API_TOKEN to an API token (reader role is enough). See the README's LaunchDarkly section.",
       );
     }
     // Checked before any request: nothing goes out without a token.
     const token = process.env[ld.tokenEnv]?.trim();
-    if (!token)
-      fail(new Error(`${ld.tokenEnv} is not set: set it to a LaunchDarkly API token (reader role is enough).`));
+    if (!token) usage(`${ld.tokenEnv} is not set: set it to a LaunchDarkly API token (reader role is enough).`);
     const codeNames = (await buildInventory(projects)).flags.map((f) => f.flag);
     let report: StaleReport;
     try {
       const read = await new LaunchDarklySource(ld, { token }).read((f) => needsHistory(f, ld, codeNames));
       report = evaluateStale({ project: ld.project, read, codeNames, config: ld, now: new Date(), only: flags });
     } catch (err) {
-      if (!(err instanceof SourceError)) fail(err);
+      if (!(err instanceof SourceError)) throw err;
       console.error(pc.red(err.message));
       process.exitCode = 3;
       return;
@@ -377,12 +347,7 @@ program
   .action(async (opts: { tool?: string }) => {
     const root = installRoot(process.cwd());
     printInstallRoot(root);
-    let tools: ToolId[];
-    try {
-      tools = await chooseTools(root, opts.tool);
-    } catch (err) {
-      fail(err);
-    }
+    const tools = await chooseTools(root, opts.tool);
     printSteps(initProject(root, tools));
     console.log(pc.bold("\nflagrm doctor"));
     printDoctor(await runDoctor(root));
@@ -397,7 +362,7 @@ program
 async function chooseTools(root: string, flag: string | undefined): Promise<ToolId[]> {
   if (flag !== undefined) {
     const tools = parseTools(flag, "--tool") ?? [];
-    if (tools.length === 0) throw new Error(`--tool needs at least one of ${TOOL_IDS.join(", ")}.`);
+    if (tools.length === 0) usage(`--tool needs at least one of ${TOOL_IDS.join(", ")}.`);
     return tools;
   }
   const saved = savedTools(root);
@@ -423,13 +388,7 @@ program
   .action(() => {
     const root = installRoot(process.cwd());
     printInstallRoot(root);
-    let tools: ToolId[] | undefined;
-    try {
-      tools = savedTools(root);
-    } catch (err) {
-      fail(err);
-    }
-    printSteps(updateProject(root, tools));
+    printSteps(updateProject(root, savedTools(root)));
   });
 
 /** Say where init/update install when it isn't the working directory. */
@@ -496,8 +455,17 @@ try {
   if (err instanceof CommanderError) {
     // Commander printed the message already; --help and --version end with 0.
     process.exitCode = err.exitCode === 0 ? 0 : 2;
-  } else if (err instanceof CliError) {
+  } else if (err instanceof UsageError) {
     console.error(pc.red(err.message));
     process.exitCode = 2;
-  } else throw err;
+  } else {
+    // Not the user's to fix: keep the stack, and a code an agent won't read as "called it wrong".
+    console.error(
+      pc.red(
+        `flagrm ${packageVersion()}: unexpected error. This is likely a bug in flagrm; please report it with the output below.`,
+      ),
+    );
+    console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
+    process.exitCode = 4;
+  }
 }

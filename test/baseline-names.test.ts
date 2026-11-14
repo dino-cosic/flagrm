@@ -3,15 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  addNames,
-  discoverNames,
-  mergeNames,
-  UsageError,
-  validateAgentNames,
-  writeBaseline,
-} from "../src/core/baseline.js";
+import { addNames, discoverNames, mergeNames, validateAgentNames, writeBaseline } from "../src/core/baseline.js";
 import { loadConfig } from "../src/core/config.js";
+import { UsageError } from "../src/core/errors.js";
 import { resolveProjects } from "../src/core/registry.js";
 import type { RecordedName } from "../src/core/types.js";
 
