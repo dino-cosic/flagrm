@@ -6,6 +6,7 @@ import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
 import { type ChangeFilter, changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { environmentProblem } from "./environment.js";
+import { UsageError } from "./errors.js";
 import { changedFilesSince } from "./git.js";
 import { buildInventory } from "./inventory.js";
 import { formatDuration, progress } from "./progress.js";
@@ -81,9 +82,6 @@ export function baselineSummary(baseline: Baseline, file: string): Record<string
   };
 }
 
-/** A problem with how flagrm was run (missing baseline, stale schema) rather than with the code under check. */
-export class UsageError extends Error {}
-
 /** Read `.flagrm/<flag>/baseline.json`, which `flagrm baseline <flag>` writes. */
 export function readBaseline(root: string, flag: string): { baseline: Baseline; file: string } {
   const file = baselinePath(root, flag);
@@ -92,7 +90,15 @@ export function readBaseline(root: string, flag: string): { baseline: Baseline; 
       `No baseline for ${flag} at ${file}. Run \`flagrm baseline ${flag}\` before changing the code.`,
     );
   }
-  const baseline = JSON.parse(fs.readFileSync(file, "utf8")) as Baseline;
+  let baseline: Baseline;
+  try {
+    baseline = JSON.parse(fs.readFileSync(file, "utf8")) as Baseline;
+  } catch (err) {
+    throw new UsageError(
+      `${file} is not valid JSON (${(err as Error).message}). ` +
+        `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`,
+    );
+  }
   if (!READABLE_BASELINE_VERSIONS.includes(baseline.schemaVersion)) {
     throw new UsageError(
       `${file} was written by schema version ${baseline.schemaVersion}; this flagrm expects ${JSON_SCHEMA_VERSION}. ` +
@@ -172,14 +178,25 @@ interface CommandExit {
   error?: Error;
 }
 
+const isWindows = process.platform === "win32";
+
 /**
  * Run `command` in a shell with its output on `fd`. On timeout the whole
- * process tree is killed: on Windows the shell is `cmd.exe`, and killing only
- * it would leave the real command (`dotnet test`, `node`) running.
+ * process tree is killed: killing only the shell (`sh`, `cmd.exe`) would leave
+ * the real command (`dotnet test`, a watch-mode test runner) running. On POSIX
+ * the shell leads its own process group so the group can be killed at once;
+ * that group no longer gets the terminal's Ctrl-C, so SIGINT and SIGTERM sent
+ * to flagrm are passed on to it.
  */
 function runCommand(command: string, cwd: string, fd: number, timeout: number | undefined): Promise<CommandExit> {
   return new Promise((resolve) => {
-    const child = spawn(command, { cwd, shell: true, stdio: ["ignore", fd, fd], windowsHide: true });
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      stdio: ["ignore", fd, fd],
+      windowsHide: true,
+      detached: !isWindows,
+    });
     let timedOut = false;
     const timer = timeout
       ? setTimeout(() => {
@@ -187,21 +204,47 @@ function runCommand(command: string, cwd: string, fd: number, timeout: number | 
           killTree(child.pid, () => child.kill("SIGKILL"));
         }, timeout * 1000)
       : undefined;
+    const forward = (signal: NodeJS.Signals) => {
+      killTree(child.pid, () => child.kill(signal), signal);
+      stopForwarding();
+      // Without a listener left, re-raising gives flagrm the signal's default behavior.
+      process.kill(process.pid, signal);
+    };
+    const stopForwarding = () => {
+      process.off("SIGINT", forward);
+      process.off("SIGTERM", forward);
+    };
+    if (!isWindows) {
+      process.once("SIGINT", forward);
+      process.once("SIGTERM", forward);
+    }
     child.on("error", (error) => {
       clearTimeout(timer);
+      stopForwarding();
       resolve({ status: null, signal: null, error });
     });
     child.on("close", (status, signal) => {
       clearTimeout(timer);
+      stopForwarding();
       resolve({ status, signal, timedOut });
     });
   });
 }
 
-function killTree(pid: number | undefined, fallback: () => void): void {
-  if (pid !== undefined && process.platform === "win32") {
-    const r = spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-    if (r.status === 0) return;
+function killTree(pid: number | undefined, fallback: () => void, signal: NodeJS.Signals = "SIGKILL"): void {
+  if (pid !== undefined) {
+    if (isWindows) {
+      const r = spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+      if (r.status === 0) return;
+    } else {
+      try {
+        // A negative pid signals the whole process group the detached shell leads.
+        process.kill(-pid, signal);
+        return;
+      } catch {
+        // The group is already gone, or was never created: fall back to the shell alone.
+      }
+    }
   }
   fallback();
 }

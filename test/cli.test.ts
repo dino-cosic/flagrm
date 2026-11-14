@@ -335,6 +335,58 @@ describe("CLI baseline and verify (spawned dist/cli.js)", () => {
   });
 });
 
+describe("CLI error exit codes (spawned dist/cli.js)", () => {
+  let dir: string;
+  let file: string;
+
+  beforeAll(() => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ffr-errors-")));
+    fs.cpSync(path.resolve(HERE, "fixtures", "realistic", "before"), dir, { recursive: true });
+    expect(runCli(["baseline", "NewCheckout", "--no-checks"], dir).status).toBe(0);
+    file = path.join(dir, ".flagrm", "NewCheckout", "baseline.json");
+  });
+
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("exits 2 naming the file when baseline.json is not valid JSON", () => {
+    const saved = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(file, "{", "utf8");
+    try {
+      const r = runCli(["verify", "NewCheckout"], dir);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain(`${file} is not valid JSON`);
+      expect(r.stderr).toContain("flagrm baseline NewCheckout --force");
+    } finally {
+      fs.writeFileSync(file, saved, "utf8");
+    }
+  });
+
+  it("exits 2 naming the file when the config is not valid YAML", () => {
+    const config = path.join(dir, "broken.yaml");
+    fs.writeFileSync(config, "projects: [\n", "utf8");
+    const r = runCli(["list", "--config", config], dir);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain(`${config} is not valid YAML`);
+  });
+
+  it("exits 4 with the stack trace on an unexpected error, not 2", () => {
+    // A baseline without `names` crashes the leftovers check: a stand-in for any bug inside a command.
+    const saved = fs.readFileSync(file, "utf8");
+    const { names: _, ...rest } = JSON.parse(saved);
+    fs.writeFileSync(file, JSON.stringify(rest), "utf8");
+    try {
+      const r = runCli(["verify", "NewCheckout", "--skip", "build,tests,lint,coverage"], dir);
+      expect(r.status).toBe(4);
+      expect(r.stderr).toContain("unexpected error. This is likely a bug in flagrm");
+      expect(r.stderr).toMatch(/TypeError: .*\n\s+at /);
+    } finally {
+      fs.writeFileSync(file, saved, "utf8");
+    }
+  });
+});
+
 describe("CLI scope (spawned dist/cli.js)", () => {
   it("reports a .NET project this machine can build and test, and exits 0", () => {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ffr-scope-")));

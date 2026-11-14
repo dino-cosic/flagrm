@@ -10,6 +10,7 @@ import type { Workspace } from "../adapter.js";
 import { flagDir, readBaseline, runChecks, verifyPath } from "../baseline.js";
 import { changeFilter, changeFilterAt } from "../change-filter.js";
 import { configChanges as configChangesSince, configSnapshot } from "../config-snapshot.js";
+import { UsageError } from "../errors.js";
 import { changedFilesSince, gitState, treeFingerprint } from "../git.js";
 import { dropRuns, findRuns, plannedRuns, reuseRuns, runsKey, saveRuns } from "../run-cache.js";
 import {
@@ -142,7 +143,7 @@ export function parseSkip(value: string | undefined): CheckId[] {
     .filter(Boolean);
   for (const id of ids) {
     if (!(CHECK_IDS as readonly string[]).includes(id)) {
-      throw new Error(`Unknown check "${id}" in --skip. Checks: ${CHECK_IDS.join(", ")}.`);
+      throw new UsageError(`Unknown check "${id}" in --skip. Checks: ${CHECK_IDS.join(", ")}.`);
     }
   }
   return ids as CheckId[];

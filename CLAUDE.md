@@ -15,7 +15,7 @@ npm run lint:fix           # biome check --write (formatting + organize imports)
 npm run dev -- list --config test/fixtures/realistic/before/flagrm.config.yaml   # run the CLI from source via tsx
 ```
 
-`test/cli.test.ts` and `test/skills.test.ts` spawn the **built** `dist/cli.js`, so run `npm run build` before them after changing `src/`. Node >= 22, ESM (`"type": "module"`, NodeNext resolution: relative imports use `.js` extensions).
+`npm run typecheck` checks `src/` and `test/` (`tsconfig.test.json`, fixtures excluded); `tsconfig.json` alone is the build. `test/cli.test.ts` and `test/skills.test.ts` spawn the **built** `dist/cli.js`, so run `npm run build` before them after changing `src/`. Node >= 22, ESM (`"type": "module"`, NodeNext resolution: relative imports use `.js` extensions).
 
 Biome excludes `dist/`, `examples/`, `skills/` and `test/fixtures/`. Never reformat fixtures; they are verbatim inputs.
 

@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { FlagRef, Workspace } from "./adapter.js";
-import { UsageError } from "./baseline.js";
+import { UsageError } from "./errors.js";
 import { buildInventory } from "./inventory.js";
 import { commentSyntax, computeLexicalMask, escapeRegExp, LEX_CODE, LEX_STRING } from "./scan.js";
 import { SourceText } from "./source-text.js";
