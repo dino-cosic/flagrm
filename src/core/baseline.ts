@@ -12,6 +12,7 @@ import { buildInventory } from "./inventory.js";
 import { formatDuration, progress } from "./progress.js";
 import { globAbsolute } from "./scan.js";
 import { withScopeFiles } from "./scope-files.js";
+import { baselineProblem, COMMIT_ID } from "./state-files.js";
 import {
   type Baseline,
   type CheckRun,
@@ -90,33 +91,28 @@ export function readBaseline(root: string, flag: string): { baseline: Baseline; 
       `No baseline for ${flag} at ${file}. Run \`flagrm baseline ${flag}\` before changing the code.`,
     );
   }
-  let baseline: Baseline;
+  const redo = `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`;
+  let parsed: unknown;
   try {
-    baseline = JSON.parse(fs.readFileSync(file, "utf8")) as Baseline;
+    parsed = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch (err) {
+    throw new UsageError(`${file} is not valid JSON (${(err as Error).message}). ${redo}`);
+  }
+  const version = (parsed as { schemaVersion?: unknown } | null)?.schemaVersion;
+  if (typeof version === "number" && !READABLE_BASELINE_VERSIONS.includes(version)) {
     throw new UsageError(
-      `${file} is not valid JSON (${(err as Error).message}). ` +
-        `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`,
+      `${file} was written by schema version ${version}; this flagrm expects ${JSON_SCHEMA_VERSION}. ${redo}`,
     );
   }
-  if (!READABLE_BASELINE_VERSIONS.includes(baseline.schemaVersion)) {
-    throw new UsageError(
-      `${file} was written by schema version ${baseline.schemaVersion}; this flagrm expects ${JSON_SCHEMA_VERSION}. ` +
-        `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`,
-    );
-  }
-  const sha = baseline.git?.sha;
+  const problem = baselineProblem(parsed);
+  if (problem) throw new UsageError(`${file} is not a valid baseline: ${problem}. ${redo}`);
+  const baseline = parsed as Baseline;
+  const sha = baseline.git.sha;
   if (sha != null && !COMMIT_ID.test(sha)) {
-    throw new UsageError(
-      `${file} has git.sha "${sha}", which is not a git commit id. ` +
-        `Re-run \`flagrm baseline ${flag} --force\` on the code as it was before the removal.`,
-    );
+    throw new UsageError(`${file} has git.sha "${sha}", which is not a git commit id. ${redo}`);
   }
   return { baseline, file };
 }
-
-/** A full SHA-1 or SHA-256 commit id, as `git rev-parse HEAD` prints it. */
-const COMMIT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /**
  * Run one shell command inside a project, streaming its output to `logFile`
@@ -443,7 +439,8 @@ export function assertNoEditsSinceBaseline(
   ignore: ChangeFilter = changeFilter(),
 ): void {
   const sha = readJson<Partial<Baseline>>(baselinePath(root, flag))?.git?.sha;
-  if (!sha) return;
+  // Unreadable or without a commit: nothing to compare, and \`--force\` is how a broken baseline is replaced.
+  if (typeof sha !== "string" || !COMMIT_ID.test(sha)) return;
   const edits = editsSince(root, sha, testResults, ignore);
   if (edits === undefined) {
     throw new UsageError(

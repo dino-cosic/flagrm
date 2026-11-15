@@ -14,6 +14,7 @@ import { changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
 import { treeFingerprint } from "./git.js";
 import { packageVersion } from "./package.js";
+import { isSavedRuns } from "./state-files.js";
 import { type CheckRun, JSON_SCHEMA_VERSION, RUN_CHECK_ID, type SavedRuns } from "./types.js";
 import { readJson } from "./util.js";
 
@@ -111,8 +112,8 @@ export function findRuns(root: string, projects: Workspace, key: string, needed:
     absolute: true,
     dot: true,
   })) {
-    const saved = readJson<SavedRuns>(file);
-    if (!saved || !Array.isArray(saved.runs) || typeof saved.createdAt !== "string") continue;
+    const saved = readJson<unknown>(file);
+    if (!isSavedRuns(saved)) continue;
     if (saved.key !== key || saved.schemaVersion !== JSON_SCHEMA_VERSION) continue;
     if (saved.flagrmVersion !== version || JSON.stringify(saved.commands) !== commands) continue;
     const runs = needed.map((n) => saved.runs.find((r) => r.project === n.project && r.check === n.check));

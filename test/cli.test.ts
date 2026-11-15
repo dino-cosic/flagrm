@@ -4,7 +4,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -350,6 +350,19 @@ describe("CLI error exit codes (spawned dist/cli.js)", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it("exits 2 naming the file and the field when baseline.json is malformed", () => {
+    const saved = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(saved), names: "NewCheckout" }), "utf8");
+    try {
+      const r = runCli(["verify", "NewCheckout"], dir);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain(`${file} is not a valid baseline: names must be an array, not a string.`);
+      expect(r.stderr).toContain("flagrm baseline NewCheckout --force");
+    } finally {
+      fs.writeFileSync(file, saved, "utf8");
+    }
+  });
+
   it("exits 2 naming the file when baseline.json is not valid JSON", () => {
     const saved = fs.readFileSync(file, "utf8");
     fs.writeFileSync(file, "{", "utf8");
@@ -372,17 +385,23 @@ describe("CLI error exit codes (spawned dist/cli.js)", () => {
   });
 
   it("exits 4 with the stack trace on an unexpected error, not 2", () => {
-    // A baseline without `names` crashes the leftovers check: a stand-in for any bug inside a command.
-    const saved = fs.readFileSync(file, "utf8");
-    const { names: _, ...rest } = JSON.parse(saved);
-    fs.writeFileSync(file, JSON.stringify(rest), "utf8");
+    // A preload that makes writing verify.json throw stands in for any bug inside a command.
+    const bug = path.join(dir, "bug.mjs");
+    fs.writeFileSync(
+      bug,
+      'import fs from "node:fs"; const write = fs.writeFileSync;' +
+        'fs.writeFileSync = (file, ...rest) => { if (String(file).endsWith("verify.json")) throw new TypeError("simulated bug"); return write(file, ...rest); };',
+      "utf8",
+    );
     try {
-      const r = runCli(["verify", "NewCheckout", "--skip", "build,tests,lint,coverage"], dir);
+      const r = runCli(["verify", "NewCheckout", "--skip", "build,tests,lint,coverage"], dir, undefined, {
+        NODE_OPTIONS: `--import ${pathToFileURL(bug).href}`,
+      });
       expect(r.status).toBe(4);
       expect(r.stderr).toContain("unexpected error. This is likely a bug in flagrm");
-      expect(r.stderr).toMatch(/TypeError: .*\n\s+at /);
+      expect(r.stderr).toMatch(/TypeError: simulated bug\n\s+at /);
     } finally {
-      fs.writeFileSync(file, saved, "utf8");
+      fs.rmSync(bug);
     }
   });
 });

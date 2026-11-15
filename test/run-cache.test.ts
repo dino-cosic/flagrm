@@ -150,6 +150,8 @@ describe("run cache", () => {
     expect(findRuns(tmp, projects, key, needed)).toBeUndefined();
     fs.writeFileSync(file, "{ not json");
     expect(findRuns(tmp, projects, key, needed)).toBeUndefined();
+    fs.writeFileSync(file, JSON.stringify({ ...saved, runs: [null, ...saved.runs] }));
+    expect(findRuns(tmp, projects, key, needed)).toBeUndefined();
     fs.writeFileSync(file, JSON.stringify(saved));
     fs.rmSync(saved.runs[0].log);
     expect(findRuns(tmp, projects, key, needed)).toBeUndefined();

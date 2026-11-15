@@ -198,6 +198,19 @@ describe("stopDecision", () => {
     expect(stopDecision(tmp, {}).block).toBe(true);
   });
 
+  it("keeps guarding a baseline that is malformed apart from its commit, and ignores one without a commit", () => {
+    const { file } = baseline();
+    edit("b\n");
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    fs.writeFileSync(file, JSON.stringify({ git: saved.git, config: { projects: "x" } }));
+    expect(stopDecision(tmp, {})).toEqual({
+      block: true,
+      reason: "flagrm: NewCheckout removal not verified — run flagrm verify NewCheckout --json",
+    });
+    fs.writeFileSync(file, JSON.stringify({ ...saved, git: { sha: "--output=x", dirty: false } }));
+    expect(stopDecision(tmp, {}).block).toBe(false);
+  });
+
   it("blocks when verify failed", () => {
     baseline();
     edit("b\n");
