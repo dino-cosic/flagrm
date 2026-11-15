@@ -20,7 +20,7 @@ Several flags (`/flagrm-remove A B C`): read [batch.md](batch.md) first; it runs
 
 ## 1. Preconditions
 
-- `flagrm doctor` must not warn about uncommitted files (flagrm's own setup files and `exclude`d paths don't count). Otherwise ask the user to commit or stash.
+- `flagrm doctor` must not warn about uncommitted files (flagrm's own setup files and `exclude`d paths don't count). Otherwise ask the user to commit or stash. A removal "committed but never verified": show it and ask whether to verify or delete it.
 - No `flagrm.config.yaml`: run `flagrm init` and fill in project paths and build/test commands with the user.
   Its doctor reports a missing SDK, `cargo` or Docker: show it. For `cargo`/Docker, offer `flagrm scope`; `--write` only on a yes.
 - `flagrm list --json`: find the flag in `flags[]`. Not there: show the closest names and ask.

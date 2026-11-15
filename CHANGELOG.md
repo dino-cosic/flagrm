@@ -15,9 +15,15 @@ contain breaking changes.
   so a slow run can be told from a hung one. stdout is unchanged.
 - `doctor` warns when a project has a test command but no `timeout`: a test
   runner left in watch mode would keep `baseline` and `verify` waiting forever.
+- `doctor` warns about a removal that was committed but never verified, so
+  a leftover baseline is found before the Stop hook blocks on it.
 
 ### Fixed
 
+- The Stop hook no longer stops guarding a removal when the agent commits
+  it before verifying. A removal stays guarded on later commits, a new
+  branch included, until a verify of it passes once; the block message says
+  to delete `.flagrm/<flag>/` if the removal was abandoned.
 - On macOS and Linux, a build or test command that hits `timeout` is now
   killed with everything it started. Before, only the shell was killed and
   the real command (a watch-mode test runner, say) kept running. Ctrl-C on

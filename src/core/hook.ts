@@ -7,10 +7,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { changeFilterAt } from "./change-filter.js";
+import { type ChangeFilter, changeFilterAt } from "./change-filter.js";
 import { findConfigRoot } from "./config.js";
 import { scanConfigChanged } from "./config-snapshot.js";
-import { headSha, trackedChangesSince, treeFingerprint } from "./git.js";
+import { headSha, isAncestor, trackedChangesSince, treeFingerprint } from "./git.js";
 import type { Baseline, VerifyReport } from "./types.js";
 import { readJson } from "./util.js";
 
@@ -49,38 +49,84 @@ export interface StopDecision {
 
 /**
  * Whether to block the stop: a removal is in progress and no passing verify
- * matches the current tree. In progress means HEAD is still the baseline
- * commit and a file git tracks changed, other than flagrm's setup files and
- * paths matching `exclude` (a removal paused on a question to the user, or a
- * stray test result file, doesn't count), the config changed in what it
- * scans or ignores, or the last verify skipped checks.
- * The fingerprint leaves out the same paths, as verify's does. Once HEAD moves (a
- * commit, a branch switch, a merge), that removal is no longer guarded.
+ * matches the current tree. A removal is tracked while HEAD is its baseline
+ * commit, or a later commit on top of it as long as no verify of that flag
+ * ever passed: an agent that commits before verifying is still checked, and
+ * one that verified and then committed is released. A baseline commit no
+ * longer in HEAD's history (a branch switch, a rebase) isn't tracked.
+ * In progress means a file git tracks changed since the baseline commit,
+ * other than flagrm's setup files and paths matching `exclude` (a removal
+ * paused on a question to the user, or a stray test result file, doesn't
+ * count), the config changed in what it scans or ignores, or the last verify
+ * skipped checks. The fingerprint leaves out the same paths, as verify's does.
  */
 export function stopDecision(root: string, input: StopHookInput): StopDecision {
   if (input.stop_hook_active) return { block: false };
   try {
-    const dir = path.join(root, ".flagrm");
-    if (!fs.existsSync(dir)) return { block: false };
-    const head = headSha(root);
-    if (!head) return { block: false };
-    const active = fs
-      .readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => path.join(dir, e.name))
-      .filter((flagDir) => readJson<Baseline>(path.join(flagDir, "baseline.json"))?.git?.sha === head);
-    if (active.length === 0) return { block: false };
+    if (!fs.existsSync(path.join(root, ".flagrm"))) return { block: false };
     const ignore = changeFilterAt(root);
-    const edited = (trackedChangesSince(root, head, ignore) ?? []).length > 0;
-    const started = active.filter((flagDir) => edited || lastVerifySkipped(flagDir) || configChanged(flagDir, root));
+    const started = startedRemovals(root, ignore);
     if (started.length === 0) return { block: false };
     const current = treeFingerprint(root, ignore);
     if (!current) return { block: false };
-    const reasons = started.map((flagDir) => unverified(flagDir, current)).filter((r): r is string => r !== undefined);
+    const reasons = started.map((r) => unverified(r, current)).filter((r): r is string => r !== undefined);
     return reasons.length ? { block: true, reason: reasons.join("\n") } : { block: false };
   } catch {
     return { block: false };
   }
+}
+
+/**
+ * The removals `doctor` warns about: committed on this branch, never
+ * verified, and in progress, so the Stop hook blocks on each of them.
+ * `dir` is the `.flagrm/` directory name, `flag` the flag's name.
+ */
+export function committedUnverified(root: string): { dir: string; flag: string }[] {
+  return startedRemovals(root, changeFilterAt(root))
+    .filter((r) => r.committed)
+    .map((r) => ({
+      dir: path.basename(r.flagDir),
+      flag: readJson<Baseline>(path.join(r.flagDir, "baseline.json"))?.flag ?? path.basename(r.flagDir),
+    }));
+}
+
+/** The removals the hook guards and that are in progress: see {@link stopDecision}. */
+function startedRemovals(root: string, ignore: ChangeFilter): Tracked[] {
+  const dir = path.join(root, ".flagrm");
+  if (!fs.existsSync(dir)) return [];
+  const head = headSha(root);
+  if (!head) return [];
+  const active = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => tracked(path.join(dir, e.name), root, head))
+    .filter((r): r is Tracked => r !== undefined);
+  const editedSince = new Map<string, boolean>();
+  const edited = (sha: string) => {
+    if (!editedSince.has(sha)) editedSince.set(sha, (trackedChangesSince(root, sha, ignore) ?? []).length > 0);
+    return editedSince.get(sha) === true;
+  };
+  return active.filter((r) => edited(r.sha) || lastVerifySkipped(r.flagDir) || configChanged(r.flagDir, root));
+}
+
+interface Tracked {
+  flagDir: string;
+  sha: string;
+  /** HEAD moved past the baseline commit. */
+  committed: boolean;
+}
+
+/** The removal in `flagDir` if the hook guards it at `head`: see {@link stopDecision}. */
+function tracked(flagDir: string, root: string, head: string): Tracked | undefined {
+  const sha = readJson<Baseline>(path.join(flagDir, "baseline.json"))?.git?.sha;
+  if (typeof sha !== "string") return undefined;
+  if (sha === head) return { flagDir, sha, committed: false };
+  if (everPassed(flagDir) || !isAncestor(root, sha)) return undefined;
+  return { flagDir, sha, committed: true };
+}
+
+function everPassed(flagDir: string): boolean {
+  return readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"))?.status === "pass";
 }
 
 /**
@@ -98,12 +144,17 @@ function lastVerifySkipped(flagDir: string): boolean {
   return Array.isArray(skipped) && skipped.length > 0;
 }
 
-/** Why the in-progress removal in `flagDir` is not verified, or undefined when a full verify passed on `current`. */
-function unverified(flagDir: string, current: string): string | undefined {
+/** Why the in-progress removal is not verified, or undefined when a full verify passed on `current`. */
+function unverified({ flagDir, committed }: Tracked, current: string): string | undefined {
   const baseline = readJson<Baseline>(path.join(flagDir, "baseline.json"));
   if (!baseline) return undefined;
-  const verify = readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"));
   const run = `run flagrm verify ${baseline.flag} --json`;
+  if (committed) {
+    // Not released by a verify yet, or `tracked` would have dropped it.
+    const abandoned = `.flagrm/${path.basename(flagDir)}`;
+    return `flagrm: ${baseline.flag} removal committed but never verified — ${run} (or delete ${abandoned} if it was abandoned)`;
+  }
+  const verify = readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"));
   // A report without `skipped` comes from an older flagrm, which didn't record skips.
   if (verify?.status !== "pass" || verify.fingerprint !== current || !Array.isArray(verify.skipped)) {
     return `flagrm: ${baseline.flag} removal not verified — ${run}`;

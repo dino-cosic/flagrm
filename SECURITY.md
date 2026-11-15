@@ -30,7 +30,10 @@ it, which no tool inside the same repository can enforce:
 
 - It blocks once per stop: Claude Code marks the next attempt with
   `stop_hook_active` to avoid an endless loop, and the hook lets it through.
-- It stops guarding a removal once HEAD moves (a commit, a branch switch).
+- Once HEAD moves past the baseline commit, a removal that passed verify
+  once is no longer guarded, even if later edits break it. A branch switch
+  or rebase that leaves the baseline commit out of HEAD's history ends
+  guarding too.
 - `.flagrm/` holds plain JSON files that anything with write access to the
   repository can change. The skills tell the agent never to edit them.
 - `verify` warns about, but doesn't fail on, a config change since the

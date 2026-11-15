@@ -222,27 +222,72 @@ describe("stopDecision", () => {
     expect(stopDecision(tmp, {}).block).toBe(false);
   });
 
-  it("stops guarding a removal once HEAD moves: an unverified removal that was committed", () => {
+  it("keeps guarding an unverified removal that was committed", () => {
     baseline();
     edit("b\n");
     commit("remove flag, unverified");
-    edit("more work\n");
+    expect(stopDecision(tmp, {})).toEqual({
+      block: true,
+      reason:
+        "flagrm: NewCheckout removal committed but never verified — run flagrm verify NewCheckout --json (or delete .flagrm/NewCheckout if it was abandoned)",
+    });
+  });
+
+  it("keeps guarding a committed removal whose last verify failed, over several commits", () => {
+    baseline();
+    edit("b\n");
+    verified("fail");
+    commit("remove flag");
+    edit("c\n");
+    commit("more");
+    expect(stopDecision(tmp, {}).block).toBe(true);
+  });
+
+  it("keeps guarding a removal committed on a new branch", () => {
+    baseline();
+    git("checkout", "-qb", "remove-new-checkout");
+    edit("b\n");
+    commit("remove flag");
+    expect(stopDecision(tmp, {}).block).toBe(true);
+  });
+
+  it("releases a committed removal once verify passes", () => {
+    baseline();
+    edit("b\n");
+    commit("remove flag");
+    verified("pass");
+    edit("unrelated work\n");
+    expect(stopDecision(tmp, {})).toEqual({ block: false });
+  });
+
+  it("allows a committed baseline that never changed anything", () => {
+    baseline();
+    fs.mkdirSync(path.join(tmp, ".claude"));
+    fs.writeFileSync(path.join(tmp, ".claude", "settings.json"), "{}\n");
+    commit("setup only");
     expect(stopDecision(tmp, {})).toEqual({ block: false });
   });
 
   it("ignores a removal left on another branch", () => {
+    git("checkout", "-qb", "feature");
+    fs.writeFileSync(path.join(tmp, "feature.txt"), "x\n");
+    commit("feature work");
     baseline();
     edit("b\n");
-    git("stash", "-q");
-    git("checkout", "-qb", "other");
+    commit("remove flag, unverified");
+    git("checkout", "-q", "-");
     fs.writeFileSync(path.join(tmp, "other.txt"), "x\n");
     commit("other work");
     edit("unrelated\n");
     expect(stopDecision(tmp, {})).toEqual({ block: false });
   });
 
-  it("still blocks the removal in progress when another one is stale", () => {
+  it("still blocks the removal in progress when another one was left on another branch", () => {
+    git("checkout", "-qb", "feature");
+    fs.writeFileSync(path.join(tmp, "feature.txt"), "x\n");
+    commit("feature work");
     baseline("Old");
+    git("checkout", "-q", "-");
     fs.writeFileSync(path.join(tmp, "later.txt"), "x\n");
     commit("later commit");
     baseline();
@@ -251,6 +296,15 @@ describe("stopDecision", () => {
       block: true,
       reason: "flagrm: NewCheckout removal not verified — run flagrm verify NewCheckout --json",
     });
+  });
+
+  it("reports both an unverified committed removal and the one in progress", () => {
+    baseline("Old");
+    edit("b\n");
+    commit("remove Old, unverified");
+    baseline();
+    edit("c\n");
+    expect(stopDecision(tmp, {}).reason?.split("\n")).toHaveLength(2);
   });
 
   it("allows when stop_hook_active is set, to avoid loops", () => {
