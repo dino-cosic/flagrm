@@ -137,8 +137,10 @@ flowchart LR
    tracks changed on top of the baseline commit (untracked files and
    flagrm's own setup files don't count, so a removal paused on a question to
    the user doesn't block), the config changed in what it scans or ignores
-   (such as `exclude`), or the last verify used `--skip`. It guards against
-   finishing by accident, not an agent working around it: see
+   (such as `exclude`), or the last verify used `--skip`. Committing doesn't
+   end it: a removal stays guarded on later commits until a verify of it
+   passes once (delete `.flagrm/<flag>/` to drop an abandoned one). It guards
+   against finishing by accident, not an agent working around it: see
    [SECURITY.md](SECURITY.md#what-it-doesnt-guarantee).
 4. **`/flagrm-review <flag>`** (optional), in a new session, reviews the
    removal: it runs `flagrm verify <flag> --json` and stops on a failure; on
@@ -233,8 +235,9 @@ so stdout keeps only the `--json` or `--md` output.
 - **`doctor`**: checks the build, test and lint commands (marking adapter
   defaults; `--run` runs them and fails when tests write no readable
   `testResults`), the .NET SDK `global.json` asks for, `cargo` and Docker
-  where projects need them, git, `.gitignore`, installed skills and hook, and
-  abandoned baselines.
+  where projects need them, git, `.gitignore`, installed skills and hook,
+  abandoned baselines, and removals committed but never verified (the Stop
+  hook blocks on those).
 - **`scope`**: for each .NET project, shows what the machine lacks and which
   projects a solution filter would leave out; `--write` creates
   `flagrm.slnf`, adds it to `.git/info/exclude` and points the project's build

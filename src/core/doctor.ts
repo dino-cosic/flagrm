@@ -13,6 +13,7 @@ import { changeFilter, changeFilterAt } from "./change-filter.js";
 import { findConfigFile, loadConfig, TOOL_IDS, type ToolId } from "./config.js";
 import { projectCommands } from "./config-snapshot.js";
 import { gitState, isAncestor } from "./git.js";
+import { committedUnverified } from "./hook.js";
 import { installedSkillVersion, SKILLS, stopHookState, TOOL_SKILL_DIRS } from "./install.js";
 import { packageVersion } from "./package.js";
 import { resolveProjects } from "./registry.js";
@@ -114,7 +115,10 @@ export async function runDoctor(cwd: string, options: DoctorOptions = {}): Promi
   else if (hook === "missing")
     add("warn", "Claude Code Stop hook missing from .claude/settings.json (run flagrm init)");
 
-  if (git.sha !== null) abandonedBaselines(root, add);
+  if (git.sha !== null) {
+    abandonedBaselines(root, add);
+    unverifiedCommits(root, add);
+  }
   return { status: checks.some((c) => c.status === "fail") ? "fail" : "ok", checks };
 }
 
@@ -282,5 +286,15 @@ function abandonedBaselines(root: string, add: (status: DoctorStatus, message: s
         `.flagrm/${entry.name}: baseline commit ${sha.slice(0, 7)} is not in this branch's history — delete it if that removal was abandoned`,
       );
     }
+  }
+}
+
+/** Removals committed on this branch but never verified: the Stop hook blocks every stop until one is verified or deleted. */
+function unverifiedCommits(root: string, add: (status: DoctorStatus, message: string) => void): void {
+  for (const { dir, flag } of committedUnverified(root)) {
+    add(
+      "warn",
+      `.flagrm/${dir}: ${flag} removal was committed but never verified, so the Stop hook blocks — run flagrm verify ${flag}, or delete .flagrm/${dir} if it was abandoned`,
+    );
   }
 }

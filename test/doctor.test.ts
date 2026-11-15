@@ -3,7 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { flagDir, verifyPath, writeBaseline } from "../src/core/baseline.js";
 import { runDoctor, simpleCommandProgram } from "../src/core/doctor.js";
+import { gitState } from "../src/core/git.js";
 import { HOOK_COMMAND, initProject, stampSkill } from "../src/core/install.js";
 
 let tmp: string;
@@ -365,6 +367,37 @@ describe("runDoctor", () => {
     expect(found.some((p) => p.startsWith("warn") && p.includes("Stop hook"))).toBe(true);
     expect(found.some((p) => p.startsWith("warn .flagrm/Old") && p.includes("abandoned"))).toBe(true);
     expect((await runDoctor(tmp)).status).toBe("ok");
+  });
+
+  describe("a removal committed but never verified", () => {
+    const removeAndCommit = () => {
+      writeBaseline(tmp, "team/Old", [], gitState(tmp));
+      fs.writeFileSync(path.join(tmp, "src.txt"), "removed\n");
+      commitAll();
+    };
+    const warning = (found: string[]) => found.filter((p) => p.includes("never verified"));
+
+    it("warns, naming the flag and how to release it", async () => {
+      removeAndCommit();
+      const dir = `.flagrm/${path.basename(flagDir(tmp, "team/Old"))}`;
+      expect(warning(await problems())).toEqual([
+        `warn ${dir}: team/Old removal was committed but never verified, so the Stop hook blocks — run flagrm verify team/Old, or delete ${dir} if it was abandoned`,
+      ]);
+      expect((await runDoctor(tmp)).status).toBe("ok");
+    });
+
+    it("doesn't warn once a verify of it passed", async () => {
+      removeAndCommit();
+      fs.writeFileSync(verifyPath(tmp, "team/Old"), JSON.stringify({ flag: "team/Old", status: "pass", skipped: [] }));
+      expect(warning(await problems())).toEqual([]);
+    });
+
+    it("doesn't warn about a removal still on its baseline commit", async () => {
+      writeBaseline(tmp, "Old", [], gitState(tmp));
+      fs.writeFileSync(path.join(tmp, "src.txt"), "removing\n");
+      git("add", "-A");
+      expect(warning(await problems())).toEqual([]);
+    });
   });
 
   it("checks the skills and hook next to a config in a parent directory", async () => {
