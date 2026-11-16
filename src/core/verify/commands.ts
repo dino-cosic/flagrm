@@ -12,8 +12,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { errorExcerpt, logLines, looksLikeError, templateCheckGap } from "../baseline.js";
+import { templateCheckGap } from "../command-gaps.js";
 import { projectCommands } from "../config-snapshot.js";
+import { errorExcerpt, logLines, looksLikeError } from "../logs.js";
 import { escapeRegExp, isTestPath } from "../scan.js";
 import {
   type CheckFinding,

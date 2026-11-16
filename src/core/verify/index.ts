@@ -7,12 +7,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Workspace } from "../adapter.js";
-import { flagDir, readBaseline, runChecks, verifyPath } from "../baseline.js";
+import { readBaseline } from "../baseline.js";
 import { changeFilter, changeFilterAt } from "../change-filter.js";
 import { configChanges as configChangesSince, configSnapshot } from "../config-snapshot.js";
 import { UsageError } from "../errors.js";
 import { changedFilesSince, gitState, treeFingerprint } from "../git.js";
+import { flagDir, verifyPath } from "../paths.js";
 import { dropRuns, findRuns, plannedRuns, reuseRuns, runsKey, saveRuns } from "../run-cache.js";
+import { runChecks } from "../run-command.js";
 import {
   CHECK_IDS,
   type CheckId,

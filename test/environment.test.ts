@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runCheck } from "../src/core/baseline.js";
 import { environmentProblem } from "../src/core/environment.js";
+import { runCheck } from "../src/core/run-command.js";
 import { projectContext } from "./support/projects.js";
 
 let tmp: string;

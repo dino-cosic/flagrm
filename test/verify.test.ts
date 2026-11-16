@@ -4,13 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { acceptBaseline, addNames, discoverNames, runChecks, writeBaseline } from "../src/core/baseline.js";
+import { acceptBaseline, addNames, discoverNames, writeBaseline } from "../src/core/baseline.js";
 import { changeFilterAt } from "../src/core/change-filter.js";
 import { loadConfig, type ToolConfig } from "../src/core/config.js";
 import { UsageError } from "../src/core/errors.js";
 import { gitState, treeFingerprint } from "../src/core/git.js";
 import { stopDecision } from "../src/core/hook.js";
 import { resolveProjects } from "../src/core/registry.js";
+import { runChecks } from "../src/core/run-command.js";
 import type { CheckId, VerifyReport } from "../src/core/types.js";
 import { verifyFlag } from "../src/core/verify/index.js";
 

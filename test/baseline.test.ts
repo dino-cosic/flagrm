@@ -8,19 +8,17 @@ import { genericAdapter } from "../src/adapters/generic/index.js";
 import {
   acceptBaseline,
   assertNoEditsSinceBaseline,
-  baselinePath,
   baselineSummary,
-  flagDir,
   parseAccept,
   readBaseline,
-  runCheck,
-  runChecks,
   writeBaseline,
 } from "../src/core/baseline.js";
 import { changeFilter } from "../src/core/change-filter.js";
 import { UsageError } from "../src/core/errors.js";
 import { gitState } from "../src/core/git.js";
+import { baselinePath, flagDir } from "../src/core/paths.js";
 import { formatDuration, progress } from "../src/core/progress.js";
+import { runCheck, runChecks } from "../src/core/run-command.js";
 import { JSON_SCHEMA_VERSION } from "../src/core/types.js";
 import { projectContext } from "./support/projects.js";
 

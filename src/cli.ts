@@ -5,29 +5,14 @@ import { Command, CommanderError } from "commander";
 import pc from "picocolors";
 import { realProbes } from "./adapters/dotnet/setup.js";
 import type { Workspace } from "./core/adapter.js";
-import {
-  acceptBaseline,
-  addNames,
-  assertNoEditsSinceBaseline,
-  baselinePath,
-  baselineSummary,
-  discoverFlag,
-  mergeNames,
-  parseAccept,
-  validateAgentNames,
-  writeBaseline,
-} from "./core/baseline.js";
-import { changeFilter } from "./core/change-filter.js";
+import { baselineSummary, takeBaseline } from "./core/baseline.js";
 import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
-import { projectCommands } from "./core/config-snapshot.js";
 import { runDoctor } from "./core/doctor.js";
 import { UsageError } from "./core/errors.js";
-import { blobIds, gitState } from "./core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
 import { buildInventory } from "./core/inventory.js";
 import { staleMarkdown, verifyMarkdown } from "./core/markdown.js";
-import { assertOwnNames } from "./core/name-owner.js";
 import { packageVersion } from "./core/package.js";
 import { resolveProjects } from "./core/registry.js";
 import {
@@ -39,14 +24,12 @@ import {
   printSteps,
   printVerifyReport,
 } from "./core/report.js";
-import { baselineRuns } from "./core/run-cache.js";
 import { setupReport, writeScope } from "./core/scope.js";
-import { withScopeFiles } from "./core/scope-files.js";
 import { LaunchDarklySource } from "./core/sources/launchdarkly.js";
 import { SourceError } from "./core/sources/types.js";
 import { evaluateStale, needsHistory } from "./core/stale.js";
 import { askTools, detectTools, savedTools, TOOL_LABELS } from "./core/tools.js";
-import { CHECK_IDS, type RecordedName, type StaleReport } from "./core/types.js";
+import { CHECK_IDS, type StaleReport } from "./core/types.js";
 import { onPath, relativePath } from "./core/util.js";
 import { parseSkip, verifyFlag } from "./core/verify/index.js";
 
@@ -148,69 +131,17 @@ addCommonOptions(
       },
     ) => {
       const { root, projects } = loadWorkspace(opts);
-      if (opts.accept !== undefined) {
-        if (opts.force || opts.name.length || opts.file.length || opts.kind || !opts.checks || !opts.reuse) {
-          usage(
-            "--accept only records an acknowledgement; run it without --force, --name, --file, --kind, --no-checks and --no-reuse.",
-          );
-        }
-        const accepted = acceptBaseline(root, flag, projects, parseAccept(opts.accept));
-        if (opts.json) console.log(JSON.stringify(baselineSummary(accepted.baseline, accepted.file), null, 2));
-        else printBaseline(accepted.baseline, accepted.file);
-        return;
-      }
-      // Only wrappers are matched per file: a name scoped with --file is a local, parameter or field.
-      const kind = opts.kind ?? (opts.file.length ? "wrapper" : "alias");
-      if (kind !== "alias" && kind !== "wrapper") {
-        usage(`--kind must be alias or wrapper, not "${kind}".`);
-      }
-      if (!opts.checks && !opts.reuse) usage("--no-reuse has nothing to reuse with --no-checks.");
-      if (opts.file.length && opts.name.length === 0) usage("--file scopes --name entries; pass --name too.");
-      if (opts.file.length && kind !== "wrapper") usage("--file scopes wrapper names; drop --kind alias.");
-      const scopes = [
-        ...new Set(
-          opts.file.flatMap((file) => {
-            const rel = relativePath(root, path.resolve(file));
-            if (rel.startsWith("..")) usage(`--file ${file} is outside ${root}.`);
-            return withScopeFiles(projects, root, rel);
-          }),
-        ),
-      ];
-      const added: RecordedName[] = opts.name.flatMap((name) =>
-        (scopes.length ? scopes : [undefined]).map(
-          (file): RecordedName => ({
-            name,
-            kind: kind as RecordedName["kind"],
-            source: "agent",
-            ...(file ? { file } : {}),
-          }),
-        ),
-      );
-      let result: ReturnType<typeof writeBaseline>;
-      validateAgentNames(projects, added);
-      await assertOwnNames(root, projects, flag, added);
-      const exists = fs.existsSync(baselinePath(root, flag));
-      if (exists && opts.force) {
-        const testResults = projects.flatMap(({ adapter, ctx }) => projectCommands(adapter, ctx).testResults ?? []);
-        assertNoEditsSinceBaseline(root, flag, testResults, changeFilter(projects[0]?.ctx.config));
-      }
-      if (exists && !opts.force) {
-        if (added.length === 0) {
-          usage(`Baseline for ${flag} already exists; pass --name to add names, or --force to start over.`);
-        }
-        result = addNames(root, flag, added);
-      } else {
-        const git = gitState(root);
-        if (git.dirtyFiles?.length) git.dirtyHashes = blobIds(root, git.dirtyFiles);
-        const checks = opts.checks ? await baselineRuns(root, flag, projects, opts.reuse) : undefined;
-        const { names, ...flow } = await discoverFlag(projects, flag);
-        result = writeBaseline(root, flag, projects, git, checks, mergeNames(names, added), flow);
-      }
-      if (opts.json) {
-        console.log(JSON.stringify(baselineSummary(result.baseline, result.file), null, 2));
-      } else {
-        printBaseline(result.baseline, result.file);
-      }
+      const { baseline, file } = await takeBaseline(root, projects, flag, {
+        checks: opts.checks,
+        reuse: opts.reuse,
+        names: opts.name,
+        kind: opts.kind,
+        files: opts.file,
+        force: opts.force,
+        accept: opts.accept,
+      });
+      if (opts.json) console.log(JSON.stringify(baselineSummary(baseline, file), null, 2));
+      else printBaseline(baseline, file);
     },
   );
 

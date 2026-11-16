@@ -4,19 +4,18 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/config.js";
 import {
-  AGENT_SKILL_DIRS,
   AGENTS_BLOCK,
   HOOK_COMMAND,
   initProject,
   installedSkillVersion,
   installRoot,
   PROMPT_FILES,
-  SKILLS,
   stampSkill,
   stopHookState,
   updateProject,
 } from "../src/core/install.js";
 import { packageVersion } from "../src/core/package.js";
+import { AGENT_SKILL_DIRS, SKILLS } from "../src/core/skill-dirs.js";
 
 let tmp: string;
 const read = (rel: string) => fs.readFileSync(path.join(tmp, rel), "utf8");

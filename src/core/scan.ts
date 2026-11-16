@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { globSync, isDynamicPattern } from "tinyglobby";
+import { relativePath } from "./util.js";
 
 export const BACKEND_GLOBS = [
   "**/*.cs",
@@ -46,6 +47,11 @@ export function globAbsolute(pattern: string): string[] {
     base = dir;
   }
   return globSync(segments.slice(i).join("/"), { expandDirectories: false, cwd: base, absolute: true, dot: true });
+}
+
+/** The files (relative to `root`) matching absolute paths or globs, such as `testResults` patterns. */
+export function matchingFiles(root: string, patterns: readonly string[]): Set<string> {
+  return new Set(patterns.flatMap((pattern) => globAbsolute(pattern).map((file) => relativePath(root, file))));
 }
 
 function isDirectory(dir: string): boolean {
