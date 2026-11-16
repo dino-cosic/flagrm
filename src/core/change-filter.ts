@@ -8,7 +8,7 @@
 
 import picomatch from "picomatch";
 import { CONFIG_FILENAMES, loadConfig, type ToolConfig } from "./config.js";
-import { AGENT_SKILL_DIRS, SKILLS } from "./install.js";
+import { AGENT_SKILL_DIRS, SKILLS } from "./skill-dirs.js";
 import { relativePath } from "./util.js";
 
 /** True for a path (relative to the config root, `/`-separated) that is not part of a removal. */

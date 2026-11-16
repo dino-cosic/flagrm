@@ -3,10 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { flagDir, verifyPath, writeBaseline } from "../src/core/baseline.js";
+import { writeBaseline } from "../src/core/baseline.js";
 import { runDoctor, simpleCommandProgram } from "../src/core/doctor.js";
 import { gitState } from "../src/core/git.js";
 import { HOOK_COMMAND, initProject, stampSkill } from "../src/core/install.js";
+import { flagDir, verifyPath } from "../src/core/paths.js";
 
 let tmp: string;
 

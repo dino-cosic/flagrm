@@ -3,11 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { flagDir, verifyPath, writeBaseline } from "../src/core/baseline.js";
+import { writeBaseline } from "../src/core/baseline.js";
 import { changeFilterAt } from "../src/core/change-filter.js";
 import { loadConfig } from "../src/core/config.js";
 import { gitState, treeFingerprint } from "../src/core/git.js";
 import { hookRoot, parseHookInput, stopDecision } from "../src/core/hook.js";
+import { flagDir, verifyPath } from "../src/core/paths.js";
 import { resolveProjects } from "../src/core/registry.js";
 
 let tmp: string;

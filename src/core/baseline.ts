@@ -1,16 +1,21 @@
-import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+/**
+ * A flag's baseline: what `flagrm baseline <flag>` records before the removal
+ * starts (git state, check runs, the flag's names) and the ways it may change
+ * later (`--name`, `--accept`, `--force`).
+ */
+
 import fs from "node:fs";
 import path from "node:path";
-import type { Adapter, ProjectContext, Workspace } from "./adapter.js";
+import type { Workspace } from "./adapter.js";
 import { type ChangeFilter, changeFilter } from "./change-filter.js";
 import { configSnapshot, projectCommands } from "./config-snapshot.js";
-import { environmentProblem } from "./environment.js";
 import { UsageError } from "./errors.js";
-import { changedFilesSince } from "./git.js";
+import { blobIds, changedFilesSince, gitState } from "./git.js";
 import { buildInventory } from "./inventory.js";
-import { formatDuration, progress } from "./progress.js";
-import { globAbsolute } from "./scan.js";
+import { assertOwnNames } from "./name-owner.js";
+import { baselinePath, flagDir } from "./paths.js";
+import { baselineRuns } from "./run-cache.js";
+import { matchingFiles } from "./scan.js";
 import { withScopeFiles } from "./scope-files.js";
 import { baselineProblem, COMMIT_ID } from "./state-files.js";
 import {
@@ -24,28 +29,91 @@ import {
   type RecordedName,
 } from "./types.js";
 import { readJson, relativePath } from "./util.js";
-import { parseTestLog } from "./verify/log-results.js";
-import { type ClaimedResults, collectTestResults, shortTestNames } from "./verify/test-results.js";
+import { shortTestNames } from "./verify/test-results.js";
+
+/** The `flagrm baseline` options, as parsed from the command line. */
+export interface BaselineOptions {
+  /** Run build, test and lint (default true; `--no-checks`). */
+  checks?: boolean;
+  /** Reuse the runs a passing verify saved (default true; `--no-reuse`). */
+  reuse?: boolean;
+  /** `--name`: names the flag is read through, added for the leftovers check. */
+  names?: string[];
+  /** `--kind`: alias or wrapper; default alias, wrapper with `files`. */
+  kind?: string;
+  /** `--file`: scope `names` to these files (resolved against `cwd`) and the files sharing their scope. */
+  files?: string[];
+  /** `--force`: replace an existing baseline, only while the code is unedited since it. */
+  force?: boolean;
+  /** `--accept`: the raw comma-separated value. */
+  accept?: string;
+  /** What relative `files` resolve against; default the process's working directory. */
+  cwd?: string;
+}
 
 /**
- * `.flagrm/<flag>/` under the config root. A name that isn't safe as a directory
- * (`team/new`, `..`) is sanitized and suffixed with a hash of the original, so
- * it stays inside `.flagrm/` and can't collide with another flag's directory.
+ * `flagrm baseline <flag>`: validate the options, then record an
+ * acknowledgement (`accept`), add names to an existing baseline (`names`
+ * without `force`), or write a new one. Throws a `UsageError` for options
+ * that don't fit together or a baseline that can't be changed that way.
  */
-export function flagDir(root: string, flag: string): string {
-  const safe = flag.replace(/[^\w.-]/g, "_");
-  if (flag && safe === flag && !flag.startsWith(".")) return path.join(root, ".flagrm", flag);
-  const hash = createHash("sha256").update(flag).digest("hex").slice(0, 8);
-  return path.join(root, ".flagrm", `${safe.replace(/^\.+/, "")}-${hash}`);
-}
-
-export function baselinePath(root: string, flag: string): string {
-  return path.join(flagDir(root, flag), "baseline.json");
-}
-
-/** `.flagrm/<flag>/verify.json`: the last verify result. */
-export function verifyPath(root: string, flag: string): string {
-  return path.join(flagDir(root, flag), "verify.json");
+export async function takeBaseline(
+  root: string,
+  projects: Workspace,
+  flag: string,
+  opts: BaselineOptions = {},
+): Promise<{ baseline: Baseline; file: string }> {
+  const checks = opts.checks ?? true;
+  const reuse = opts.reuse ?? true;
+  const nameArgs = opts.names ?? [];
+  const fileArgs = opts.files ?? [];
+  if (opts.accept !== undefined) {
+    if (opts.force || nameArgs.length || fileArgs.length || opts.kind || !checks || !reuse) {
+      throw new UsageError(
+        "--accept only records an acknowledgement; run it without --force, --name, --file, --kind, --no-checks and --no-reuse.",
+      );
+    }
+    return acceptBaseline(root, flag, projects, parseAccept(opts.accept));
+  }
+  // Only wrappers are matched per file: a name scoped with --file is a local, parameter or field.
+  const kind = opts.kind ?? (fileArgs.length ? "wrapper" : "alias");
+  if (kind !== "alias" && kind !== "wrapper") throw new UsageError(`--kind must be alias or wrapper, not "${kind}".`);
+  if (!checks && !reuse) throw new UsageError("--no-reuse has nothing to reuse with --no-checks.");
+  if (fileArgs.length && nameArgs.length === 0) throw new UsageError("--file scopes --name entries; pass --name too.");
+  if (fileArgs.length && kind !== "wrapper") throw new UsageError("--file scopes wrapper names; drop --kind alias.");
+  const cwd = opts.cwd ?? process.cwd();
+  const scopes = [
+    ...new Set(
+      fileArgs.flatMap((file) => {
+        const rel = relativePath(root, path.resolve(cwd, file));
+        if (rel.startsWith("..")) throw new UsageError(`--file ${file} is outside ${root}.`);
+        return withScopeFiles(projects, root, rel);
+      }),
+    ),
+  ];
+  const added: RecordedName[] = nameArgs.flatMap((name) =>
+    (scopes.length ? scopes : [undefined]).map(
+      (file): RecordedName => ({ name, kind, source: "agent", ...(file ? { file } : {}) }),
+    ),
+  );
+  validateAgentNames(projects, added);
+  await assertOwnNames(root, projects, flag, added);
+  const exists = fs.existsSync(baselinePath(root, flag));
+  if (exists && opts.force) {
+    const testResults = projects.flatMap(({ adapter, ctx }) => projectCommands(adapter, ctx).testResults ?? []);
+    assertNoEditsSinceBaseline(root, flag, testResults, changeFilter(projects[0]?.ctx.config));
+  }
+  if (exists && !opts.force) {
+    if (added.length === 0) {
+      throw new UsageError(`Baseline for ${flag} already exists; pass --name to add names, or --force to start over.`);
+    }
+    return addNames(root, flag, added);
+  }
+  const git = gitState(root);
+  if (git.dirtyFiles?.length) git.dirtyHashes = blobIds(root, git.dirtyFiles);
+  const runs = checks ? await baselineRuns(root, flag, projects, reuse) : undefined;
+  const { names, ...flow } = await discoverFlag(projects, flag);
+  return writeBaseline(root, flag, projects, git, runs, mergeNames(names, added), flow);
 }
 
 /** At most this many failed test names in `baseline --json`. */
@@ -112,194 +180,6 @@ export function readBaseline(root: string, flag: string): { baseline: Baseline; 
     throw new UsageError(`${file} has git.sha "${sha}", which is not a git commit id. ${redo}`);
   }
   return { baseline, file };
-}
-
-/**
- * Run one shell command inside a project, streaming its output to `logFile`
- * (no buffer limit, stdout and stderr interleaved as printed). A command that
- * can't start, is killed or outlives the project's `timeout` fails with the
- * reason at the end of the log. A test run also reads the `testResults`
- * files (absolute path or glob) written during it, or without any, what its
- * log says (`log-results.ts`).
- */
-export async function runCheck(
-  ctx: ProjectContext,
-  check: CheckRun["check"],
-  command: string,
-  logFile: string,
-  claimed?: ClaimedResults,
-  testResults?: string,
-): Promise<CheckRun> {
-  const started = Date.now();
-  progress.write(`${ctx.name} ${check}: \`${command}\` …`);
-  fs.mkdirSync(path.dirname(logFile), { recursive: true });
-  fs.writeFileSync(logFile, `$ ${command}\n`, "utf8");
-  const fd = fs.openSync(logFile, "a");
-  let exit: CommandExit;
-  try {
-    exit = await runCommand(command, ctx.root, fd, ctx.project.timeout);
-  } finally {
-    fs.closeSync(fd);
-  }
-  const reason = failureReason(exit, ctx.project.timeout);
-  if (reason) fs.appendFileSync(logFile, `\nflagrm: error: ${reason}\n`, "utf8");
-  const run: CheckRun = {
-    project: ctx.name,
-    check,
-    command,
-    exitCode: exit.status ?? 1,
-    durationMs: Date.now() - started,
-    log: logFile,
-  };
-  if (reason) run.interrupted = reason;
-  progress.write(
-    `${ctx.name} ${check}: ${reason ?? (run.exitCode === 0 ? "passed" : `failed (exit ${run.exitCode})`)} ` +
-      `in ${formatDuration(run.durationMs)}`,
-  );
-  if (run.exitCode !== 0) {
-    const problem = environmentProblem(fs.readFileSync(logFile, "utf8"), ctx.root);
-    if (problem) run.failure = { kind: "environment", message: problem };
-  }
-  let results = check === "test" && testResults ? collectTestResults(testResults, started, claimed) : undefined;
-  // No result files: the runner's log still names failing tests and prints counts.
-  if (check === "test" && !results) results = parseTestLog(fs.readFileSync(logFile, "utf8"));
-  if (results) run.results = results;
-  return run;
-}
-
-interface CommandExit {
-  status: number | null;
-  signal: NodeJS.Signals | null;
-  timedOut?: boolean;
-  error?: Error;
-}
-
-const isWindows = process.platform === "win32";
-
-/**
- * Run `command` in a shell with its output on `fd`. On timeout the whole
- * process tree is killed: killing only the shell (`sh`, `cmd.exe`) would leave
- * the real command (`dotnet test`, a watch-mode test runner) running. On POSIX
- * the shell leads its own process group so the group can be killed at once;
- * that group no longer gets the terminal's Ctrl-C, so SIGINT and SIGTERM sent
- * to flagrm are passed on to it.
- */
-function runCommand(command: string, cwd: string, fd: number, timeout: number | undefined): Promise<CommandExit> {
-  return new Promise((resolve) => {
-    const child = spawn(command, {
-      cwd,
-      shell: true,
-      stdio: ["ignore", fd, fd],
-      windowsHide: true,
-      detached: !isWindows,
-    });
-    let timedOut = false;
-    const timer = timeout
-      ? setTimeout(() => {
-          timedOut = true;
-          killTree(child.pid, () => child.kill("SIGKILL"));
-        }, timeout * 1000)
-      : undefined;
-    const forward = (signal: NodeJS.Signals) => {
-      killTree(child.pid, () => child.kill(signal), signal);
-      stopForwarding();
-      // Without a listener left, re-raising gives flagrm the signal's default behavior.
-      process.kill(process.pid, signal);
-    };
-    const stopForwarding = () => {
-      process.off("SIGINT", forward);
-      process.off("SIGTERM", forward);
-    };
-    if (!isWindows) {
-      process.once("SIGINT", forward);
-      process.once("SIGTERM", forward);
-    }
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      stopForwarding();
-      resolve({ status: null, signal: null, error });
-    });
-    child.on("close", (status, signal) => {
-      clearTimeout(timer);
-      stopForwarding();
-      resolve({ status, signal, timedOut });
-    });
-  });
-}
-
-function killTree(pid: number | undefined, fallback: () => void, signal: NodeJS.Signals = "SIGKILL"): void {
-  if (pid !== undefined) {
-    if (isWindows) {
-      const r = spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-      if (r.status === 0) return;
-    } else {
-      try {
-        // A negative pid signals the whole process group the detached shell leads.
-        process.kill(-pid, signal);
-        return;
-      } catch {
-        // The group is already gone, or was never created: fall back to the shell alone.
-      }
-    }
-  }
-  fallback();
-}
-
-/** Why a command ended without an exit code, or undefined when it exited normally. */
-function failureReason(exit: CommandExit, timeout: number | undefined): string | undefined {
-  if (exit.timedOut) return `timed out after ${timeout}s (timeout in flagrm.config.yaml)`;
-  if (exit.error) return `could not run the command: ${exit.error.message}`;
-  if (exit.status === null) return `killed by ${exit.signal ?? "a signal"}`;
-  return undefined;
-}
-
-/**
- * Why an Angular project's build can't catch template errors, if it can't:
- * `tsc` never reads templates, so a member removed or renamed in a component
- * but still used in its `.html` passes the build. `ngc` and `ng build` check them.
- */
-export function templateCheckGap(adapter: Adapter, build: string | undefined): string | undefined {
-  if (adapter.id !== "angular" || !build || !/\btsc\b/.test(build)) return undefined;
-  if (/\bngc\b|\bng\s+build\b|\bnx\b/.test(build)) return undefined;
-  return "`tsc` doesn't type-check Angular templates: add `npx ngc -p <app>/tsconfig.json --noEmit` to `build` so a member removed from a component but still used in its template fails the build";
-}
-
-/**
- * Why a .NET build can't feed the dead-code check, if it can't: an incremental
- * `dotnet build` skips compiling up-to-date projects and prints none of their
- * warnings, so a baseline taken on a built tree records no pre-existing unused
- * code and verify reports all of it as new.
- */
-export function incrementalBuildGap(adapter: Adapter, build: string | undefined): string | undefined {
-  if (adapter.id !== "dotnet" || !build || !/\bdotnet\s+build\b/.test(build)) return undefined;
-  if (/--no-incremental\b|[-/]t(arget)?:\s*Rebuild\b/i.test(build)) return undefined;
-  return "`dotnet build` without `--no-incremental` skips up-to-date projects and prints none of their warnings, so the dead-code check may report existing unused code as new: add `--no-incremental` to `build`";
-}
-
-/**
- * Build, test, then lint every project, each command resolved on its own
- * (see `projectCommands`): the configured one, none for `false`, else the
- * adapter's default (`dotnet build --no-incremental`, `npx ng test`, ...;
- * lint has none).
- */
-export async function runChecks(
-  projects: Workspace,
-  logDir: string,
-  only: ReadonlyArray<CheckRun["check"]> = ["build", "test", "lint"],
-): Promise<CheckRun[]> {
-  const runs: CheckRun[] = [];
-  // Projects whose `testResults` patterns overlap must not count each other's result files.
-  const claimed: ClaimedResults = new Map();
-  for (const { adapter, ctx } of projects) {
-    const commands = projectCommands(adapter, ctx);
-    for (const check of only) {
-      const command = commands[check];
-      if (!command) continue;
-      const log = path.join(logDir, `${ctx.name}.${check}.log`);
-      runs.push(await runCheck(ctx, check, command, log, claimed, commands.testResults));
-    }
-  }
-  return runs;
 }
 
 /**
@@ -419,12 +299,6 @@ export function editsSince(
   const results = matchingFiles(root, testResults);
   return changedFilesSince(root, sha, ignore)?.filter((rel) => !results.has(rel));
 }
-
-/** The files (relative to `root`) matching absolute paths or globs, such as `testResults` patterns. */
-export function matchingFiles(root: string, patterns: readonly string[]): Set<string> {
-  return new Set(patterns.flatMap((pattern) => globAbsolute(pattern).map((file) => relativePath(root, file))));
-}
-
 /**
  * `baseline --force` starts over only before the removal began: the working
  * tree must still match the baseline commit. Otherwise the new baseline would
@@ -515,42 +389,4 @@ export function validateAgentNames(projects: Workspace, names: RecordedName[]): 
       );
     }
   }
-}
-
-/** A log's non-blank lines, trimmed, without ANSI colors or the `$ <command>` header; undefined when unreadable. */
-export function logLines(log: string | undefined): string[] | undefined {
-  if (!log) return undefined;
-  let text: string;
-  try {
-    text = fs.readFileSync(log, "utf8");
-  } catch {
-    return undefined;
-  }
-  return (
-    text
-      .split(/\r?\n/)
-      // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colors (ngc colors even when piped)
-      .map((line) => line.replace(/\u001b\[[0-9;]*m/g, "").trim())
-      .filter((line) => line && !line.startsWith("$ "))
-  );
-}
-
-/** A log line that reports an error: not a compiler warning, nor a summary such as `0 Error(s)`. */
-export function looksLikeError(line: string): boolean {
-  return /\berror\b|\bfailed\b|✗|×/i.test(line) && !/:\s*warning\b/i.test(line) && !/^\d+ Error\(s\)$/i.test(line);
-}
-
-/**
- * Up to `max` distinct lines of a log that look like errors, so the reader sees
- * why a command failed without opening the log. Compiler warnings and summary
- * lines such as `0 Error(s)` are skipped: in a large build they bury the one
- * real error. When no line looks like an error, the last `max` lines instead.
- */
-export function errorExcerpt(log: string | undefined, max = 10): string[] {
-  const all = logLines(log);
-  if (!all) return [];
-  const lines = all.filter(looksLikeError);
-  // No line says error (e.g. "A compatible .NET SDK was not found"): the end of the log usually does.
-  if (!lines.length) return all.slice(-max);
-  return [...new Set(lines)].slice(0, max);
 }

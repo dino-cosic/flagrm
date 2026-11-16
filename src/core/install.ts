@@ -21,23 +21,12 @@ import {
 } from "./config.js";
 import { type DetectedProject, detectProjects } from "./detect.js";
 import { packageRoot, packageVersion } from "./package.js";
+import { SKILLS, TOOL_SKILL_DIRS } from "./skill-dirs.js";
 import { runnerTestCommands, testResultsHint } from "./test-runner.js";
 import { saveTools } from "./tools.js";
 import { relativePath } from "./util.js";
 
-export const SKILLS = ["flagrm-remove", "flagrm-review"] as const;
-
 type Skill = (typeof SKILLS)[number];
-
-/** Where each supported tool discovers repository skills. */
-export const TOOL_SKILL_DIRS: Record<ToolId, string> = {
-  "claude-code": ".claude/skills",
-  copilot: ".github/skills",
-  codex: ".agents/skills",
-};
-
-/** Every tool's skills directory: Claude Code, GitHub Copilot, Codex. */
-export const AGENT_SKILL_DIRS = TOOL_IDS.map((t) => TOOL_SKILL_DIRS[t]);
 
 /** GitHub Copilot prompt files: `/flagrm-remove` and `/flagrm-review` in Copilot Chat, each pointing at its skill. */
 export const PROMPT_FILES: Record<Skill, string> = {
