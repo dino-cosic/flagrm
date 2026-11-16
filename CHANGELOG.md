@@ -20,6 +20,9 @@ contain breaking changes.
 
 ### Changed
 
+- `hook stop`, `update`, `--version` and `--help` no longer load the
+  TypeScript compiler, which only the Angular adapter needs. The Stop hook,
+  which runs every time the agent stops, starts in about 80 ms instead of 200 ms.
 - `list`, `baseline` and `verify` read each project file once per run
   instead of once per scan, which was several times on a large repository.
   Discovery now also treats Windows (`\r\n`) line endings the same in every
