@@ -18,6 +18,13 @@ contain breaking changes.
 - `doctor` warns about a removal that was committed but never verified, so
   a leftover baseline is found before the Stop hook blocks on it.
 
+### Changed
+
+- `list`, `baseline` and `verify` read each project file once per run
+  instead of once per scan, which was several times on a large repository.
+  Discovery now also treats Windows (`\r\n`) line endings the same in every
+  adapter.
+
 ### Fixed
 
 - The Stop hook no longer stops guarding a removal when the agent commits

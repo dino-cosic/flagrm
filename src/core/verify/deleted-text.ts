@@ -7,8 +7,8 @@
  * the text that replaced it on the same line, the ON behavior lost coverage.
  */
 
-import fs from "node:fs";
 import path from "node:path";
+import { workspaceText } from "../file-text.js";
 import { fileAt } from "../git.js";
 import { computeLexicalMask, isTestPath, LEX_STRING } from "../scan.js";
 import { SourceText } from "../source-text.js";
@@ -75,6 +75,7 @@ function deletedTexts(v: VerifyContext, codeNow: string[], skip: Set<string>): D
   const sha = v.baseline.git.sha;
   if (!sha || !v.changedFiles) return [];
   const out = new Map<string, DeletedText>();
+  const read = workspaceText(v.projects);
   for (const rel of v.changedFiles) {
     if (!CODE_FILE.test(rel) || isTestPath(rel)) continue;
     const before = fileAt(v.root, sha, rel);
@@ -91,14 +92,6 @@ function deletedTexts(v: VerifyContext, codeNow: string[], skip: Set<string>): D
     }
   }
   return [...out.values()].filter((d) => !codeNow.some((text) => text.includes(d.value)));
-}
-
-function read(file: string): string | undefined {
-  try {
-    return toLf(fs.readFileSync(file, "utf8"));
-  } catch {
-    return undefined;
-  }
 }
 
 /** The test enclosing `index`: the last `it('title'` / `test(` or C#/Java test method before it. */
@@ -128,6 +121,7 @@ export function deletedTextFindings(v: VerifyContext): CheckFinding[] {
   }
   const tests: Array<{ file: string; project: string; text: string }> = [];
   const code: string[] = [];
+  const read = workspaceText(v.projects);
   for (const [file, { project, isTest }] of files) {
     const text = read(file);
     if (text === undefined) continue;

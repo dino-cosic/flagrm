@@ -1,9 +1,7 @@
-import fs from "node:fs";
 import type { ProjectContext } from "../../core/adapter.js";
 import { discoverInText } from "../../core/discover.js";
 import { LEX_CODE, LEX_STRING } from "../../core/scan.js";
 import { SourceText } from "../../core/source-text.js";
-import { toLf } from "../../core/text-utils.js";
 import type { FlagCandidate } from "../../core/types.js";
 import { closingParen, declaredName, evalCallPattern, isConfigFile, lexicalMask } from "./text.js";
 
@@ -24,12 +22,8 @@ export function discoverGeneric(ctx: ProjectContext): FlagCandidate[] {
   const passed = new Set<string>();
 
   for (const file of ctx.files) {
-    let text: string;
-    try {
-      text = toLf(fs.readFileSync(file, "utf8"));
-    } catch {
-      continue;
-    }
+    const text = ctx.text(file);
+    if (text === undefined) continue;
     if (file.endsWith(".json")) {
       out.push(...discoverInText(text, file, ctx.name, { evalMethods: [], attributes: [] }));
       continue;

@@ -1,4 +1,5 @@
 import type { AdapterId, ProjectConfig, ToolConfig } from "./config.js";
+import type { ReadText } from "./file-text.js";
 import type { FlagCandidate, FlagFlowName, ParameterizedTest } from "./types.js";
 
 /** Everything an adapter needs to work on one configured project. */
@@ -11,6 +12,11 @@ export interface ProjectContext {
   config: ToolConfig;
   /** Files in scope: the project's globs (or the adapter's defaults), minus ignored and excluded paths. */
   files: string[];
+  /**
+   * A file's text with `\n` line endings, undefined when unreadable. Read once
+   * per command and shared by every project of a workspace: use it instead of `fs`.
+   */
+  text: ReadText;
 }
 
 /**
