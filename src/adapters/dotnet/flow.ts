@@ -11,12 +11,11 @@
  * unusual ones, which the agent still records with `--name`.
  */
 
-import fs from "node:fs";
 import path from "node:path";
 import type { FlagFlow, FlagRef, ProjectContext } from "../../core/adapter.js";
 import { computeCodeMask, escapeRegExp, isTestPath, methodNamePattern } from "../../core/scan.js";
 import { SourceText } from "../../core/source-text.js";
-import { matchBracket, toLf } from "../../core/text-utils.js";
+import { matchBracket } from "../../core/text-utils.js";
 import type { FlagFlowName, ParameterizedTest } from "../../core/types.js";
 
 interface CsFile {
@@ -176,12 +175,8 @@ function readCsFiles(ctx: ProjectContext): CsFile[] {
   const out: CsFile[] = [];
   for (const file of ctx.files) {
     if (!file.endsWith(".cs")) continue;
-    let text: string;
-    try {
-      text = toLf(fs.readFileSync(file, "utf8"));
-    } catch {
-      continue;
-    }
+    const text = ctx.text(file);
+    if (text === undefined) continue;
     out.push({
       file,
       text,

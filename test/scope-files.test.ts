@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { componentScopeFiles } from "../src/adapters/angular/component-files.js";
 import { discoverFlag, writeBaseline } from "../src/core/baseline.js";
 import { loadConfig } from "../src/core/config.js";
+import { cachedTextReader } from "../src/core/file-text.js";
 import { gitState } from "../src/core/git.js";
 import { resolveProjects } from "../src/core/registry.js";
 import { withScopeFiles } from "../src/core/scope-files.js";
@@ -37,7 +38,7 @@ afterEach(() => {
 describe("scope files", () => {
   it("gives a component its templateUrl file", () => {
     const ts = path.join(tmp, "src/app/list.component.ts");
-    expect(componentScopeFiles(ts)).toEqual([path.join(tmp, "src/app/list.component.html")]);
+    expect(componentScopeFiles(ts, cachedTextReader())).toEqual([path.join(tmp, "src/app/list.component.html")]);
     expect(withScopeFiles(workspace(), tmp, "src/app/list.component.ts")).toEqual([
       "src/app/list.component.ts",
       "src/app/list.component.html",

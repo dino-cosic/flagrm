@@ -7,7 +7,6 @@
  * is parsed at most once, never type-checked.
  */
 
-import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import type { FlagFlow, FlagRef, ProjectContext } from "../../core/adapter.js";
@@ -29,7 +28,7 @@ export function angularFlow(ctx: ProjectContext, flags: FlagRef[], evalMethods: 
   const sites = collectSites(code);
   let holders = deriveHolders(sites, evaluates);
   // One hop: a child's inputs bound to a holder, then what the child derives from them.
-  const inputs = childInputs(code, holders);
+  const inputs = childInputs(code, holders, ctx.text);
   if (inputs.length > 0) holders = deriveHolders(sites, evaluates, inputs);
   for (const h of holders) {
     if (evalMethods.includes(h.name)) continue;
@@ -53,12 +52,8 @@ function parseFiles(ctx: ProjectContext, evalMethods: string[]): TsFile[] {
   const files: TsFile[] = [];
   for (const file of ctx.files) {
     if (!file.endsWith(".ts")) continue;
-    let text: string;
-    try {
-      text = fs.readFileSync(file, "utf8");
-    } catch {
-      continue;
-    }
+    const text = ctx.text(file);
+    if (text === undefined) continue;
     const wanted =
       RENAMED_IMPORT.test(text) ||
       (evalMethods.length > 0 && (text.includes("@Component") || evalMethods.some((m) => text.includes(m))));

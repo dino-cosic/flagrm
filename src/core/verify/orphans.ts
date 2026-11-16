@@ -12,6 +12,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { workspaceText } from "../file-text.js";
 import { fileAt } from "../git.js";
 import { commentSyntax, computeLexicalMask, escapeRegExp, LEX_COMMENT } from "../scan.js";
 import { SourceText } from "../source-text.js";
@@ -115,14 +116,6 @@ function occurrences(file: string, text: string, only?: Set<string>): Map<string
   return out;
 }
 
-function read(file: string): string | undefined {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return undefined;
-  }
-}
-
 function add(totals: Map<string, number>, counts: Map<string, Occurrences>): void {
   for (const [name, { count }] of counts) totals.set(name, (totals.get(name) ?? 0) + count);
 }
@@ -137,6 +130,7 @@ export function orphanFindings(v: VerifyContext): CheckFinding[] {
   const inProject = (file: string) =>
     projectFiles.has(file) || (!fs.existsSync(file) && roots.some((r) => !path.relative(r, file).startsWith("..")));
   const changed = v.changedFiles.map((rel) => path.join(v.root, rel)).filter(inProject);
+  const read = workspaceText(v.projects);
   const recorded = new Set(v.baseline.names.map((n) => n.name));
 
   // Counts in the changed files then and now; unchanged files count the same both times.

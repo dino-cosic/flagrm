@@ -3,16 +3,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import type { ReadText } from "../../core/file-text.js";
 
-export function componentScopeFiles(file: string): string[] {
+export function componentScopeFiles(file: string, read: ReadText): string[] {
   if (!file.endsWith(".ts")) return [];
-  let text: string;
-  try {
-    text = fs.readFileSync(file, "utf8");
-  } catch {
-    return [];
-  }
-  if (!text.includes("templateUrl")) return [];
+  const text = read(file);
+  if (text === undefined || !text.includes("templateUrl")) return [];
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const out: string[] = [];
   for (const statement of sf.statements) {

@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import type { Adapter, ProjectContext } from "../../core/adapter.js";
 import { discoverInText } from "../../core/discover.js";
@@ -13,12 +12,8 @@ export function discoverDotnetFlags(ctx: ProjectContext): FlagCandidate[] {
   const out: FlagCandidate[] = [];
   const classify = { evalMethods: ctx.project.methods, attributes: ctx.project.attributes };
   for (const file of ctx.files) {
-    let text: string;
-    try {
-      text = fs.readFileSync(file, "utf8");
-    } catch {
-      continue;
-    }
+    const text = ctx.text(file);
+    if (text === undefined) continue;
     out.push(...discoverInText(text, file, ctx.name, classify));
   }
   return out;

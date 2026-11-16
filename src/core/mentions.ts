@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import type { ProjectContext } from "./adapter.js";
 import {
@@ -12,7 +11,6 @@ import {
   LEX_STRING,
 } from "./scan.js";
 import { SourceText } from "./source-text.js";
-import { toLf } from "./text-utils.js";
 
 /** A direct mention of a flag in code. */
 export interface Mention {
@@ -69,12 +67,8 @@ export function findMentions(
     for (const file of ctx.files) {
       if (seen.has(file) || file.endsWith(".json")) continue;
       seen.add(file);
-      let text: string;
-      try {
-        text = toLf(fs.readFileSync(file, "utf8"));
-      } catch {
-        continue;
-      }
+      const text = ctx.text(file);
+      if (text === undefined) continue;
       pattern.lastIndex = 0;
       if (!pattern.test(text)) continue;
       pattern.lastIndex = 0; // matchAll starts from the regex's lastIndex
@@ -156,12 +150,8 @@ export function findIdentifiers(
       if (seen.has(file) || (json && (configPaths.length === 0 || path.basename(file) !== "launchSettings.json")))
         continue;
       seen.add(file);
-      let text: string;
-      try {
-        text = toLf(fs.readFileSync(file, "utf8"));
-      } catch {
-        continue;
-      }
+      const text = ctx.text(file);
+      if (text === undefined) continue;
       pattern.lastIndex = 0;
       if (!pattern.test(text)) continue;
       pattern.lastIndex = 0;

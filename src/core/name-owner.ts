@@ -10,14 +10,12 @@
  * a recorded name can't be removed again.
  */
 
-import fs from "node:fs";
 import path from "node:path";
 import type { FlagRef, Workspace } from "./adapter.js";
 import { UsageError } from "./errors.js";
 import { buildInventory } from "./inventory.js";
 import { commentSyntax, computeLexicalMask, escapeRegExp, LEX_CODE, LEX_STRING } from "./scan.js";
 import { SourceText } from "./source-text.js";
-import { toLf } from "./text-utils.js";
 import type { RecordedName } from "./types.js";
 import { relativePath } from "./util.js";
 
@@ -49,12 +47,8 @@ export function nameReads(
     for (const file of ctx.files) {
       if (seen.has(file) || (only && !only.has(file)) || commentSyntax(file) !== "slash") continue;
       seen.add(file);
-      let text: string;
-      try {
-        text = toLf(fs.readFileSync(file, "utf8"));
-      } catch {
-        continue;
-      }
+      const text = ctx.text(file);
+      if (text === undefined) continue;
       if (!text.includes(name)) continue;
       const mask = computeLexicalMask(text, "slash");
       const source = new SourceText(file, text);

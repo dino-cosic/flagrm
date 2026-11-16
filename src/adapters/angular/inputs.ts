@@ -6,9 +6,9 @@
  * never type-checked. The child's own bindings are not followed.
  */
 
-import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import type { ReadText } from "../../core/file-text.js";
 import type { Holder, TsFile } from "./holders.js";
 
 interface ComponentInfo {
@@ -47,7 +47,7 @@ interface InputBindings {
  * tag maps to several components, or when another binding passes it
  * something else: a reusable component keeps that input after the removal.
  */
-export function childInputs(files: TsFile[], holders: Holder[]): Holder[] {
+export function childInputs(files: TsFile[], holders: Holder[], read: ReadText): Holder[] {
   const all = components(files);
   const bySelector = new Map<string, ComponentInfo[]>();
   for (const c of all) for (const s of c.selectors) bySelector.set(s, [...(bySelector.get(s) ?? []), c]);
@@ -59,7 +59,7 @@ export function childInputs(files: TsFile[], holders: Holder[]): Holder[] {
       if (h.cls !== parent.cls || h.kind === "local" || h.ternary || h.ambiguous) continue;
       bound.set(h.name, (bound.get(h.name) ?? new Set<string>()).add(h.flag));
     }
-    const template = templateOf(parent)?.replace(/<!--[\s\S]*?-->/g, "");
+    const template = templateOf(parent, read)?.replace(/<!--[\s\S]*?-->/g, "");
     if (!template) continue;
     for (const tag of template.matchAll(START_TAG)) {
       const children = bySelector.get(tag[1].toLowerCase());
@@ -135,14 +135,9 @@ function components(files: TsFile[]): ComponentInfo[] {
   return out;
 }
 
-function templateOf(c: ComponentInfo): string | undefined {
+function templateOf(c: ComponentInfo, read: ReadText): string | undefined {
   if (c.template !== undefined) return c.template;
-  if (!c.templateUrl) return undefined;
-  try {
-    return fs.readFileSync(c.templateUrl, "utf8");
-  } catch {
-    return undefined;
-  }
+  return c.templateUrl ? read(c.templateUrl) : undefined;
 }
 
 /** The child's member whose binding name (its `alias`, else its own name) is `binding`. */

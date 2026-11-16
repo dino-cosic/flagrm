@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import type { Adapter, ProjectContext } from "../../core/adapter.js";
 import { discoverInText } from "../../core/discover.js";
@@ -19,12 +18,8 @@ export function discoverAngularFlags(ctx: ProjectContext): FlagCandidate[] {
   const out: FlagCandidate[] = [];
   const classify = { evalMethods: ctx.project.methods, attributes: [] };
   for (const file of ctx.files) {
-    let text: string;
-    try {
-      text = fs.readFileSync(file, "utf8");
-    } catch {
-      continue;
-    }
+    const text = ctx.text(file);
+    if (text === undefined) continue;
     out.push(...discoverInText(text, file, ctx.name, classify));
     if (file.endsWith(".ts")) out.push(...discoverTypeScript(text, file, ctx.name));
   }
@@ -45,7 +40,7 @@ export const angularAdapter: Adapter = {
   defaultGlobs: FRONTEND_GLOBS,
   discover: async (ctx) => discoverAngularFlags(ctx),
   flow: (ctx, flags) => angularFlow(ctx, flags, ctx.project.methods),
-  scopeFiles: (_ctx, file) => componentScopeFiles(file),
+  scopeFiles: (ctx, file) => componentScopeFiles(file, ctx.text),
   // Like the .NET adapter: when the runner can write results without setup, the default test command does, under .flagrm/.
   defaultCommands: (ctx) => {
     const dir = path.join(ctx.config.root, ".flagrm", "test-results", ctx.name);
