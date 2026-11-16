@@ -34,6 +34,12 @@ contain breaking changes.
   different arguments. A config file with a YAML or JSON syntax error, or a
   `baseline.json` that isn't valid JSON, is still exit 2 and now names the
   file.
+- A `baseline.json` that is truncated or hand-edited into the wrong shape (a
+  missing `names` list, say) is now a usage error (exit 2) that names the
+  file and the field and says to re-run `baseline --force`. Before, it crashed
+  inside a verify check. `baseline --force` replaces a baseline without a
+  usable commit id. A malformed saved run set (`verify/runs.json`) is ignored
+  instead of reused.
 
 ## [1.0.0] - 2026-11-08
 

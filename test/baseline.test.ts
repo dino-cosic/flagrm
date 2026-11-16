@@ -338,6 +338,15 @@ describe("assertNoEditsSinceBaseline", () => {
     expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
   });
 
+  it("allows starting over from a baseline.json that is broken or has no usable commit id", () => {
+    fs.writeFileSync(path.join(tmp, "a.cs"), "b");
+    const file = baselinePath(tmp, "F");
+    fs.writeFileSync(file, "{");
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
+    fs.writeFileSync(file, JSON.stringify({ git: { sha: "--output=x" } }));
+    expect(() => assertNoEditsSinceBaseline(tmp, "F")).not.toThrow();
+  });
+
   it("doesn't count flagrm's setup files or the filter's paths as edits", () => {
     fs.writeFileSync(path.join(tmp, ".gitignore"), ".flagrm/\n");
     fs.writeFileSync(path.join(tmp, "AGENTS.md"), "x\n");
@@ -430,5 +439,16 @@ describe("readBaseline", () => {
     const saved = JSON.parse(fs.readFileSync(file, "utf8"));
     fs.writeFileSync(file, JSON.stringify({ ...saved, git: { sha: "--output=x", dirty: false } }));
     expect(() => readBaseline(tmp, "F")).toThrow(/not a git commit id/);
+  });
+
+  it("refuses a malformed baseline.json with a usage error naming the file and the field", () => {
+    const ctx = projectContext("generic", tmp, { name: "svc" });
+    const { file } = writeBaseline(tmp, "F", [{ adapter: dotnetAdapter, ctx }], { sha: null, dirty: false });
+    const { names: _names, ...saved } = JSON.parse(fs.readFileSync(file, "utf8"));
+    fs.writeFileSync(file, JSON.stringify(saved));
+    expect(() => readBaseline(tmp, "F")).toThrow(UsageError);
+    expect(() => readBaseline(tmp, "F")).toThrow(`${file} is not a valid baseline: names is missing.`);
+    fs.writeFileSync(file, "null");
+    expect(() => readBaseline(tmp, "F")).toThrow("the file must be an object, not null");
   });
 });

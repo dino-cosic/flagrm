@@ -11,7 +11,8 @@ import { type ChangeFilter, changeFilterAt } from "./change-filter.js";
 import { findConfigRoot } from "./config.js";
 import { scanConfigChanged } from "./config-snapshot.js";
 import { headSha, isAncestor, trackedChangesSince, treeFingerprint } from "./git.js";
-import type { Baseline, VerifyReport } from "./types.js";
+import { COMMIT_ID, isConfigSnapshot } from "./state-files.js";
+import type { ConfigSnapshot, VerifyReport } from "./types.js";
 import { readJson } from "./util.js";
 
 /** The fields flagrm reads from the hook's stdin JSON. */
@@ -84,10 +85,7 @@ export function stopDecision(root: string, input: StopHookInput): StopDecision {
 export function committedUnverified(root: string): { dir: string; flag: string }[] {
   return startedRemovals(root, changeFilterAt(root))
     .filter((r) => r.committed)
-    .map((r) => ({
-      dir: path.basename(r.flagDir),
-      flag: readJson<Baseline>(path.join(r.flagDir, "baseline.json"))?.flag ?? path.basename(r.flagDir),
-    }));
+    .map((r) => ({ dir: path.basename(r.flagDir), flag: r.baseline.flag }));
 }
 
 /** The removals the hook guards and that are in progress: see {@link stopDecision}. */
@@ -106,37 +104,29 @@ function startedRemovals(root: string, ignore: ChangeFilter): Tracked[] {
     if (!editedSince.has(sha)) editedSince.set(sha, (trackedChangesSince(root, sha, ignore) ?? []).length > 0);
     return editedSince.get(sha) === true;
   };
-  return active.filter((r) => edited(r.sha) || lastVerifySkipped(r.flagDir) || configChanged(r.flagDir, root));
+  return active.filter(
+    (r) => edited(r.baseline.sha) || lastVerifySkipped(r.flagDir) || scanConfigChanged(r.baseline.config, root),
+  );
 }
 
 interface Tracked {
   flagDir: string;
-  sha: string;
+  baseline: HookBaseline;
   /** HEAD moved past the baseline commit. */
   committed: boolean;
 }
 
 /** The removal in `flagDir` if the hook guards it at `head`: see {@link stopDecision}. */
 function tracked(flagDir: string, root: string, head: string): Tracked | undefined {
-  const sha = readJson<Baseline>(path.join(flagDir, "baseline.json"))?.git?.sha;
-  if (typeof sha !== "string") return undefined;
-  if (sha === head) return { flagDir, sha, committed: false };
-  if (everPassed(flagDir) || !isAncestor(root, sha)) return undefined;
-  return { flagDir, sha, committed: true };
+  const baseline = readBaseline(flagDir);
+  if (!baseline) return undefined;
+  if (baseline.sha === head) return { flagDir, baseline, committed: false };
+  if (everPassed(flagDir) || !isAncestor(root, baseline.sha)) return undefined;
+  return { flagDir, baseline, committed: true };
 }
 
 function everPassed(flagDir: string): boolean {
   return readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"))?.status === "pass";
-}
-
-/**
- * Whether the config changed since the baseline (or `--accept config`) in what
- * is scanned or ignored: widening `exclude` would otherwise hide the removal's
- * edits from the hook. A verify passing on this tree shows the change and allows.
- */
-function configChanged(flagDir: string, root: string): boolean {
-  const baseline = readJson<Baseline>(path.join(flagDir, "baseline.json"));
-  return scanConfigChanged(baseline?.acceptedConfig ?? baseline?.config, root);
 }
 
 function lastVerifySkipped(flagDir: string): boolean {
@@ -144,10 +134,37 @@ function lastVerifySkipped(flagDir: string): boolean {
   return Array.isArray(skipped) && skipped.length > 0;
 }
 
+/** What the hook reads of a baseline. */
+interface HookBaseline {
+  flag: string;
+  sha: string;
+  /**
+   * `acceptedConfig`, else `config`: whether it changed in what is scanned or
+   * ignored counts as in progress, since widening `exclude` would otherwise
+   * hide the removal's edits from the hook. A verify passing on this tree allows.
+   */
+  config?: ConfigSnapshot;
+}
+
+/**
+ * The fields of `flagDir`'s baseline the hook reads, or undefined without a
+ * commit id. Only those are checked, so a baseline broken elsewhere (which
+ * verify reports) stays guarded; a flag name that isn't a string falls back
+ * to the directory name, and a malformed config snapshot counts as none.
+ */
+function readBaseline(flagDir: string): HookBaseline | undefined {
+  const raw = readJson<{ flag?: unknown; git?: { sha?: unknown }; config?: unknown; acceptedConfig?: unknown }>(
+    path.join(flagDir, "baseline.json"),
+  );
+  const sha = raw?.git?.sha;
+  if (typeof sha !== "string" || !COMMIT_ID.test(sha)) return undefined;
+  const flag = typeof raw?.flag === "string" ? raw.flag : path.basename(flagDir);
+  const config = raw?.acceptedConfig ?? raw?.config;
+  return { flag, sha, ...(isConfigSnapshot(config) ? { config } : {}) };
+}
+
 /** Why the in-progress removal is not verified, or undefined when a full verify passed on `current`. */
-function unverified({ flagDir, committed }: Tracked, current: string): string | undefined {
-  const baseline = readJson<Baseline>(path.join(flagDir, "baseline.json"));
-  if (!baseline) return undefined;
+function unverified({ flagDir, baseline, committed }: Tracked, current: string): string | undefined {
   const run = `run flagrm verify ${baseline.flag} --json`;
   if (committed) {
     // Not released by a verify yet, or `tracked` would have dropped it.
@@ -156,11 +173,14 @@ function unverified({ flagDir, committed }: Tracked, current: string): string | 
   }
   const verify = readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"));
   // A report without `skipped` comes from an older flagrm, which didn't record skips.
-  if (verify?.status !== "pass" || verify.fingerprint !== current || !Array.isArray(verify.skipped)) {
+  const skipped = verify?.skipped;
+  if (verify?.status !== "pass" || verify.fingerprint !== current || !isStringArray(skipped)) {
     return `flagrm: ${baseline.flag} removal not verified — ${run}`;
   }
-  if (verify.skipped.length) {
-    return `flagrm: ${baseline.flag} verified with --skip ${verify.skipped.join(",")} — ${run} without --skip`;
+  if (skipped.length) {
+    return `flagrm: ${baseline.flag} verified with --skip ${skipped.join(",")} — ${run} without --skip`;
   }
   return undefined;
 }
+
+const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
