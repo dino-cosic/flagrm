@@ -402,6 +402,19 @@ describe("CLI hook stop (spawned dist/cli.js)", () => {
     fs.rmSync(hookDir, { recursive: true, force: true });
   });
 
+  /** A CommonJS preload that reports on exit whether the `typescript` package was loaded. */
+  function typescriptProbe(): string {
+    const probe = path.join(hookDir, "typescript-probe.cjs");
+    fs.writeFileSync(
+      probe,
+      'process.on("exit", () => process.stderr.write("typescript loaded: " + ' +
+        "Object.keys(require.cache).some((k) => /node_modules[\\\\/]typescript[\\\\/]/.test(k)) + " +
+        '"\\n"));',
+      "utf8",
+    );
+    return JSON.stringify(probe);
+  }
+
   it("prints nothing and exits 0 when there is nothing to check, or on bad input", () => {
     for (const input of ["{}", "not json", "", "null", "5", "[]"]) {
       const { status, stdout } = runCli(["hook", "stop"], hookDir, input);
@@ -427,12 +440,22 @@ describe("CLI hook stop (spawned dist/cli.js)", () => {
       expect(runCli(["baseline", "NewCheckout", "--no-checks"], repo).status).toBe(0);
       fs.writeFileSync(path.join(repo, "src", "a.txt"), "edited\n");
       const sub = path.join(repo, "src");
-      const { status, stdout } = runCli(["hook", "stop"], sub, JSON.stringify({ cwd: sub }));
+      const { status, stdout, stderr } = runCli(["hook", "stop"], sub, JSON.stringify({ cwd: sub }), {
+        NODE_OPTIONS: `--require ${typescriptProbe()}`,
+      });
       expect(status).toBe(0);
       expect(JSON.parse(stdout)).toMatchObject({ decision: "block" });
+      // The hook runs on every stop: it must not pay for loading the TypeScript compiler.
+      expect(stderr).toContain("typescript loaded: false");
     } finally {
       fs.rmSync(repo, { recursive: true, force: true });
     }
+  });
+
+  it("loads the TypeScript compiler only for commands that use an adapter", () => {
+    const env = { NODE_OPTIONS: `--require ${typescriptProbe()}` };
+    expect(runCli(["--version"], hookDir, undefined, env).stderr).toContain("typescript loaded: false");
+    expect(runCli(["list"], tmp, undefined, env).stderr).toContain("typescript loaded: true");
   });
 });
 

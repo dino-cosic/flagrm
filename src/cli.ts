@@ -7,14 +7,12 @@ import { realProbes } from "./adapters/dotnet/setup.js";
 import type { Workspace } from "./core/adapter.js";
 import { baselineSummary, takeBaseline } from "./core/baseline.js";
 import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
-import { runDoctor } from "./core/doctor.js";
 import { UsageError } from "./core/errors.js";
 import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
 import { buildInventory } from "./core/inventory.js";
 import { staleMarkdown, verifyMarkdown } from "./core/markdown.js";
 import { packageVersion } from "./core/package.js";
-import { resolveProjects } from "./core/registry.js";
 import {
   printBaseline,
   printDoctor,
@@ -77,10 +75,20 @@ function usage(message: string): never {
   throw new UsageError(message);
 }
 
+/**
+ * The adapter registry, loaded on first use: the Angular adapter pulls in the
+ * TypeScript compiler (over 100 ms to load), which commands that never touch an
+ * adapter, the Stop hook above all, should not pay for. `doctor` reaches the
+ * registry too, so it is loaded the same way.
+ */
+const registry = () => import("./core/registry.js");
+const doctor = async (...args: Parameters<typeof import("./core/doctor.js").runDoctor>) =>
+  (await import("./core/doctor.js")).runDoctor(...args);
+
 /** Load the config and pair every project with its adapter; a config error exits 2. */
-function loadWorkspace(opts: CliPathOptions): { root: string; projects: Workspace } {
+async function loadWorkspace(opts: CliPathOptions): Promise<{ root: string; projects: Workspace }> {
   const config = loadConfig(opts);
-  return { root: config.root, projects: resolveProjects(config) };
+  return { root: config.root, projects: (await registry()).resolveProjects(config) };
 }
 
 // --- baseline ------------------------------------------------------------------
@@ -130,7 +138,7 @@ addCommonOptions(
         accept?: string;
       },
     ) => {
-      const { root, projects } = loadWorkspace(opts);
+      const { root, projects } = await loadWorkspace(opts);
       const { baseline, file } = await takeBaseline(root, projects, flag, {
         checks: opts.checks,
         reuse: opts.reuse,
@@ -165,7 +173,7 @@ addCommonOptions(
   .action(
     async (flag: string, opts: CommonOptions & { skip?: string; strict?: boolean; md?: boolean; reuse: boolean }) => {
       if (opts.md && opts.json) usage("--md and --json can't be combined.");
-      const { root, projects } = loadWorkspace(opts);
+      const { root, projects } = await loadWorkspace(opts);
       const result = await verifyFlag(root, projects, flag, {
         skip: parseSkip(opts.skip),
         strict: opts.strict,
@@ -194,7 +202,7 @@ addCommonOptions(
         "direct reference counts and the projects involved",
     ),
 ).action(async (opts: CommonOptions) => {
-  const report = await buildInventory(loadWorkspace(opts).projects);
+  const report = await buildInventory((await loadWorkspace(opts)).projects);
   if (opts.json) {
     console.log(JSON.stringify(report, null, 2));
   } else {
@@ -218,7 +226,7 @@ addCommonOptions(
   .action(async (flags: string[], opts: CommonOptions & { md?: boolean }) => {
     if (opts.md && opts.json) usage("--md and --json can't be combined.");
     const config = loadConfig(opts);
-    const projects = resolveProjects(config);
+    const projects = (await registry()).resolveProjects(config);
     const ld = config.launchdarkly;
     if (!ld) {
       usage(
@@ -281,7 +289,7 @@ program
     const tools = await chooseTools(root, opts.tool);
     printSteps(initProject(root, tools));
     console.log(pc.bold("\nflagrm doctor"));
-    printDoctor(await runDoctor(root));
+    printDoctor(await doctor(root));
     console.log(pc.dim("\nNext: fill in flagrm.config.yaml, then ask your agent: /flagrm-remove <FlagName>"));
   });
 
@@ -344,7 +352,7 @@ program
   .option("--run", "also run each build, test and lint command")
   .option("--json", "machine-readable JSON output")
   .action(async (opts: { config?: string; run?: boolean; json?: boolean }) => {
-    const report = await runDoctor(process.cwd(), { config: opts.config, run: opts.run });
+    const report = await doctor(process.cwd(), { config: opts.config, run: opts.run });
     if (opts.json) console.log(JSON.stringify(report, null, 2));
     else printDoctor(report);
     process.exitCode = report.status === "ok" ? 0 : 1;
@@ -362,8 +370,8 @@ addCommonOptions(
     ),
 )
   .option("--write", "create flagrm.slnf, keep it out of git and point the config's build and test at it")
-  .action((opts: CommonOptions & { write?: boolean }) => {
-    const { root, projects } = loadWorkspace(opts);
+  .action(async (opts: CommonOptions & { write?: boolean }) => {
+    const { root, projects } = await loadWorkspace(opts);
     const setups = setupReport(
       projects,
       root,
