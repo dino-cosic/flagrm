@@ -13,6 +13,9 @@ updates:
       # TypeScript 7 is the native (Go) compiler without the JavaScript compiler API the Angular adapter uses.
       - dependency-name: typescript
         update-types: [version-update:semver-major]
+      # Types for the oldest Node flagrm supports (engines), so code can't use an API that version lacks.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
     commit-message:
       prefix: chore
       include: scope
