@@ -289,7 +289,9 @@ describe("runCheck", () => {
   });
 
   it("kills the command the shell started on timeout, not only the shell", async () => {
-    const ctx = projectContext("generic", tmp, { name: "svc", timeout: 1 });
+    // 5 s, not 1: on a loaded Windows runner node can take about a second to start, and a kill that lands
+    // while it is still starting can miss it.
+    const ctx = projectContext("generic", tmp, { name: "svc", timeout: 5 });
     const pidFile = path.join(tmp, "child.pid");
     // `&&` keeps the shell alive as the node process's parent instead of exec'ing it.
     const command = `node -e "require('fs').writeFileSync('child.pid', String(process.pid)); setTimeout(() => {}, 30000)" && echo done`;
