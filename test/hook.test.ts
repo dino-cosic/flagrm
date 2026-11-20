@@ -7,7 +7,7 @@ import { writeBaseline } from "../src/core/baseline.js";
 import { changeFilterAt } from "../src/core/change-filter.js";
 import { loadConfig } from "../src/core/config.js";
 import { gitState, treeFingerprint } from "../src/core/git.js";
-import { hookRoot, parseHookInput, stopDecision } from "../src/core/hook.js";
+import { HOOK_LOG, hookRoot, logStopDecision, parseHookInput, stopDecision } from "../src/core/hook.js";
 import { flagDir, verifyPath } from "../src/core/paths.js";
 import { resolveProjects } from "../src/core/registry.js";
 
@@ -45,12 +45,12 @@ afterEach(() => {
 
 describe("stopDecision", () => {
   it("allows when there is no .flagrm/ directory", () => {
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("allows when the removal hasn't started", () => {
     baseline();
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("allows while the removal is paused before any edit: only the flagrm config or untracked files changed", () => {
@@ -61,7 +61,7 @@ describe("stopDecision", () => {
     fs.mkdirSync(path.join(tmp, "TestResults"));
     fs.writeFileSync(path.join(tmp, "TestResults", "run.trx"), "<TestRun/>");
     fs.writeFileSync(path.join(tmp, "flagrm.slnf"), "{}");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("allows when only flagrm's setup files changed since the baseline", () => {
@@ -73,7 +73,7 @@ describe("stopDecision", () => {
     fs.writeFileSync(path.join(tmp, ".claude", "settings.json"), '{"hooks":{}}\n');
     fs.writeFileSync(path.join(tmp, "AGENTS.md"), "y\n");
     fs.appendFileSync(path.join(tmp, ".gitignore"), "bin/\n");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("allows once verify passed while a generated file matching exclude changes", () => {
@@ -87,7 +87,7 @@ describe("stopDecision", () => {
     verified("pass");
     fs.mkdirSync(path.join(tmp, "graphify-out"));
     fs.writeFileSync(path.join(tmp, "graphify-out", "graph.json"), "{}");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("allows once verify passed while a committed file matching exclude is deleted", () => {
@@ -102,7 +102,7 @@ describe("stopDecision", () => {
     edit("b\n");
     verified("pass");
     fs.rmSync(path.join(tmp, "graphify-out", "graph.html"));
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("blocks when exclude is widened after the baseline to hide the removal's edits", () => {
@@ -125,7 +125,7 @@ describe("stopDecision", () => {
     configuredBaseline();
     fs.writeFileSync(path.join(tmp, "flagrm.config.yaml"), `${config}exclude: ['graphify-out/**']\n`);
     verified("pass");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("allows a config change after the baseline that only touches commands", () => {
@@ -137,7 +137,7 @@ describe("stopDecision", () => {
       path.join(tmp, "flagrm.config.yaml"),
       "projects:\n  - {name: svc, adapter: generic, path: ., test: go test ./...}\n",
     );
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("blocks a new file that exclude doesn't cover, written after a passing verify", () => {
@@ -271,7 +271,7 @@ describe("stopDecision", () => {
     commit("remove flag");
     verified("pass");
     edit("unrelated work\n");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("allows a committed baseline that never changed anything", () => {
@@ -279,7 +279,7 @@ describe("stopDecision", () => {
     fs.mkdirSync(path.join(tmp, ".claude"));
     fs.writeFileSync(path.join(tmp, ".claude", "settings.json"), "{}\n");
     commit("setup only");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("ignores a removal left on another branch", () => {
@@ -293,7 +293,7 @@ describe("stopDecision", () => {
     fs.writeFileSync(path.join(tmp, "other.txt"), "x\n");
     commit("other work");
     edit("unrelated\n");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("still blocks the removal in progress when another one was left on another branch", () => {
@@ -324,7 +324,7 @@ describe("stopDecision", () => {
   it("allows when stop_hook_active is set, to avoid loops", () => {
     baseline();
     edit("b\n");
-    expect(stopDecision(tmp, { stop_hook_active: true })).toEqual({ block: false });
+    expect(stopDecision(tmp, { stop_hook_active: true })).toMatchObject({ block: false });
   });
 
   it("names the flag from the baseline, not the sanitized directory", () => {
@@ -337,14 +337,14 @@ describe("stopDecision", () => {
     baseline();
     edit("b\n");
     fs.writeFileSync(path.join(flagDir(tmp, "NewCheckout"), "baseline.json"), "{not json");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false });
   });
 
   it("allows outside a git repository", () => {
     const plain = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "flagrm-hook-plain-")));
     try {
       writeBaseline(plain, "NewCheckout", [], { sha: null, dirty: false });
-      expect(stopDecision(plain, {})).toEqual({ block: false });
+      expect(stopDecision(plain, {})).toMatchObject({ block: false });
     } finally {
       fs.rmSync(plain, { recursive: true, force: true });
     }
@@ -375,5 +375,54 @@ describe("hookRoot", () => {
 
   it("falls back to the directory itself without a config", () => {
     expect(hookRoot(tmp)).toBe(tmp);
+  });
+});
+
+describe("logStopDecision", () => {
+  const log = () => path.join(tmp, HOOK_LOG);
+  const lines = () =>
+    fs
+      .readFileSync(log(), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+  const now = new Date("2026-11-20T10:00:00Z");
+
+  it("writes nothing unless FLAGRM_DEBUG is set to something other than 0", () => {
+    logStopDecision(tmp, { block: false, allowed: "no .flagrm/ directory" }, {}, now);
+    logStopDecision(tmp, { block: false, allowed: "no .flagrm/ directory" }, { FLAGRM_DEBUG: "0" }, now);
+    expect(fs.existsSync(log())).toBe(false);
+  });
+
+  it("appends one JSON line per decision, with the error behind an allow", () => {
+    baseline();
+    edit("b\n");
+    logStopDecision(tmp, stopDecision(tmp, {}), { FLAGRM_DEBUG: "1" }, now);
+    logStopDecision(
+      tmp,
+      { block: false, allowed: "unexpected error", error: new TypeError("boom") },
+      { FLAGRM_DEBUG: "1" },
+      now,
+    );
+    const [blocked, failed] = lines();
+    expect(blocked).toMatchObject({ time: now.toISOString(), root: tmp, block: true });
+    expect(blocked.reason).toContain("NewCheckout removal not verified");
+    expect(failed).toMatchObject({ block: false, allowed: "unexpected error" });
+    expect(failed.error).toMatch(/^TypeError: boom\n\s+at /);
+  });
+
+  it("says why a stop was allowed", () => {
+    expect(stopDecision(tmp, {})).toEqual({ block: false, allowed: "no .flagrm/ directory" });
+    baseline();
+    expect(stopDecision(tmp, {})).toEqual({ block: false, allowed: "no removal in progress" });
+    edit("b\n");
+    verified("pass");
+    expect(stopDecision(tmp, {})).toEqual({ block: false, allowed: "verified: NewCheckout" });
+  });
+
+  it("never throws, even when the log can't be written", () => {
+    const file = path.join(tmp, "not-a-dir");
+    fs.writeFileSync(file, "");
+    expect(() => logStopDecision(file, { block: false }, { FLAGRM_DEBUG: "1" }, now)).not.toThrow();
   });
 });

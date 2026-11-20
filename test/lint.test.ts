@@ -246,6 +246,6 @@ describe("lint check", () => {
     commit("lint cache");
     await baseline();
     expect((await verify()).status).toBe("pass");
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false, allowed: expect.stringMatching(/^verified: /) });
   });
 });

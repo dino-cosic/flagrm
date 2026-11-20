@@ -10,6 +10,10 @@ contain breaking changes.
 
 ### Added
 
+- With `FLAGRM_DEBUG=1` set, the Stop hook appends each decision to
+  `.flagrm/hook.log`: why it blocked or allowed, and the error behind an
+  allow, since the hook allows silently on anything unexpected. `doctor`
+  mentions the variable.
 - `baseline`, `verify` and `doctor --run` print a progress line to stderr as
   each build, test and lint command starts and ends, with how long it took,
   so a slow run can be told from a hung one. stdout is unchanged.

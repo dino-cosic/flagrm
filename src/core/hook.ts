@@ -46,6 +46,10 @@ export interface StopDecision {
   block: boolean;
   /** One line per unverified flag, shown to the agent. */
   reason?: string;
+  /** Why the stop was allowed, for the debug log. */
+  allowed?: string;
+  /** The error that made the hook allow the stop, for the debug log. */
+  error?: unknown;
 }
 
 /**
@@ -62,18 +66,54 @@ export interface StopDecision {
  * skipped checks. The fingerprint leaves out the same paths, as verify's does.
  */
 export function stopDecision(root: string, input: StopHookInput): StopDecision {
-  if (input.stop_hook_active) return { block: false };
+  if (input.stop_hook_active) return { block: false, allowed: "the agent is already continuing after a block" };
   try {
-    if (!fs.existsSync(path.join(root, ".flagrm"))) return { block: false };
+    if (!fs.existsSync(path.join(root, ".flagrm"))) return { block: false, allowed: "no .flagrm/ directory" };
     const ignore = changeFilterAt(root);
     const started = startedRemovals(root, ignore);
-    if (started.length === 0) return { block: false };
+    if (started.length === 0) return { block: false, allowed: "no removal in progress" };
     const current = treeFingerprint(root, ignore);
-    if (!current) return { block: false };
+    if (!current) return { block: false, allowed: "git couldn't fingerprint the working tree" };
     const reasons = started.map((r) => unverified(r, current)).filter((r): r is string => r !== undefined);
-    return reasons.length ? { block: true, reason: reasons.join("\n") } : { block: false };
+    if (reasons.length) return { block: true, reason: reasons.join("\n") };
+    return { block: false, allowed: `verified: ${started.map((r) => r.baseline.flag).join(", ")}` };
+  } catch (error) {
+    return { block: false, allowed: "unexpected error", error };
+  }
+}
+
+/** The environment variable that turns on {@link logStopDecision}. */
+export const HOOK_DEBUG_ENV = "FLAGRM_DEBUG";
+export const HOOK_LOG = path.join(".flagrm", "hook.log");
+
+/**
+ * With `FLAGRM_DEBUG` set (and not `0`), append the decision, and the error
+ * behind an allow, as one JSON line to `.flagrm/hook.log` under `root`: the
+ * hook allows silently on anything unexpected, so this is the one place to
+ * see why it didn't block. Never throws.
+ */
+export function logStopDecision(
+  root: string,
+  decision: StopDecision,
+  env: NodeJS.ProcessEnv = process.env,
+  now: Date = new Date(),
+): void {
+  const flag = env[HOOK_DEBUG_ENV];
+  if (!flag || flag === "0") return;
+  try {
+    const { error, ...rest } = decision;
+    const entry = {
+      time: now.toISOString(),
+      root,
+      ...rest,
+      ...(error === undefined
+        ? {}
+        : { error: error instanceof Error ? (error.stack ?? error.message) : String(error) }),
+    };
+    fs.mkdirSync(path.join(root, ".flagrm"), { recursive: true });
+    fs.appendFileSync(path.join(root, HOOK_LOG), `${JSON.stringify(entry)}\n`);
   } catch {
-    return { block: false };
+    // Debug logging must not change the hook's outcome.
   }
 }
 

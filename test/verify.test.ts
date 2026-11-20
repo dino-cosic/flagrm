@@ -121,7 +121,7 @@ describe("verify on the realistic fixture", () => {
     expect(report.skipped).toEqual([]);
     expect(report.changedFiles?.filter((f) => f.startsWith("graphify-out/") || f === "flagrm.config.yaml")).toEqual([]);
     fs.writeFileSync(path.join(tmp, "graphify-out", "graph.json"), '{"regenerated":true}');
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false, allowed: expect.stringMatching(/^verified: /) });
     fs.appendFileSync(path.join(tmp, "backend", "Shop.sln"), "\n");
     expect(stopDecision(tmp, {}).block).toBe(true);
   });
@@ -138,7 +138,7 @@ describe("verify on the realistic fixture", () => {
     const report = await verify({ skip: [] }, cliExclude);
     expect(report.status).toBe("pass");
     expect(report.changedFiles?.filter((f) => f.startsWith("graphify-out/"))).toEqual([]);
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false, allowed: expect.stringMatching(/^verified: /) });
   });
 
   it("fails on unused code the removal left in a changed TypeScript file", async () => {

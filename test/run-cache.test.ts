@@ -214,7 +214,7 @@ describe("verify with saved runs", () => {
     expect(ran()).toHaveLength(4);
     expect(again.status).toBe("pass");
     expect(again.runs.map((r) => r.reused?.flag)).toEqual(["FlagA", "FlagA"]);
-    expect(stopDecision(tmp, {})).toEqual({ block: false });
+    expect(stopDecision(tmp, {})).toMatchObject({ block: false, allowed: expect.stringMatching(/^verified: /) });
     addNames(tmp, "FlagA", [{ name: "removed", kind: "wrapper", source: "agent" }]);
     const failed = await verify("FlagA");
     expect(ran()).toHaveLength(4);

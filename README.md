@@ -142,6 +142,9 @@ flowchart LR
    passes once (delete `.flagrm/<flag>/` to drop an abandoned one). It guards
    against finishing by accident, not an agent working around it: see
    [SECURITY.md](SECURITY.md#what-it-doesnt-guarantee).
+   Anything unexpected allows the stop; to see why the hook didn't block,
+   set `FLAGRM_DEBUG=1` and it appends each decision, with any error, to
+   `.flagrm/hook.log`.
 4. **`/flagrm-review <flag>`** (optional), in a new session, reviews the
    removal: it runs `flagrm verify <flag> --json` and stops on a failure; on
    a pass it reads the diff since the baseline commit and checks that the ON

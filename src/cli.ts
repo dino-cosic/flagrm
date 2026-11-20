@@ -8,7 +8,7 @@ import type { Workspace } from "./core/adapter.js";
 import { baselineSummary, takeBaseline } from "./core/baseline.js";
 import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
 import { UsageError } from "./core/errors.js";
-import { hookRoot, parseHookInput, stopDecision } from "./core/hook.js";
+import { hookRoot, logStopDecision, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
 import { buildInventory } from "./core/inventory.js";
 import { staleMarkdown, verifyMarkdown } from "./core/markdown.js";
@@ -264,12 +264,15 @@ hook
   .description("Claude Code Stop hook: block stopping while a flag removal is not verified; always exits 0")
   .action(() => {
     // Anything unexpected allows the stop: a broken hook must never trap the user.
+    let root = process.cwd();
     try {
       const input = process.stdin.isTTY ? {} : parseHookInput(fs.readFileSync(0, "utf8"));
-      const decision = stopDecision(hookRoot(input.cwd ?? process.cwd()), input);
+      root = hookRoot(input.cwd ?? root);
+      const decision = stopDecision(root, input);
+      logStopDecision(root, decision);
       if (decision.block) console.log(JSON.stringify({ decision: "block", reason: decision.reason }));
-    } catch {
-      // Allow the stop.
+    } catch (error) {
+      logStopDecision(root, { block: false, allowed: "unexpected error", error });
     }
   });
 
