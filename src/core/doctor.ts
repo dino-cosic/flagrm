@@ -13,7 +13,7 @@ import { incrementalBuildGap, templateCheckGap } from "./command-gaps.js";
 import { findConfigFile, loadConfig, TOOL_IDS, type ToolId } from "./config.js";
 import { projectCommands } from "./config-snapshot.js";
 import { gitState, isAncestor } from "./git.js";
-import { committedUnverified } from "./hook.js";
+import { committedUnverified, HOOK_DEBUG_ENV } from "./hook.js";
 import { installedSkillVersion, stopHookState } from "./install.js";
 import { errorExcerpt } from "./logs.js";
 import { packageVersion } from "./package.js";
@@ -113,8 +113,9 @@ export async function runDoctor(cwd: string, options: DoctorOptions = {}): Promi
   }
 
   const hook = tools.includes("claude-code") ? stopHookState(root) : undefined;
-  if (hook === "current") add("ok", "Claude Code Stop hook installed");
-  else if (hook === "outdated") add("warn", "Claude Code Stop hook runs an outdated command (run flagrm update)");
+  if (hook === "current") {
+    add("ok", `Claude Code Stop hook installed (set ${HOOK_DEBUG_ENV}=1 to log its decisions to .flagrm/hook.log)`);
+  } else if (hook === "outdated") add("warn", "Claude Code Stop hook runs an outdated command (run flagrm update)");
   else if (hook === "missing")
     add("warn", "Claude Code Stop hook missing from .claude/settings.json (run flagrm init)");
 
