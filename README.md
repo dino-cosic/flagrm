@@ -85,7 +85,7 @@ only when you ask. The overview looks like this (abridged):
 
 ### Requirements
 
-- Node.js 22 or later
+- Node.js 22.12 or later
 - git: `baseline` and `verify` compare against the commit the removal started from
 - An AI coding agent that reads skills: Claude Code, GitHub Copilot or Codex
   (the Stop hook is Claude Code only)
