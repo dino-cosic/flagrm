@@ -94,6 +94,18 @@ describe("treeFingerprint", () => {
     expect(git("status", "--porcelain")).toBe(status);
   });
 
+  it("writes no objects into the repository", () => {
+    commit("init");
+    write("a.txt", "changed\n");
+    write("sub/new.txt", "n\n");
+    const objects = git("count-objects", "-v");
+    const fingerprint = treeFingerprint(tmp);
+    expect(fingerprint).toMatch(/^[0-9a-f]{40,64}$/);
+    expect(git("count-objects", "-v")).toBe(objects);
+    // The id is still the tree a commit of this working tree gets.
+    expect(commit("edit") && treeAt(tmp, "HEAD")).toBe(fingerprint);
+  });
+
   it("covers only the subdirectory when the config root is one", () => {
     const sha = commit("init");
     const sub = path.join(tmp, "sub");

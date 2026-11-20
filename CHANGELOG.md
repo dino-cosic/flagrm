@@ -30,6 +30,11 @@ contain breaking changes.
 
 ### Fixed
 
+- `verify` and the Stop hook no longer leave unreachable blobs and trees in
+  the repository's object store each time they fingerprint the working tree;
+  the scratch objects go to a temporary directory. Their read-only git calls
+  also no longer take `index.lock`, so a hook firing while another git
+  command runs can't make that command fail.
 - The Stop hook no longer stops guarding a removal when the agent commits
   it before verifying. A removal stays guarded on later commits, a new
   branch included, until a verify of it passes once; the block message says
