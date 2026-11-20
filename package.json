@@ -52,7 +52,7 @@
     "cli"
   ],
   "dependencies": {
-    "commander": "^13.1.0",
+    "commander": "^15.1.0",
     "picocolors": "^1.1.1",
     "picomatch": "^4.0.7",
     "tinyglobby": "^0.2.17",
