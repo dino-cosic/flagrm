@@ -60,7 +60,7 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.8",
     "@types/node": "^22.13.0",
     "@types/picomatch": "^4.0.3",
     "tsx": "^4.19.0",
