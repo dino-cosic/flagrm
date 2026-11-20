@@ -18,7 +18,7 @@ import { runChecks } from "./run-command.js";
 import { matchingFiles } from "./scan.js";
 import { isSavedRuns } from "./state-files.js";
 import { type CheckRun, JSON_SCHEMA_VERSION, RUN_CHECK_ID, type SavedRuns } from "./types.js";
-import { readJson } from "./util.js";
+import { readJson, writeJsonFile } from "./util.js";
 
 type Planned = { project: string; check: CheckRun["check"] };
 
@@ -87,7 +87,7 @@ export function saveRuns(
     commands: configSnapshot(projects).projects,
     runs: kept,
   };
-  fs.writeFileSync(file, `${JSON.stringify(saved, null, 2)}\n`, "utf8");
+  writeJsonFile(file, saved);
 }
 
 /** Forget every saved set, of any flag, for this tree: a fresh run on it failed, so they may hide a flaky test or a changed machine. */

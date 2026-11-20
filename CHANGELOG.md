@@ -43,6 +43,11 @@ contain breaking changes.
   the scratch objects go to a temporary directory. Their read-only git calls
   also no longer take `index.lock`, so a hook firing while another git
   command runs can't make that command fail.
+- `baseline.json`, `verify.json` and saved runs are written to a temporary
+  file and renamed into place, so the Stop hook can't read half a file and
+  allow the stop. `flagrm update` builds each new skill directory next to
+  the installed one before swapping it in, so a failed copy no longer leaves
+  no skill at all.
 - The Stop hook no longer stops guarding a removal when the agent commits
   it before verifying. A removal stays guarded on later commits, a new
   branch included, until a verify of it passes once; the block message says

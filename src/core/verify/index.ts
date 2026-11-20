@@ -4,7 +4,6 @@
  * and writes `.flagrm/<flag>/verify.json`.
  */
 
-import fs from "node:fs";
 import path from "node:path";
 import type { Workspace } from "../adapter.js";
 import { readBaseline } from "../baseline.js";
@@ -25,6 +24,7 @@ import {
   type VerifyReport,
   type VerifyRun,
 } from "../types.js";
+import { splitList, writeJsonFile } from "../util.js";
 import { buildCheck, compareTests, lintCheck, testsCheck } from "./commands.js";
 import { skippedResult, type VerifyContext } from "./context.js";
 import { coverageCheck } from "./coverage.js";
@@ -124,8 +124,7 @@ export async function verifyFlag(
     dropRuns(root, key);
   }
   const file = verifyPath(root, flag);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  writeJsonFile(file, report);
   return { report, file };
 }
 
@@ -139,10 +138,7 @@ function countsOnly(run: CheckRun): VerifyRun {
 /** Parse `--skip build,tests`; throws on an unknown check name. */
 export function parseSkip(value: string | undefined): CheckId[] {
   if (!value) return [];
-  const ids = value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const ids = splitList(value);
   for (const id of ids) {
     if (!(CHECK_IDS as readonly string[]).includes(id)) {
       throw new UsageError(`Unknown check "${id}" in --skip. Checks: ${CHECK_IDS.join(", ")}.`);

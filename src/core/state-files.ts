@@ -9,10 +9,9 @@
  */
 
 import type { ConfigSnapshot, SavedRuns } from "./types.js";
+import { isObject } from "./util.js";
 
 type Check = (value: unknown, at: string) => string | undefined;
-
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 const describe = (v: unknown) => (v === null ? "null" : Array.isArray(v) ? "an array" : `a ${typeof v}`);
 

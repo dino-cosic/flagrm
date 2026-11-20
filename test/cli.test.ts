@@ -276,7 +276,7 @@ describe("CLI error exit codes (spawned dist/cli.js)", () => {
     fs.writeFileSync(
       bug,
       'import fs from "node:fs"; const write = fs.writeFileSync;' +
-        'fs.writeFileSync = (file, ...rest) => { if (String(file).endsWith("verify.json")) throw new TypeError("simulated bug"); return write(file, ...rest); };',
+        'fs.writeFileSync = (file, ...rest) => { if (String(file).includes("verify.json")) throw new TypeError("simulated bug"); return write(file, ...rest); };',
       "utf8",
     );
     try {

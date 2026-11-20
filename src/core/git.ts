@@ -79,27 +79,21 @@ export function blobIds(cwd: string, files: string[]): Record<string, string | n
 }
 
 /**
- * Files added, modified or deleted in the working tree since `sha` (tracked
- * diff plus untracked files), without the ones `ignore` names.
+ * Files added, modified or deleted in the working tree since `sha` (staged or
+ * not), plus untracked files unless `untracked` is false, without the ones
+ * `ignore` names. Undefined when git can't tell.
  */
-export function changedFilesSince(cwd: string, sha: string, ignore?: ChangeFilter): string[] | undefined {
+export function changedFilesSince(
+  cwd: string,
+  sha: string,
+  ignore?: ChangeFilter,
+  options: { untracked?: boolean } = {},
+): string[] | undefined {
   if (!isRevision(sha)) return undefined;
   const diff = git(cwd, "diff", "-z", "--name-only", "--no-renames", "--relative", sha, ...PATHSPEC);
   if (!diff.ok) return undefined;
-  const all = [...new Set([...paths(diff.stdout), ...untracked(cwd)])].sort();
-  return ignore ? all.filter((rel) => !ignore(rel)) : all;
-}
-
-/**
- * Tracked files modified or deleted in the working tree since `sha` (staged
- * or not), without the ones `ignore` names; untracked files don't count.
- * Undefined when git can't tell.
- */
-export function trackedChangesSince(cwd: string, sha: string, ignore?: ChangeFilter): string[] | undefined {
-  if (!isRevision(sha)) return undefined;
-  const diff = git(cwd, "diff", "-z", "--name-only", "--no-renames", "--relative", sha, ...PATHSPEC);
-  if (!diff.ok) return undefined;
-  const all = paths(diff.stdout).sort();
+  const extra = options.untracked === false ? [] : untracked(cwd);
+  const all = [...new Set([...paths(diff.stdout), ...extra])].sort();
   return ignore ? all.filter((rel) => !ignore(rel)) : all;
 }
 

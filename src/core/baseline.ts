@@ -28,7 +28,7 @@ import {
   READABLE_BASELINE_VERSIONS,
   type RecordedName,
 } from "./types.js";
-import { readJson, relativePath } from "./util.js";
+import { readJson, relativePath, splitList, writeJsonFile } from "./util.js";
 import { shortTestNames } from "./verify/test-results.js";
 
 /** The `flagrm baseline` options, as parsed from the command line. */
@@ -213,8 +213,7 @@ export function writeBaseline(
 
 function saveBaseline(root: string, baseline: Baseline): { baseline: Baseline; file: string } {
   const file = baselinePath(root, baseline.flag);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(baseline, null, 2)}\n`, "utf8");
+  writeJsonFile(file, baseline);
   return { baseline, file };
 }
 
@@ -337,10 +336,7 @@ export type Acceptance = "config" | "failures";
 
 /** Parse `--accept config,failures`; throws on anything else, or nothing. */
 export function parseAccept(value: string): Acceptance[] {
-  const items = value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const items = splitList(value);
   if (items.length === 0) throw new UsageError("--accept takes config, failures; got nothing.");
   for (const item of items) {
     if (item !== "config" && item !== "failures") {

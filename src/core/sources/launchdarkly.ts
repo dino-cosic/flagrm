@@ -7,6 +7,7 @@
 
 import type { LaunchDarklyConfig } from "../config.js";
 import { UsageError } from "../errors.js";
+import { isObject } from "../util.js";
 import { type FlagSource, type Served, SourceError, type SourceFlag, type SourceRead } from "./types.js";
 
 export const LD_API_VERSION = "20240415";
@@ -63,7 +64,6 @@ export interface LaunchDarklyOptions {
 
 type Json = Record<string, unknown>;
 
-const isObject = (v: unknown): v is Json => v !== null && typeof v === "object" && !Array.isArray(v);
 const iso = (ms: number) => new Date(ms).toISOString();
 
 export class LaunchDarklySource implements FlagSource {
