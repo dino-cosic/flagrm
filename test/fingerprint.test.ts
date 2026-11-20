@@ -94,6 +94,30 @@ describe("treeFingerprint", () => {
     expect(git("status", "--porcelain")).toBe(status);
   });
 
+  it("writes no objects into the repository", () => {
+    commit("init");
+    write("a.txt", "changed\n");
+    write("sub/new.txt", "n\n");
+    const objects = git("count-objects", "-v");
+    const fingerprint = treeFingerprint(tmp);
+    expect(fingerprint).toMatch(/^[0-9a-f]{40,64}$/);
+    expect(git("count-objects", "-v")).toBe(objects);
+    // The id is still the tree a commit of this working tree gets.
+    expect(commit("edit") && treeAt(tmp, "HEAD")).toBe(fingerprint);
+  });
+
+  // Windows doesn't allow ":" in a file name.
+  it.skipIf(process.platform === "win32")("works in a repository whose path contains a colon", () => {
+    const repo = path.join(tmp, "a:b");
+    fs.mkdirSync(repo);
+    execFileSync("git", ["init", "-q"], { cwd: repo });
+    fs.writeFileSync(path.join(repo, "keep.txt"), "k\n");
+    execFileSync("git", ["add", "-A"], { cwd: repo });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"], { cwd: repo });
+    // The filter makes the fingerprint read HEAD's tree, which only the repository's own object store has.
+    expect(treeFingerprint(repo, () => false)).toBe(treeAt(repo, "HEAD"));
+  });
+
   it("covers only the subdirectory when the config root is one", () => {
     const sha = commit("init");
     const sub = path.join(tmp, "sub");

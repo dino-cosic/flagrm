@@ -14,8 +14,20 @@ import type { GitState } from "./types.js";
 /** Excludes flagrm's own output from every diff. */
 const PATHSPEC = ["--", ".", ":(exclude).flagrm"];
 
+/**
+ * Lets read-only commands (`diff`, `status`) skip refreshing the index, which
+ * takes `index.lock`: the Stop hook can run while the user or the agent runs
+ * git, and their command would fail on the lock.
+ */
+const NO_OPTIONAL_LOCKS = { GIT_OPTIONAL_LOCKS: "0" };
+
 function git(cwd: string, ...args: string[]): { ok: boolean; stdout: string } {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+    env: { ...process.env, ...NO_OPTIONAL_LOCKS },
+  });
   return { ok: result.status === 0, stdout: result.stdout ?? "" };
 }
 
@@ -98,14 +110,40 @@ export function fileAt(cwd: string, sha: string, relativePath: string): string |
   return result.ok ? result.stdout : undefined;
 }
 
-function gitWithIndex(cwd: string, index: string, args: string[], input?: string): { ok: boolean; stdout: string } {
+/** A scratch index and object store: objects git writes go to `objects`, and the repository's own stay readable. */
+interface Scratch {
+  index: string;
+  objects: string;
+  realObjects: string;
+}
+
+/**
+ * `dir` as one entry of `GIT_ALTERNATE_OBJECT_DIRECTORIES`, which git splits
+ * on `:` (`;` on Windows): a path containing the separator, or starting with a
+ * quote, goes in C-style quotes, which git reads as one path.
+ */
+export function alternatePath(dir: string): string {
+  if (!dir.includes(path.delimiter) && !dir.startsWith('"')) return dir;
+  return `"${dir.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function gitWithIndex(cwd: string, scratch: Scratch, args: string[], input?: string): { ok: boolean; stdout: string } {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
     input,
-    // Literal: a file named `[ab].txt` must not match `a.txt` when its path is passed back to git.
-    env: { ...process.env, GIT_INDEX_FILE: index, GIT_LITERAL_PATHSPECS: input === undefined ? undefined : "1" },
+    env: {
+      ...process.env,
+      ...NO_OPTIONAL_LOCKS,
+      GIT_INDEX_FILE: scratch.index,
+      // The blobs and trees `add` and `write-tree` create land in the temporary directory and are deleted with it,
+      // instead of piling up as unreachable objects in the repository until `git gc`.
+      GIT_OBJECT_DIRECTORY: scratch.objects,
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: alternatePath(scratch.realObjects),
+      // Literal: a file named `[ab].txt` must not match `a.txt` when its path is passed back to git.
+      GIT_LITERAL_PATHSPECS: input === undefined ? undefined : "1",
+    },
   });
   return { ok: result.status === 0, stdout: result.stdout ?? "" };
 }
@@ -119,26 +157,30 @@ function repoPrefix(cwd: string): string | undefined {
 /**
  * The git tree id of the working tree under `cwd` as it would be committed:
  * tracked and untracked files, not ignored ones, without `.flagrm/` and the
- * paths `ignore` names. Built in a temporary copy of the index, so the user's
- * index is untouched. Committing the tree doesn't change it; any edit does.
+ * paths `ignore` names. Built in a temporary copy of the index and a temporary
+ * object store, so the user's index is untouched and no objects are left
+ * behind in the repository. Committing the tree doesn't change it; any edit does.
  * Before any edit it equals {@link treeAt} of HEAD, as long as the ignored
  * paths are unchanged since.
  */
 export function treeFingerprint(cwd: string, ignore?: ChangeFilter): string | undefined {
   const prefix = repoPrefix(cwd);
   if (prefix === undefined) return undefined;
-  const realIndex = git(cwd, "rev-parse", "--path-format=absolute", "--git-path", "index").stdout.trim();
+  const gitPaths = git(cwd, "rev-parse", "--path-format=absolute", "--git-path", "index", "--git-path", "objects");
+  const [realIndex, realObjects] = gitPaths.stdout.split("\n").map((line) => line.trim());
+  if (!gitPaths.ok || !realIndex || !realObjects) return undefined;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flagrm-index-"));
-  const index = path.join(dir, "index");
+  const scratch: Scratch = { index: path.join(dir, "index"), objects: path.join(dir, "objects"), realObjects };
   try {
+    fs.mkdirSync(scratch.objects);
     // Keep the index's mtime: git compares it with entry mtimes to catch same-second ("racy") edits.
-    if (realIndex && fs.existsSync(realIndex)) fs.cpSync(realIndex, index, { preserveTimestamps: true });
+    if (fs.existsSync(realIndex)) fs.cpSync(realIndex, scratch.index, { preserveTimestamps: true });
     // Not PATHSPEC: `git add` exits 1 when an exclude pathspec names an ignored path (`.flagrm/` usually is).
-    if (!gitWithIndex(cwd, index, ["add", "-A", "--", "."]).ok) return undefined;
-    if (!gitWithIndex(cwd, index, ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".flagrm"]).ok)
+    if (!gitWithIndex(cwd, scratch, ["add", "-A", "--", "."]).ok) return undefined;
+    if (!gitWithIndex(cwd, scratch, ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".flagrm"]).ok)
       return undefined;
-    if (ignore && !dropIgnored(cwd, index, ignore)) return undefined;
-    const tree = gitWithIndex(cwd, index, ["write-tree", ...(prefix ? [`--prefix=${prefix}`] : [])]);
+    if (ignore && !dropIgnored(cwd, scratch, ignore)) return undefined;
+    const tree = gitWithIndex(cwd, scratch, ["write-tree", ...(prefix ? [`--prefix=${prefix}`] : [])]);
     return tree.ok ? tree.stdout.trim() : undefined;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -149,13 +191,13 @@ export function treeFingerprint(cwd: string, ignore?: ChangeFilter): string | un
  * Put back each path `ignore` names as it is at HEAD (or drop it, if HEAD
  * doesn't have it), so the fingerprint doesn't see changes to it.
  */
-function dropIgnored(cwd: string, index: string, ignore: ChangeFilter): boolean {
+function dropIgnored(cwd: string, scratch: Scratch, ignore: ChangeFilter): boolean {
   const head = headSha(cwd);
   // The paths that differ from HEAD, deleted ones included: `ls-files` no longer lists a deleted file.
   // Before the first commit there is no HEAD to compare with, so every path in the index.
   const listing = head
-    ? gitWithIndex(cwd, index, ["diff-index", "--cached", "--name-only", "--no-renames", "--relative", "-z", "HEAD"])
-    : gitWithIndex(cwd, index, ["ls-files", "-z"]);
+    ? gitWithIndex(cwd, scratch, ["diff-index", "--cached", "--name-only", "--no-renames", "--relative", "-z", "HEAD"])
+    : gitWithIndex(cwd, scratch, ["ls-files", "-z"]);
   if (!listing.ok) return false;
   const listed = paths(listing.stdout).filter(ignore);
   if (listed.length === 0) return true;
@@ -163,7 +205,7 @@ function dropIgnored(cwd: string, index: string, ignore: ChangeFilter): boolean 
   const fromFile = ["--pathspec-from-file=-", "--pathspec-file-nul"];
   // `reset` also drops a path HEAD doesn't have; before the first commit there is no HEAD to reset to.
   const args = head ? ["reset", "-q", "HEAD", ...fromFile] : ["rm", "-q", "--cached", ...fromFile];
-  return gitWithIndex(cwd, index, args, input).ok;
+  return gitWithIndex(cwd, scratch, args, input).ok;
 }
 
 /** The tree id of `cwd` at commit `sha`. */
