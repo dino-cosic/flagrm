@@ -117,6 +117,16 @@ interface Scratch {
   realObjects: string;
 }
 
+/**
+ * `dir` as one entry of `GIT_ALTERNATE_OBJECT_DIRECTORIES`, which git splits
+ * on `:` (`;` on Windows): a path containing the separator, or starting with a
+ * quote, goes in C-style quotes, which git reads as one path.
+ */
+export function alternatePath(dir: string): string {
+  if (!dir.includes(path.delimiter) && !dir.startsWith('"')) return dir;
+  return `"${dir.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 function gitWithIndex(cwd: string, scratch: Scratch, args: string[], input?: string): { ok: boolean; stdout: string } {
   const result = spawnSync("git", args, {
     cwd,
@@ -130,7 +140,7 @@ function gitWithIndex(cwd: string, scratch: Scratch, args: string[], input?: str
       // The blobs and trees `add` and `write-tree` create land in the temporary directory and are deleted with it,
       // instead of piling up as unreachable objects in the repository until `git gc`.
       GIT_OBJECT_DIRECTORY: scratch.objects,
-      GIT_ALTERNATE_OBJECT_DIRECTORIES: scratch.realObjects,
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: alternatePath(scratch.realObjects),
       // Literal: a file named `[ab].txt` must not match `a.txt` when its path is passed back to git.
       GIT_LITERAL_PATHSPECS: input === undefined ? undefined : "1",
     },
