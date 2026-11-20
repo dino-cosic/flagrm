@@ -56,7 +56,7 @@
     "picocolors": "^1.1.1",
     "picomatch": "^4.0.7",
     "tinyglobby": "^0.2.17",
-    "typescript": "^5.7.0",
+    "typescript": "^7.0.2",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
