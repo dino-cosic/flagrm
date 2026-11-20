@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { UsageError } from "./errors.js";
+import { isObject, splitList } from "./util.js";
 
 export const ADAPTER_IDS = ["angular", "dotnet", "generic"] as const;
 
@@ -15,7 +16,7 @@ export type ToolId = (typeof TOOL_IDS)[number];
 /** `tools:` as configured, checked; undefined when the key is absent. */
 export function parseTools(value: unknown, where = "tools"): ToolId[] | undefined {
   if (value === undefined || value === null) return undefined;
-  const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : undefined;
+  const list = Array.isArray(value) ? value : typeof value === "string" ? splitList(value) : undefined;
   if (!list) throw new UsageError(`${where} must be a list of ${TOOL_IDS.join(", ")}.`);
   const tools = list.map((t) => String(t).trim()).filter(Boolean);
   for (const t of tools) {
@@ -299,10 +300,6 @@ function optionalPositiveDays(value: unknown, where: string): number | undefined
     throw new UsageError(`${where} must be a positive whole number of days.`);
   }
   return value;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function optionalStringMap(value: unknown, where: string): Record<string, string> | undefined {

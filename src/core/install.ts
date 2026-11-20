@@ -197,15 +197,33 @@ export function installSkills(
       }
       if (mode === "update" && !exists) continue;
       const before = exists ? snapshot(target) : undefined;
-      fs.rmSync(target, { recursive: true, force: true });
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.cpSync(path.join(source, skill), target, { recursive: true });
-      stampSkill(path.join(target, "SKILL.md"), version);
+      replaceDir(target, (staged) => {
+        fs.cpSync(path.join(source, skill), staged, { recursive: true });
+        stampSkill(path.join(staged, "SKILL.md"), version);
+      });
       const status = !exists ? "created" : before === snapshot(target) ? "unchanged" : "updated";
       results.push({ path: relativePath(cwd, target), status });
     }
   }
   return results;
+}
+
+/**
+ * Replace `target` with a directory `fill` writes: it is built next to
+ * `target` first, so a copy that fails halfway leaves the installed one as it
+ * was instead of no directory at all.
+ */
+function replaceDir(target: string, fill: (staged: string) => void): void {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const staged = `${target}.flagrm-new`;
+  fs.rmSync(staged, { recursive: true, force: true });
+  try {
+    fill(staged);
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.renameSync(staged, target);
+  } finally {
+    fs.rmSync(staged, { recursive: true, force: true });
+  }
 }
 
 /** Every file under `dir` with its content, for telling an update from a no-op. */

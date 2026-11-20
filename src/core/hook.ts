@@ -10,7 +10,7 @@ import path from "node:path";
 import { type ChangeFilter, changeFilterAt } from "./change-filter.js";
 import { findConfigRoot } from "./config.js";
 import { scanConfigChanged } from "./config-snapshot.js";
-import { headSha, isAncestor, trackedChangesSince, treeFingerprint } from "./git.js";
+import { changedFilesSince, headSha, isAncestor, treeFingerprint } from "./git.js";
 import { COMMIT_ID, isConfigSnapshot } from "./state-files.js";
 import type { ConfigSnapshot, VerifyReport } from "./types.js";
 import { readJson } from "./util.js";
@@ -141,17 +141,20 @@ function startedRemovals(root: string, ignore: ChangeFilter): Tracked[] {
     .filter((r): r is Tracked => r !== undefined);
   const editedSince = new Map<string, boolean>();
   const edited = (sha: string) => {
-    if (!editedSince.has(sha)) editedSince.set(sha, (trackedChangesSince(root, sha, ignore) ?? []).length > 0);
+    if (!editedSince.has(sha))
+      editedSince.set(sha, (changedFilesSince(root, sha, ignore, { untracked: false }) ?? []).length > 0);
     return editedSince.get(sha) === true;
   };
   return active.filter(
-    (r) => edited(r.baseline.sha) || lastVerifySkipped(r.flagDir) || scanConfigChanged(r.baseline.config, root),
+    (r) => edited(r.baseline.sha) || lastVerifySkipped(r.verify) || scanConfigChanged(r.baseline.config, root),
   );
 }
 
 interface Tracked {
   flagDir: string;
   baseline: HookBaseline;
+  /** The last verify's report, read once; undefined when there is none or it isn't JSON. */
+  verify?: Partial<VerifyReport>;
   /** HEAD moved past the baseline commit. */
   committed: boolean;
 }
@@ -160,17 +163,15 @@ interface Tracked {
 function tracked(flagDir: string, root: string, head: string): Tracked | undefined {
   const baseline = readBaseline(flagDir);
   if (!baseline) return undefined;
-  if (baseline.sha === head) return { flagDir, baseline, committed: false };
-  if (everPassed(flagDir) || !isAncestor(root, baseline.sha)) return undefined;
-  return { flagDir, baseline, committed: true };
+  const verify = readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"));
+  if (baseline.sha === head) return { flagDir, baseline, verify, committed: false };
+  // Ever passed: one passing verify releases a committed removal.
+  if (verify?.status === "pass" || !isAncestor(root, baseline.sha)) return undefined;
+  return { flagDir, baseline, verify, committed: true };
 }
 
-function everPassed(flagDir: string): boolean {
-  return readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"))?.status === "pass";
-}
-
-function lastVerifySkipped(flagDir: string): boolean {
-  const skipped = readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"))?.skipped;
+function lastVerifySkipped(verify: Partial<VerifyReport> | undefined): boolean {
+  const skipped = verify?.skipped;
   return Array.isArray(skipped) && skipped.length > 0;
 }
 
@@ -204,14 +205,13 @@ function readBaseline(flagDir: string): HookBaseline | undefined {
 }
 
 /** Why the in-progress removal is not verified, or undefined when a full verify passed on `current`. */
-function unverified({ flagDir, baseline, committed }: Tracked, current: string): string | undefined {
+function unverified({ flagDir, baseline, verify, committed }: Tracked, current: string): string | undefined {
   const run = `run flagrm verify ${baseline.flag} --json`;
   if (committed) {
     // Not released by a verify yet, or `tracked` would have dropped it.
     const abandoned = `.flagrm/${path.basename(flagDir)}`;
     return `flagrm: ${baseline.flag} removal committed but never verified — ${run} (or delete ${abandoned} if it was abandoned)`;
   }
-  const verify = readJson<Partial<VerifyReport>>(path.join(flagDir, "verify.json"));
   // A report without `skipped` comes from an older flagrm, which didn't record skips.
   const skipped = verify?.skipped;
   if (verify?.status !== "pass" || verify.fingerprint !== current || !isStringArray(skipped)) {

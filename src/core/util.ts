@@ -11,6 +11,32 @@ export function relativePath(from: string, file: string): string {
   return path.relative(from, file).split(path.sep).join("/");
 }
 
+/** A plain object: not null, not an array. */
+export const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** The items of a comma-separated list (`--skip build,tests`), trimmed, without empty ones. */
+export const splitList = (value: string): string[] =>
+  value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+/**
+ * Write `value` as JSON to `file` (creating its directory) through a temporary
+ * file and a rename, so a reader such as the Stop hook never sees half a file.
+ */
+export function writeJsonFile(file: string, value: unknown): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    fs.renameSync(tmp, file);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
 /** A JSON file's parsed content, or undefined when it is missing or not valid JSON. */
 export function readJson<T>(file: string): T | undefined {
   try {
