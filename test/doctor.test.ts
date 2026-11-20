@@ -75,6 +75,14 @@ describe("runDoctor", () => {
     expect(await problems(tmp, { env: { SHOP_LD: "api-123" } })).toEqual([]);
   });
 
+  it("warns about an unknown config key without failing", async () => {
+    fs.appendFileSync(path.join(tmp, "flagrm.config.yaml"), "    tset: x\n");
+    commitAll();
+    const report = await runDoctor(tmp);
+    expect(report.status).toBe("ok");
+    expect(await problems()).toEqual([expect.stringMatching(/^warn config: unknown key "tset" in project "svc"/)]);
+  });
+
   it("fails without a config file", async () => {
     fs.rmSync(path.join(tmp, "flagrm.config.yaml"));
     expect(await problems()).toContain("fail no flagrm.config.yaml (run flagrm init)");

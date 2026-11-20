@@ -12,7 +12,7 @@ const write = (rel: string, text: string) => {
   fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });
   fs.writeFileSync(path.join(tmp, rel), text);
 };
-const workspace = () => resolveProjects(loadConfig({ quiet: true }, tmp));
+const workspace = () => resolveProjects(loadConfig({}, tmp));
 const FLAGS = [
   { flag: "Paging", aliases: ["FeatureFlags.Paging"] },
   { flag: "PagingV2", aliases: ["FeatureFlags.PagingV2"] },

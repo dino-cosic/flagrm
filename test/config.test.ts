@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_BACKEND_ATTRIBUTES, DEFAULT_BACKEND_METHODS, loadConfig } from "../src/core/config.js";
+import { DEFAULT_BACKEND_ATTRIBUTES, DEFAULT_BACKEND_METHODS, loadConfig, readConfig } from "../src/core/config.js";
 
 let tmp: string;
 
@@ -73,31 +73,26 @@ describe("loadConfig — exclude/include globs", () => {
   });
 });
 
-describe("loadConfig — unknown key warning", () => {
-  it("warns on stderr about an unrecognized top-level config key", () => {
+describe("readConfig — unknown key warnings", () => {
+  it("returns a warning for an unrecognized top-level config key", () => {
     writeConfig(["projects: [{ name: backend, adapter: dotnet, path: ./backend }]", "frontEnd: ./oops"].join("\n"));
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    loadConfig({}, tmp);
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('unknown key "frontEnd"'));
-    spy.mockRestore();
+    expect(readConfig({}, tmp).warnings).toEqual([expect.stringContaining('unknown key "frontEnd"')]);
   });
 
-  it("does not warn with quiet, at the top level or in a project", () => {
+  it("never prints: the caller decides whether to show the warnings", () => {
     writeConfig("frontEnd: ./oops\nprojects:\n  - { name: api, adapter: dotnet, path: ./backend, tset: x }\n");
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    loadConfig({ quiet: true }, tmp);
+    expect(readConfig({}, tmp).warnings).toHaveLength(2);
+    loadConfig({}, tmp);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 
-  it("does not warn when every key is recognized", () => {
+  it("returns no warnings when every key is recognized", () => {
     writeConfig(
       ["projects: [{ name: backend, adapter: dotnet, path: ./backend }]", "exclude:", "  - '**/bin/**'"].join("\n"),
     );
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    loadConfig({}, tmp);
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
+    expect(readConfig({}, tmp).warnings).toEqual([]);
   });
 });
 
@@ -174,10 +169,7 @@ describe("loadConfig — projects", () => {
 
   it("warns about unknown keys inside a project", () => {
     writeConfig("projects:\n  - { name: api, adapter: dotnet, path: ./backend, buidl: make }\n");
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    loadConfig({}, tmp);
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('unknown key "buidl" in project "api"'));
-    spy.mockRestore();
+    expect(readConfig({}, tmp).warnings).toEqual([expect.stringContaining('unknown key "buidl" in project "api"')]);
   });
 });
 
@@ -236,10 +228,7 @@ describe("loadConfig — commands", () => {
 
   it("knows lint and covers: no unknown-key warning", () => {
     writeConfig(`${project}    lint: npx eslint .\n    covers: ["src/**"]\n`);
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    loadConfig({}, tmp);
-    expect(spy).not.toHaveBeenCalledWith(expect.stringContaining("unknown key"));
-    spy.mockRestore();
+    expect(readConfig({}, tmp).warnings).toEqual([]);
   });
 });
 
@@ -303,11 +292,10 @@ describe("loadConfig — launchdarkly", () => {
 
   it("warns about unknown keys in the section and in tags", () => {
     withLd(["  project: shop", "  minDays: 30", "  tags: { exlude: [x] }"]);
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    loadConfig({}, tmp);
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('unknown key "minDays" in "launchdarkly"'));
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('unknown key "exlude" in "launchdarkly.tags"'));
-    spy.mockRestore();
+    expect(readConfig({}, tmp).warnings).toEqual([
+      expect.stringContaining('unknown key "minDays" in "launchdarkly"'),
+      expect.stringContaining('unknown key "exlude" in "launchdarkly.tags"'),
+    ]);
   });
 
   it.each([

@@ -22,7 +22,7 @@ const edit = (text: string) => fs.writeFileSync(path.join(tmp, "a.txt"), text);
 const baseline = (flag = "NewCheckout") => writeBaseline(tmp, flag, [], gitState(tmp));
 /** A baseline with the config snapshot `flagrm baseline` records, from `flagrm.config.yaml` in `tmp`. */
 const configuredBaseline = (flag = "NewCheckout") =>
-  writeBaseline(tmp, flag, resolveProjects(loadConfig({ quiet: true }, tmp)), gitState(tmp));
+  writeBaseline(tmp, flag, resolveProjects(loadConfig({}, tmp)), gitState(tmp));
 const verified = (status: "pass" | "fail", flag = "NewCheckout", skipped: string[] = []) => {
   fs.mkdirSync(flagDir(tmp, flag), { recursive: true });
   fs.writeFileSync(

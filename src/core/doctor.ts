@@ -10,7 +10,7 @@ import { realProbes, type SetupProbes } from "../adapters/dotnet/setup.js";
 import type { ProjectContext, Workspace } from "./adapter.js";
 import { changeFilter, changeFilterAt } from "./change-filter.js";
 import { incrementalBuildGap, templateCheckGap } from "./command-gaps.js";
-import { findConfigFile, loadConfig, TOOL_IDS, type ToolId } from "./config.js";
+import { findConfigFile, readConfig, TOOL_IDS, type ToolId } from "./config.js";
 import { projectCommands } from "./config-snapshot.js";
 import { gitState, isAncestor } from "./git.js";
 import { committedUnverified, HOOK_DEBUG_ENV } from "./hook.js";
@@ -140,7 +140,8 @@ async function configChecks(
   let root: string;
   let projects: ReturnType<typeof resolveProjects>;
   try {
-    const config = loadConfig({ config: configFile }, cwd);
+    const { config, warnings } = readConfig({ config: configFile }, cwd);
+    for (const warning of warnings) add("warn", `config: ${warning}`);
     root = config.root;
     projects = resolveProjects(config);
     // Only `flagrm stale` needs the token, so a missing one warns: removals without LaunchDarkly still work.

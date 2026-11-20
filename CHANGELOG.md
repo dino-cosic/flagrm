@@ -21,6 +21,8 @@ contain breaking changes.
   runner left in watch mode would keep `baseline` and `verify` waiting forever.
 - `doctor` warns about a removal that was committed but never verified, so
   a leftover baseline is found before the Stop hook blocks on it.
+- `doctor` lists unknown config keys (likely typos) among its warnings,
+  instead of printing them to stderr ahead of its report.
 
 ### Changed
 

@@ -28,26 +28,12 @@ export function parseTools(value: unknown, where = "tools"): ToolId[] | undefine
 }
 
 /** One configured project, fully resolved (absolute paths, defaults applied). */
-export interface ProjectConfig {
+export interface ProjectConfig extends ProjectOptions {
   /** Unique name, used to label every reference and result. */
   name: string;
   adapter: AdapterId;
   /** Absolute path to the project root. */
   path: string;
-  /** Build command, run inside `path` by `verify`; `false` runs none. Absent: the adapter's default. */
-  build?: string | false;
-  /** Test command, run inside `path` by `verify`; `false` runs none. Absent: the adapter's default. */
-  test?: string | false;
-  /** Lint or type-check command, run inside `path` by `baseline` and `verify`; `false` or absent runs none (no adapter default). */
-  lint?: string | false;
-  /** Seconds each build/test/lint command may run before it is killed and fails; unlimited when absent. */
-  timeout?: number;
-  /** Absolute path or glob of the JUnit/TRX files `test` writes, so `verify` can count tests. */
-  testResults?: string;
-  /** Globs (relative to `path`) replacing the adapter's default language globs. */
-  globs?: string[];
-  /** Globs (relative to `path`) of the files the project's commands check, for the `coverage` check; absent: everything under `path`. */
-  covers?: string[];
   /** Method names treated as flag evaluations. */
   methods: string[];
   /** Attribute names treated as feature gates (.NET). */
@@ -111,37 +97,9 @@ export interface CliPathOptions {
   exclude?: string[];
   /** Additional glob patterns to include (unioned with the config file's `include`). */
   include?: string[];
-  /** Don't warn about unknown keys (the Stop hook reads the config too, and must print nothing else). */
-  quiet?: boolean;
-}
-
-interface ProjectFileShape {
-  name?: unknown;
-  adapter?: unknown;
-  path?: unknown;
-  build?: unknown;
-  test?: unknown;
-  lint?: unknown;
-  testResults?: unknown;
-  timeout?: unknown;
-  globs?: unknown;
-  covers?: unknown;
-  methods?: unknown;
-  attributes?: unknown;
-}
-
-interface ConfigFileShape {
-  projects?: unknown;
-  tools?: unknown;
-  exclude?: string[];
-  include?: string[];
-  launchdarkly?: unknown;
 }
 
 export const CONFIG_FILENAMES = ["flagrm.config.yaml", "flagrm.config.yml", "flagrm.config.json"];
-
-/** Known top-level `flagrm.config.yaml` keys — anything else is likely a typo. */
-const KNOWN_CONFIG_KEYS = ["projects", "tools", "exclude", "include", "launchdarkly"];
 
 const KNOWN_LAUNCHDARKLY_KEYS = [
   "project",
@@ -152,21 +110,6 @@ const KNOWN_LAUNCHDARKLY_KEYS = [
   "temporaryOnly",
   "tags",
   "map",
-];
-
-const KNOWN_PROJECT_KEYS = [
-  "name",
-  "adapter",
-  "path",
-  "build",
-  "test",
-  "lint",
-  "testResults",
-  "timeout",
-  "globs",
-  "covers",
-  "methods",
-  "attributes",
 ];
 
 /** Top-level keys removed in 1.0, with what replaces them. */
@@ -191,27 +134,96 @@ export function parseConfigText(configPath: string, text: string): unknown {
   }
 }
 
-function readConfigFile(configPath: string): ConfigFileShape {
-  const parsed = parseConfigText(configPath, fs.readFileSync(configPath, "utf8"));
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new UsageError(`Config file ${configPath} does not contain an object.`);
+/**
+ * Each key's parser: `(value, where)` checks the raw value (undefined when the
+ * key is absent) and returns it typed, or throws a {@link UsageError} naming
+ * `where`. A key table is the one place a key is declared: the known-key list
+ * for typo warnings and the parsed type both derive from it.
+ */
+type KeyParser = (value: unknown, where: string, fileDir: string) => unknown;
+
+/** The parsed values of a key table; absent keys stay optional. */
+type Parsed<T extends Record<string, KeyParser>> = { [K in keyof T]?: Exclude<ReturnType<T[K]>, undefined> };
+
+/** Top-level `flagrm.config.yaml` keys. `projects` and `launchdarkly` are only shape-checked here. */
+const CONFIG_KEYS = {
+  projects: (value) => {
+    if (value !== undefined && !Array.isArray(value)) {
+      throw new UsageError(`"projects" must be a list of { name, adapter, path } entries.`);
+    }
+    return value as unknown[] | undefined;
+  },
+  tools: (value, where) => parseTools(value, where),
+  /** Additional glob patterns to exclude from scanning. */
+  exclude: optionalStringList,
+  /** Additional glob patterns to include. */
+  include: optionalStringList,
+  launchdarkly: (value) => value,
+} satisfies Record<string, KeyParser>;
+
+/**
+ * Optional `projects:` entry keys. `name`, `adapter` and `path` are parsed
+ * first, by {@link parseProject}, because the others' messages and defaults
+ * depend on them.
+ */
+const PROJECT_KEYS = {
+  /** Build command, run inside `path` by `verify`; `false` runs none. Absent: the adapter's default. */
+  build: optionalCommand,
+  /** Test command, run inside `path` by `verify`; `false` runs none. Absent: the adapter's default. */
+  test: optionalCommand,
+  /** Lint or type-check command, run inside `path` by `baseline` and `verify`; `false` or absent runs none (no adapter default). */
+  lint: optionalCommand,
+  /** Absolute path or glob of the JUnit/TRX files `test` writes, so `verify` can count tests. */
+  testResults: (value, where, fileDir) => {
+    const raw = optionalString(value, where);
+    return raw && path.resolve(fileDir, raw);
+  },
+  /** Seconds each build/test/lint command may run before it is killed and fails; unlimited when absent. */
+  timeout: optionalPositiveNumber,
+  /** Globs (relative to `path`) replacing the adapter's default language globs. */
+  globs: optionalStringList,
+  /** Globs (relative to `path`) of the files the project's commands check, for the `coverage` check; absent: everything under `path`. */
+  covers: optionalStringList,
+  /** Method names treated as flag evaluations; absent: the adapter's defaults. */
+  methods: optionalStringList,
+  /** Attribute names treated as feature gates (.NET); absent: the adapter's defaults. */
+  attributes: optionalStringList,
+} satisfies Record<string, KeyParser>;
+
+/** A project's optional settings, as {@link PROJECT_KEYS} parses them. */
+export type ProjectOptions = Parsed<typeof PROJECT_KEYS>;
+
+const KNOWN_PROJECT_KEYS = ["name", "adapter", "path", ...Object.keys(PROJECT_KEYS)];
+
+/** Run every parser of `table` over `raw`; only keys with a value end up in the result. */
+function parseKeys<T extends Record<string, KeyParser>>(
+  table: T,
+  raw: Record<string, unknown>,
+  where: (key: string) => string,
+  fileDir: string,
+): Parsed<T> {
+  const result: Record<string, unknown> = {};
+  for (const [key, parse] of Object.entries(table)) {
+    const value = parse(raw[key], where(key), fileDir);
+    if (value !== undefined) result[key] = value;
   }
-  const file = parsed as Record<string, unknown>;
-  for (const [key, replacement] of Object.entries(REMOVED_CONFIG_KEYS)) {
-    if (key in file) throw new UsageError(`${configPath}: "${key}" was removed in flagrm 1.0; use ${replacement}.`);
-  }
-  // Checked here so a YAML string (`exclude: "**/gen/**"`) fails instead of being spread into characters.
-  for (const key of ["exclude", "include"] as const) {
-    optionalStringList(file[key], key);
-  }
-  return file as ConfigFileShape;
+  return result as Parsed<T>;
 }
 
-/** Warn (stderr) about keys that don't match any known option — likely a typo. */
-function warnOnUnknownKeys(obj: object, known: string[], where: string): void {
-  for (const key of Object.keys(obj).filter((k) => !known.includes(k))) {
-    console.error(`Warning: unknown key "${key}" in ${where} — ignored. Known keys: ${known.join(", ")}`);
+function readConfigFile(configPath: string): Record<string, unknown> {
+  const parsed = parseConfigText(configPath, fs.readFileSync(configPath, "utf8"));
+  if (!isObject(parsed)) throw new UsageError(`Config file ${configPath} does not contain an object.`);
+  for (const [key, replacement] of Object.entries(REMOVED_CONFIG_KEYS)) {
+    if (key in parsed) throw new UsageError(`${configPath}: "${key}" was removed in flagrm 1.0; use ${replacement}.`);
   }
+  return parsed;
+}
+
+/** A warning for each key of `obj` that doesn't match any known option — likely a typo. */
+function unknownKeys(obj: object, known: readonly string[], where: string): string[] {
+  return Object.keys(obj)
+    .filter((k) => !known.includes(k))
+    .map((key) => `unknown key "${key}" in ${where} — ignored. Known keys: ${known.join(", ")}`);
 }
 
 /**
@@ -321,7 +333,7 @@ function optionalStringList(value: unknown, where: string): string[] | undefined
 const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 
 /** The `launchdarkly:` section with defaults applied; undefined when absent. */
-function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | undefined {
+function parseLaunchDarkly(raw: unknown, warnings: string[]): LaunchDarklyConfig | undefined {
   if (raw === undefined || raw === null) return undefined;
   const where = "launchdarkly";
   if (!isObject(raw)) throw new UsageError(`${where} must be an object with at least a "project".`);
@@ -333,7 +345,7 @@ function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | un
       );
     }
   }
-  if (!quiet) warnOnUnknownKeys(raw, KNOWN_LAUNCHDARKLY_KEYS, `"${where}"`);
+  warnings.push(...unknownKeys(raw, KNOWN_LAUNCHDARKLY_KEYS, `"${where}"`));
   const project = optionalString(raw.project, `${where}.project`);
   if (!project) throw new UsageError(`${where}.project is required: the LaunchDarkly project key.`);
 
@@ -355,7 +367,7 @@ function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | un
     throw new UsageError(`${where}.tags must be an object with "include" and/or "exclude" lists.`);
   }
   const tags = (raw.tags ?? {}) as Record<string, unknown>;
-  if (!quiet) warnOnUnknownKeys(tags, ["include", "exclude"], `"${where}.tags"`);
+  warnings.push(...unknownKeys(tags, ["include", "exclude"], `"${where}.tags"`));
 
   const environments = optionalStringList(raw.environments, `${where}.environments`);
   if (environments?.length === 0) throw new UsageError(`${where}.environments must name at least one environment.`);
@@ -374,66 +386,66 @@ function parseLaunchDarkly(raw: unknown, quiet = false): LaunchDarklyConfig | un
   };
 }
 
-/** Per-adapter defaults for `methods`/`attributes`. */
-function adapterDefaults(adapter: AdapterId): { methods: string[]; attributes: string[] } {
-  if (adapter === "angular") return { methods: DEFAULT_FRONTEND_METHODS, attributes: [] };
-  if (adapter === "dotnet") return { methods: DEFAULT_BACKEND_METHODS, attributes: DEFAULT_BACKEND_ATTRIBUTES };
-  return {
-    methods: [...new Set([...DEFAULT_FRONTEND_METHODS, ...DEFAULT_BACKEND_METHODS])],
-    attributes: DEFAULT_BACKEND_ATTRIBUTES,
-  };
+/** Per-adapter defaults for whichever of `methods`/`attributes` the project doesn't set. */
+function adapterDefaults(
+  adapter: AdapterId,
+  set: Pick<ProjectOptions, "methods" | "attributes">,
+): { methods: string[]; attributes: string[] } {
+  const defaults =
+    adapter === "angular"
+      ? { methods: DEFAULT_FRONTEND_METHODS, attributes: [] }
+      : adapter === "dotnet"
+        ? { methods: DEFAULT_BACKEND_METHODS, attributes: DEFAULT_BACKEND_ATTRIBUTES }
+        : {
+            methods: [...new Set([...DEFAULT_FRONTEND_METHODS, ...DEFAULT_BACKEND_METHODS])],
+            attributes: DEFAULT_BACKEND_ATTRIBUTES,
+          };
+  return { methods: set.methods ?? defaults.methods, attributes: set.attributes ?? defaults.attributes };
 }
 
-function parseProject(raw: unknown, index: number, fileDir: string, quiet = false): ProjectConfig {
+function parseProject(raw: unknown, index: number, fileDir: string, warnings: string[]): ProjectConfig {
   const where = `projects[${index}]`;
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new UsageError(`${where} must be an object with name, adapter and path.`);
-  }
-  const p = raw as ProjectFileShape;
-  if (typeof p.name !== "string" || !p.name) throw new UsageError(`${where} is missing a "name".`);
-  const name = p.name;
+  if (!isObject(raw)) throw new UsageError(`${where} must be an object with name, adapter and path.`);
+  const { name, adapter, path: dir } = raw;
+  if (typeof name !== "string" || !name) throw new UsageError(`${where} is missing a "name".`);
   if (!PROJECT_NAME.test(name)) {
     throw new UsageError(
       `${where}: name "${name}" must start with a letter or digit and contain only letters, digits, _ . -`,
     );
   }
-  if (!quiet) warnOnUnknownKeys(p, KNOWN_PROJECT_KEYS, `project "${name}"`);
-  if (typeof p.adapter !== "string" || !(ADAPTER_IDS as readonly string[]).includes(p.adapter)) {
-    throw new UsageError(`${where}: adapter "${String(p.adapter)}" is not one of ${ADAPTER_IDS.join(", ")}.`);
+  warnings.push(...unknownKeys(raw, KNOWN_PROJECT_KEYS, `project "${name}"`));
+  if (typeof adapter !== "string" || !(ADAPTER_IDS as readonly string[]).includes(adapter)) {
+    throw new UsageError(`${where}: adapter "${String(adapter)}" is not one of ${ADAPTER_IDS.join(", ")}.`);
   }
-  const adapter = p.adapter as AdapterId;
-  if (typeof p.path !== "string" || !p.path) throw new UsageError(`${where} ("${name}") is missing a "path".`);
+  if (typeof dir !== "string" || !dir) throw new UsageError(`${where} ("${name}") is missing a "path".`);
 
-  const defaults = adapterDefaults(adapter);
-  const testResults = optionalString(p.testResults, `${where}.testResults`);
-  const project: ProjectConfig = {
+  const options = parseKeys(PROJECT_KEYS, raw, (key) => `${where}.${key}`, fileDir);
+  return {
     name,
-    adapter,
-    path: resolveProjectDir(fileDir, p.path, `Project "${name}"`),
-    build: optionalCommand(p.build, `${where}.build`),
-    test: optionalCommand(p.test, `${where}.test`),
-    lint: optionalCommand(p.lint, `${where}.lint`),
-    testResults: testResults && path.resolve(fileDir, testResults),
-    timeout: optionalPositiveNumber(p.timeout, `${where}.timeout`),
-    globs: optionalStringList(p.globs, `${where}.globs`),
-    covers: optionalStringList(p.covers, `${where}.covers`),
-    methods: optionalStringList(p.methods, `${where}.methods`) ?? defaults.methods,
-    attributes: optionalStringList(p.attributes, `${where}.attributes`) ?? defaults.attributes,
+    adapter: adapter as AdapterId,
+    path: resolveProjectDir(fileDir, dir, `Project "${name}"`),
+    ...options,
+    ...adapterDefaults(adapter as AdapterId, options),
   };
-  // Keep the resolved shape free of absent optional keys.
-  for (const key of ["build", "test", "lint", "testResults", "timeout", "globs", "covers"] as const) {
-    if (project[key] === undefined) delete project[key];
-  }
-  return project;
+}
+
+/** The `config` and the warnings to show about it (unknown keys); {@link loadConfig} when they don't matter. */
+export interface LoadedConfig {
+  config: ToolConfig;
+  /** One line each, without a "Warning:" prefix. */
+  warnings: string[];
 }
 
 /**
  * Merge CLI options with an optional config file and validate everything.
+ * Prints nothing: the caller decides whether to show `warnings` (the Stop hook
+ * reads the config too, and must print nothing else).
  *
  * Projects come from the config file's `projects:` list.
  */
-export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig {
-  let file: ConfigFileShape = {};
+export function readConfig(cli: CliPathOptions, cwd = process.cwd()): LoadedConfig {
+  const warnings: string[] = [];
+  let raw: Record<string, unknown> = {};
   let fileDir = cwd;
   // Without --config, the nearest config up to the repository root is the workspace, as it is for the Stop hook.
   const configPath = cli.config ? path.resolve(cwd, cli.config) : findConfigFile(cwd);
@@ -441,17 +453,13 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
     throw new UsageError(`Config file not found: ${configPath}`);
   }
   if (configPath && fs.existsSync(configPath)) {
-    file = readConfigFile(configPath);
+    raw = readConfigFile(configPath);
     fileDir = path.dirname(configPath);
-    if (!cli.quiet) warnOnUnknownKeys(file, KNOWN_CONFIG_KEYS, configPath);
+    warnings.push(...unknownKeys(raw, Object.keys(CONFIG_KEYS), configPath));
   }
+  const file = parseKeys(CONFIG_KEYS, raw, (key) => key, fileDir);
 
-  if (file.projects !== undefined && !Array.isArray(file.projects)) {
-    throw new UsageError(`"projects" must be a list of { name, adapter, path } entries.`);
-  }
-  const projects = ((file.projects as unknown[] | undefined) ?? []).map((raw, i) =>
-    parseProject(raw, i, fileDir, cli.quiet),
-  );
+  const projects = (file.projects ?? []).map((p, i) => parseProject(p, i, fileDir, warnings));
 
   const seen = new Set<string>();
   for (const p of projects) {
@@ -465,15 +473,20 @@ export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig
     );
   }
 
-  const tools = parseTools(file.tools);
-  const launchdarkly = parseLaunchDarkly(file.launchdarkly, cli.quiet);
-  return {
+  const launchdarkly = parseLaunchDarkly(file.launchdarkly, warnings);
+  const config: ToolConfig = {
     root: fileDir,
     file: configPath && fs.existsSync(configPath) ? configPath : undefined,
-    ...(tools ? { tools } : {}),
+    ...(file.tools ? { tools: file.tools } : {}),
     projects,
     exclude: [...(file.exclude ?? []), ...(cli.exclude ?? [])],
     include: [...(file.include ?? []), ...(cli.include ?? [])],
     ...(launchdarkly ? { launchdarkly } : {}),
   };
+  return { config, warnings };
+}
+
+/** {@link readConfig} without the warnings. */
+export function loadConfig(cli: CliPathOptions, cwd = process.cwd()): ToolConfig {
+  return readConfig(cli, cwd).config;
 }

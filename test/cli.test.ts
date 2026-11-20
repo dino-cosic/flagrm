@@ -114,6 +114,20 @@ describe("CLI with a projects: config (spawned dist/cli.js)", () => {
     const entry = JSON.parse(stdout).flags.find((f: { flag: string }) => f.flag === "EnableNewDashboard");
     expect(entry.projects).toEqual(["api", "web"]);
   });
+
+  it("warns about an unknown config key on stderr, leaving --json on stdout intact", () => {
+    const file = path.join(projTmp, "flagrm.config.yaml");
+    const original = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(file, `${original}exlcude: ["**/gen/**"]\n`, "utf8");
+    try {
+      const { status, stdout, stderr } = runCli(["list", "--json"], projTmp);
+      expect(status).toBe(0);
+      expect(stderr).toMatch(/^Warning: unknown key "exlcude" in .*flagrm\.config\.yaml — ignored\./m);
+      expect(() => JSON.parse(stdout)).not.toThrow();
+    } finally {
+      fs.writeFileSync(file, original, "utf8");
+    }
+  });
 });
 
 describe("CLI baseline and verify (spawned dist/cli.js)", () => {
