@@ -193,7 +193,7 @@ describe("runChecks with overlapping testResults patterns", () => {
       script,
       "const fs = require('fs'), path = require('path'); const [file, name] = process.argv.slice(2);" +
         "fs.mkdirSync(path.dirname(file), { recursive: true });" +
-        'fs.writeFileSync(file, `<TestRun><UnitTestResult testName="${name}" outcome="Passed"/></TestRun>`);',
+        "fs.writeFileSync(file, '<TestRun><UnitTestResult testName=\"' + name + '\" outcome=\"Passed\"/></TestRun>');",
     );
     return `node "${script}" ${file} ${name}`;
   };
