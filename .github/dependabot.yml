@@ -9,6 +9,10 @@ updates:
       dev-dependencies:
         dependency-type: development
         update-types: [minor, patch]
+    ignore:
+      # TypeScript 7 is the native (Go) compiler without the JavaScript compiler API the Angular adapter uses.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
     commit-message:
       prefix: chore
       include: scope

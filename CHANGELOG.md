@@ -24,6 +24,8 @@ contain breaking changes.
 
 ### Changed
 
+- flagrm now needs Node.js 22.12 or later (was 22.0), because its
+  command-line parser, commander 15, does.
 - `flagrm stale` retries a LaunchDarkly 5xx, timeout or network error twice
   (after 1 s, then 2 s) before failing, so one transient error no longer
   fails a scheduled run. It also looks up the audit log for up to four flag
