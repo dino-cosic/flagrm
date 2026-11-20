@@ -12,6 +12,11 @@ import { type FlagSource, type Served, SourceError, type SourceFlag, type Source
 export const LD_API_VERSION = "20240415";
 const TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 5;
+/** Retries for a 5xx, a timeout or a network error, waiting 1 s, then 2 s: a blip shouldn't fail a scheduled run. */
+const MAX_TRANSIENT_RETRIES = 2;
+const TRANSIENT_STATUSES: ReadonlySet<number> = new Set([500, 502, 503, 504]);
+/** Audit-log lookups in flight at once; a 429 still makes each one wait for the reset. */
+const AUDIT_CONCURRENCY = 4;
 const MAX_WAIT_MS = 60_000;
 const PAGE_SIZE = 100;
 /** Environments requested per flags listing: kept small, since each adds full targeting to every flag. */
@@ -78,17 +83,25 @@ export class LaunchDarklySource implements FlagSource {
   async read(wantsHistory: (flag: SourceFlag) => boolean): Promise<SourceRead> {
     const environments = await this.environments();
     const flags = await this.flags(environments);
+    const lookups: Array<() => Promise<void>> = [];
     for (const { flag, raw } of flags) {
       if (flag.unrecognized) continue;
       const history = wantsHistory(flag);
       for (const [env, state] of Object.entries(flag.environments)) {
         if (state.serves.kind !== "fixed") continue;
         const lastModified = (raw[env] as Json).lastModified as number;
-        const audit = history ? await this.lastTargetingChange(flag.key, env) : undefined;
-        state.since = iso(audit ?? lastModified);
-        state.sinceSource = audit === undefined ? "lastModified" : "audit";
+        state.since = iso(lastModified);
+        state.sinceSource = "lastModified";
+        if (!history) continue;
+        lookups.push(async () => {
+          const audit = await this.lastTargetingChange(flag.key, env);
+          if (audit === undefined) return;
+          state.since = iso(audit);
+          state.sinceSource = "audit";
+        });
       }
     }
+    await runPool(lookups, AUDIT_CONCURRENCY);
     return { environments, flags: flags.map((f) => f.flag) };
   }
 
@@ -164,13 +177,13 @@ export class LaunchDarklySource implements FlagSource {
   }
 
   /**
-   * GET `target` as JSON, retrying rate limits; every failure is a {@link SourceError}, a 404 with `notFound`
-   * as its message when given. `target` is a path rooted at `baseUrl`, or a `_links` URL on the same origin.
+   * GET `target` as JSON, retrying rate limits and transient failures; every failure is a {@link SourceError},
+   * a 404 with `notFound` as its message when given. `target` is a path rooted at `baseUrl`, or a `_links` URL on the same origin.
    */
   private async get(target: string, notFound?: string): Promise<Json> {
     const url = this.resolve(target);
     const endpoint = new URL(url).pathname;
-    for (let attempt = 0; ; attempt++) {
+    for (let limited = 0, transient = 0; ; ) {
       let res: Response;
       try {
         res = await this.fetch(url, {
@@ -179,10 +192,19 @@ export class LaunchDarklySource implements FlagSource {
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
       } catch (err) {
+        if (transient < MAX_TRANSIENT_RETRIES) {
+          await this.sleep(1000 * 2 ** transient++);
+          continue;
+        }
         throw new SourceError(this.redact(networkMessage(err, endpoint)));
       }
-      if (res.status === 429 && attempt < MAX_RETRIES) {
+      if (res.status === 429 && limited < MAX_RETRIES) {
+        limited++;
         await this.sleep(this.retryWait(res.headers));
+        continue;
+      }
+      if (TRANSIENT_STATUSES.has(res.status) && transient < MAX_TRANSIENT_RETRIES) {
+        await this.sleep(1000 * 2 ** transient++);
         continue;
       }
       if (res.ok) {
@@ -250,6 +272,23 @@ export class LaunchDarklySource implements FlagSource {
     const { token } = this.options;
     return token ? message.split(token).join("***") : message;
   }
+}
+
+/** Runs `tasks` with at most `limit` in flight; after the first failure no new task starts, and it rejects. */
+async function runPool(tasks: Array<() => Promise<void>>, limit: number): Promise<void> {
+  let next = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed && next < tasks.length) {
+      try {
+        await tasks[next++]!();
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
 }
 
 function networkMessage(err: unknown, endpoint: string): string {

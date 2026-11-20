@@ -20,6 +20,10 @@ contain breaking changes.
 
 ### Changed
 
+- `flagrm stale` retries a LaunchDarkly 5xx, timeout or network error twice
+  (after 1 s, then 2 s) before failing, so one transient error no longer
+  fails a scheduled run. It also looks up the audit log for up to four flag
+  environments at once instead of one by one.
 - `hook stop`, `update`, `--version` and `--help` no longer load the
   TypeScript compiler, which only the Angular adapter needs. The Stop hook,
   which runs every time the agent stops, starts in about 80 ms instead of 200 ms.

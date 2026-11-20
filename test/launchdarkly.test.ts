@@ -118,25 +118,58 @@ describe("LaunchDarklySource — HTTP", () => {
     expect(err.message).toContain('project "shop" not found (404)');
   });
 
-  it("reports a 5xx with the status and endpoint", async () => {
+  it("retries a 5xx twice with backoff, then reports the status and endpoint", async () => {
     const s = stub(() => json({}, 503));
     const err = await sourceError(source(s).read(() => false));
     expect(err.message).toBe("LaunchDarkly answered 503 for GET /api/v2/projects/shop/environments");
+    expect(s.calls).toHaveLength(3);
+    expect(s.sleeps).toEqual([1000, 2000]);
+  });
+
+  it("gets past a single 502 or connection reset", async () => {
+    let failures = 0;
+    const s = stub(project);
+    const fetch = (async (input: string | URL, init?: RequestInit) => {
+      if (failures === 0) {
+        failures++;
+        throw new TypeError("fetch failed", { cause: { code: "ECONNRESET" } });
+      }
+      if (failures === 1) {
+        failures++;
+        return json({}, 502);
+      }
+      return s.fetch(input, init);
+    }) as typeof globalThis.fetch;
+    const read = await new LaunchDarklySource(config(), { token: TOKEN, fetch, sleep: s.sleep, now: () => NOW }).read(
+      () => false,
+    );
+    expect(read.environments).toEqual(["production", "staging"]);
+    expect(s.sleeps).toEqual([1000, 2000]);
+  });
+
+  it("doesn't retry a 4xx other than 429", async () => {
+    const s = stub(() => json({}, 400));
+    await sourceError(source(s).read(() => false));
+    expect(s.calls).toHaveLength(1);
   });
 
   it("reports a network failure without the token", async () => {
     const fetch = (async () => {
       throw new TypeError("fetch failed", { cause: { code: "ECONNREFUSED", message: `connect ${TOKEN}` } });
     }) as unknown as typeof globalThis.fetch;
-    const err = await sourceError(new LaunchDarklySource(config(), { token: TOKEN, fetch }).read(() => false));
+    const sleeps: number[] = [];
+    const sleep = async (ms: number) => void sleeps.push(ms);
+    const err = await sourceError(new LaunchDarklySource(config(), { token: TOKEN, fetch, sleep }).read(() => false));
     expect(err.message).toBe("Couldn't reach LaunchDarkly (ECONNREFUSED) for GET /api/v2/projects/shop/environments");
+    expect(sleeps).toEqual([1000, 2000]);
   });
 
   it("reports a timeout", async () => {
     const fetch = (async () => {
       throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
     }) as unknown as typeof globalThis.fetch;
-    const err = await sourceError(new LaunchDarklySource(config(), { token: TOKEN, fetch }).read(() => false));
+    const sleep = async () => {};
+    const err = await sourceError(new LaunchDarklySource(config(), { token: TOKEN, fetch, sleep }).read(() => false));
     expect(err.message).toContain("didn't answer within 30 s");
   });
 });
@@ -329,6 +362,25 @@ describe("LaunchDarklySource — since", () => {
     expect(audits).toHaveLength(5);
     expect(audits[1].url.searchParams.get("before")).toBe(String(NOW - 20_000));
     expect(read.flags[0].environments.production.sinceSource).toBe("lastModified");
+  });
+
+  it("runs at most four audit lookups at once", async () => {
+    let inFlight = 0;
+    let most = 0;
+    const s = stub(project);
+    const fetch = (async (input: string | URL, init?: RequestInit) => {
+      if (new URL(String(input)).pathname !== "/api/v2/auditlog") return s.fetch(input, init);
+      inFlight++;
+      most = Math.max(most, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      return s.fetch(input, init);
+    }) as typeof globalThis.fetch;
+    const ld = new LaunchDarklySource(config(), { token: TOKEN, fetch, sleep: s.sleep, now: () => NOW });
+    await ld.read(() => true);
+    const audits = s.calls.filter((c) => c.url.pathname === "/api/v2/auditlog");
+    expect(audits.length).toBeGreaterThan(4);
+    expect(most).toBe(4);
   });
 
   it("makes no audit-log request for a flag that isn't a candidate", async () => {
