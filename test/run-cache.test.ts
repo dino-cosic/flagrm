@@ -30,7 +30,7 @@ const write = (rel: string, text: string) => {
   fs.writeFileSync(path.join(tmp, rel), text);
 };
 const ran = () => (fs.existsSync(counter) ? fs.readFileSync(counter, "utf8").split("\n").filter(Boolean) : []);
-const workspace = () => resolveProjects(loadConfig({ quiet: true }, tmp));
+const workspace = () => resolveProjects(loadConfig({}, tmp));
 
 const CONFIG = [
   "projects:",

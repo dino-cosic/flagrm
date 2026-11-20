@@ -27,7 +27,7 @@ const commit = (message: string) => {
 };
 const write = (rel: string, text: string) => fs.writeFileSync(path.join(tmp, rel), text);
 const lintSays = (...lines: string[]) => fs.writeFileSync(lintOut, lines.map((l) => `${l}\n`).join(""));
-const workspace = () => resolveProjects(loadConfig({ quiet: true }, tmp));
+const workspace = () => resolveProjects(loadConfig({}, tmp));
 
 const CONFIG = [
   "projects:",

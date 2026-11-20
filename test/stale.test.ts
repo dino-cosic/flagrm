@@ -235,7 +235,7 @@ describe("closestNames", () => {
 describe("evaluateStale — realistic fixture", () => {
   it("NewCheckout is ready to remove, ExpressShipping is kept", async () => {
     const fixtures = path.join(import.meta.dirname, "fixtures");
-    const ws = resolveProjects(loadConfig({ config: "realistic/before/flagrm.config.yaml", quiet: true }, fixtures));
+    const ws = resolveProjects(loadConfig({ config: "realistic/before/flagrm.config.yaml" }, fixtures));
     const codeNames = (await buildInventory(ws)).flags.map((f) => f.flag);
     const fixture = (name: string) => fs.readFileSync(path.join(fixtures, "launchdarkly", name), "utf8");
     const fetch = (async (input: string | URL) => {

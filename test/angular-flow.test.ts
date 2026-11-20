@@ -15,7 +15,7 @@ const write = (rel: string, text: string) => {
   fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });
   fs.writeFileSync(path.join(tmp, rel), text);
 };
-const workspace = () => resolveProjects(loadConfig({ quiet: true }, tmp));
+const workspace = () => resolveProjects(loadConfig({}, tmp));
 
 beforeEach(() => {
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "flagrm-ng-flow-")));

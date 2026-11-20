@@ -6,7 +6,7 @@ import pc from "picocolors";
 import { realProbes } from "./adapters/dotnet/setup.js";
 import type { Workspace } from "./core/adapter.js";
 import { baselineSummary, takeBaseline } from "./core/baseline.js";
-import { type CliPathOptions, loadConfig, parseTools, TOOL_IDS, type ToolId } from "./core/config.js";
+import { type CliPathOptions, parseTools, readConfig, TOOL_IDS, type ToolConfig, type ToolId } from "./core/config.js";
 import { UsageError } from "./core/errors.js";
 import { hookRoot, logStopDecision, parseHookInput, stopDecision } from "./core/hook.js";
 import { initProject, installRoot, updateProject } from "./core/install.js";
@@ -84,6 +84,13 @@ function usage(message: string): never {
 const registry = () => import("./core/registry.js");
 const doctor = async (...args: Parameters<typeof import("./core/doctor.js").runDoctor>) =>
   (await import("./core/doctor.js")).runDoctor(...args);
+
+/** Load the config, warning on stderr about unknown keys; a config error exits 2. */
+function loadConfig(opts: CliPathOptions): ToolConfig {
+  const { config, warnings } = readConfig(opts);
+  for (const warning of warnings) console.error(`Warning: ${warning}`);
+  return config;
+}
 
 /** Load the config and pair every project with its adapter; a config error exits 2. */
 async function loadWorkspace(opts: CliPathOptions): Promise<{ root: string; projects: Workspace }> {

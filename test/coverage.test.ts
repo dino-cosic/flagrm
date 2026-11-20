@@ -49,7 +49,7 @@ function coverage(
   return coverageCheck({
     root: tmp,
     flag: "F",
-    projects: resolveProjects(loadConfig({ quiet: true }, tmp)),
+    projects: resolveProjects(loadConfig({}, tmp)),
     baseline: { git } as Baseline,
     changedFiles,
     runs,

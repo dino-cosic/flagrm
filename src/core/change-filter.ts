@@ -71,7 +71,7 @@ export function excludeMatcher(patterns: readonly string[]): (rel: string) => bo
 /** {@link changeFilter} for the config at `root`; only setup files when it can't be loaded. Never throws. */
 export function changeFilterAt(root: string): ChangeFilter {
   try {
-    return changeFilter(loadConfig({ quiet: true }, root));
+    return changeFilter(loadConfig({}, root));
   } catch {
     return changeFilter();
   }

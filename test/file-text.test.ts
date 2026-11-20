@@ -35,13 +35,13 @@ describe("cachedTextReader", () => {
 
 describe("one workspace", () => {
   it("shares one reader across its projects", () => {
-    const projects = resolveProjects(loadConfig({ quiet: true }, BEFORE));
+    const projects = resolveProjects(loadConfig({}, BEFORE));
     expect(projects.length).toBeGreaterThan(1);
     expect(new Set(projects.map(({ ctx }) => ctx.text)).size).toBe(1);
   });
 
   it("reads each project file once across discovery, inventory and the leftovers scans", async () => {
-    const projects = resolveProjects(loadConfig({ quiet: true }, BEFORE));
+    const projects = resolveProjects(loadConfig({}, BEFORE));
     const spy = vi.spyOn(fs, "readFileSync");
     const contexts = projects.map(({ ctx }) => ctx);
     await discoverCandidates(projects);

@@ -19,7 +19,7 @@ const lines = (...source: string[]) => `${source.join("\n")}\n`;
 const config = (methods: string) =>
   `projects:\n  - name: web\n    adapter: angular\n    path: .\n${methods}    build: false\n    test: false\n`;
 // Call after writing the files: a project's file list is read when its context is created.
-const workspace = () => resolveProjects(loadConfig({ quiet: true }, tmp));
+const workspace = () => resolveProjects(loadConfig({}, tmp));
 const rel = (file: string) => path.relative(tmp, file).split(path.sep).join("/");
 
 /** A flag's flow names other than import aliases, as `kind name file:line`, sorted. */
