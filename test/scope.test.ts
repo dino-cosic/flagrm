@@ -86,6 +86,12 @@ describe("satisfiesSdk", () => {
     ["10.0.101", "8.0.100", "latestMajor", true],
     ["8.0.101", "8.0.100", "disable", false],
     ["8.0.100", "8.0.100", "disable", true],
+    // global.json's short X.Y.Z form: feature band 0, patch Z
+    ["10.0.201", "10.0.0", "latestMinor", true],
+    ["10.0.201", "10.0.0", "latestPatch", false],
+    ["10.0.100", "10.0.0", "latestFeature", true],
+    ["9.0.202", "10.0.0", "latestMinor", false],
+    ["8.0.403", "8.0.400", "latestPatch", true],
   ])("%s for %s with rollForward %s: %s", (installed, requested, rollForward, ok) => {
     expect(satisfiesSdk(installed, requested, rollForward)).toBe(ok);
   });

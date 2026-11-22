@@ -38,10 +38,16 @@ export function sdkRequest(dir: string): { file: string; version: string; rollFo
   }
 }
 
-/** `8.0.403` → [8, 0, 4, 3]: major, minor, feature band, patch. Undefined for anything else. */
+/**
+ * `8.0.403` → [8, 0, 4, 3]: major, minor, feature band, patch. Like the dotnet
+ * host, the third part is the feature band times 100 plus the patch, so
+ * global.json's short form `10.0.0` is [10, 0, 0, 0]. Undefined for anything else.
+ */
 function sdkParts(version: string): number[] | undefined {
-  const m = /^(\d+)\.(\d+)\.(\d)(\d\d)(?:-|$)/.exec(version);
-  return m ? m.slice(1).map(Number) : undefined;
+  const m = /^(\d+)\.(\d+)\.(\d+)(?:-|$)/.exec(version);
+  if (!m) return undefined;
+  const third = Number(m[3]);
+  return [Number(m[1]), Number(m[2]), Math.floor(third / 100), third % 100];
 }
 
 /**
