@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 says what a minor release won't break. Before 1.0, a minor version could
 contain breaking changes.
 
-## [Unreleased]
+## [1.1.1] - 2026-11-22
 
 ### Fixed
 
@@ -438,6 +438,7 @@ removes the flag through the `flagrm-remove` skill, and flagrm checks the result
   `doctor` warns about an incremental `dotnet build`, which hides existing
   warnings from the dead-code comparison.
 
+[1.1.1]: https://github.com/dino-cosic/flagrm/releases/tag/v1.1.1
 [1.1.0]: https://github.com/dino-cosic/flagrm/releases/tag/v1.1.0
 [1.0.0]: https://github.com/dino-cosic/flagrm/releases/tag/v1.0.0
 [0.5.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.5.0
