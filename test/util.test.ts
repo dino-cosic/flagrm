@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { splitList, writeJsonFile } from "../src/core/util.js";
+import { compareVersions, splitList, writeJsonFile } from "../src/core/util.js";
 
 let tmp: string;
 
@@ -36,5 +36,16 @@ describe("splitList", () => {
   it("trims items and drops empty ones", () => {
     expect(splitList(" build, tests ,,")).toEqual(["build", "tests"]);
     expect(splitList("")).toEqual([]);
+  });
+});
+
+describe("compareVersions", () => {
+  it("orders by major, minor and patch, with a pre-release before its release", () => {
+    expect(compareVersions("1.2.0", "1.10.0")).toBeLessThan(0);
+    expect(compareVersions("2.0.0", "1.9.9")).toBeGreaterThan(0);
+    expect(compareVersions("1.2.3", "1.2.3")).toBe(0);
+    expect(compareVersions("1.3.0-rc.1", "1.3.0")).toBeLessThan(0);
+    expect(compareVersions("1.3.0", "1.3.0-rc.1")).toBeGreaterThan(0);
+    expect(compareVersions("v1.0.0", "1.0.0")).toBe(0);
   });
 });

@@ -10,6 +10,12 @@ contain breaking changes.
 
 ### Added
 
+- The `flagrm-remove` and `flagrm-review` skills compare the flagrm version
+  they were installed from with `flagrm --version` before they start. When
+  flagrm isn't installed or is older than the skills (a teammate ran
+  `flagrm update` and you haven't upgraded), they stop and say how to upgrade.
+  When the skills are older, `flagrm-remove` offers `flagrm update`.
+
 - With `FLAGRM_DEBUG=1` set, the Stop hook appends each decision to
   `.flagrm/hook.log`: why it blocked or allowed, and the error behind an
   allow, since the hook allows silently on anything unexpected. `doctor`
@@ -25,6 +31,10 @@ contain breaking changes.
   instead of printing them to stderr ahead of its report.
 
 ### Changed
+
+- `flagrm update` no longer replaces skills installed by a newer flagrm, so
+  an outdated CLI can't downgrade the skills a repository committed. `doctor`
+  says to upgrade flagrm in that case, not to run `flagrm update`.
 
 - flagrm now needs Node.js 22.12 or later (was 22.0), because its
   command-line parser, commander 15, does.

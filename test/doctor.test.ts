@@ -361,6 +361,14 @@ describe("runDoctor", () => {
     expect((await problems()).filter((p) => p.includes("uncommitted"))).toEqual([]);
   });
 
+  it("tells the user to upgrade flagrm, not to update, when the skills are newer", async () => {
+    stampSkill(path.join(tmp, ".claude/skills/flagrm-remove/SKILL.md"), "99.0.0");
+    const found = (await problems()).filter((p) => p.startsWith("warn .claude/skills"));
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain("npm install -g flagrm@99.0.0");
+    expect(found[0]).not.toContain("run flagrm update");
+  });
+
   it("warns on a dirty tree, an outdated skill, a missing hook and an abandoned baseline", async () => {
     fs.writeFileSync(path.join(tmp, "src.txt"), "an edit\n");
     stampSkill(path.join(tmp, ".claude/skills/flagrm-remove/SKILL.md"), "0.0.1");

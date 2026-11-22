@@ -68,6 +68,20 @@ describe("skills reference only real flagrm commands and options", () => {
     for (const id of CHECK_IDS) expect(skill).toContain(`| \`${id}\` |`);
   });
 
+  it("has each skill check its version against flagrm --version before anything else", () => {
+    // The first step that runs a removal command, which the check must come before.
+    const firstStep = { "flagrm-remove": "## 2. Baseline", "flagrm-review": "## 3. Verify" };
+    for (const [skill, step] of Object.entries(firstStep)) {
+      const text = fs.readFileSync(path.join(ROOT, `skills/${skill}/SKILL.md`), "utf8");
+      // The installer replaces `dev` with the version; an older CLI must never run update.
+      expect(text).toContain("This skill is from flagrm `dev`.");
+      expect(text).toContain("`flagrm --version`");
+      expect(text).toContain("npm install -g flagrm@<this skill's version>");
+      expect(text.indexOf(step)).toBeGreaterThan(0);
+      expect(text.indexOf("flagrm --version")).toBeLessThan(text.indexOf(step));
+    }
+  });
+
   it("keeps the skills short", () => {
     const lines = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8").split("\n").length;
     expect(lines("skills/flagrm-remove/SKILL.md")).toBeLessThan(110);

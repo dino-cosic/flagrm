@@ -55,3 +55,25 @@ export function onPath(exe: string, cwd: string): boolean {
     .filter(Boolean)
     .some((dir) => exts.some((ext) => fs.existsSync(path.join(dir, exe + ext))));
 }
+
+/**
+ * Compare two semver versions (`1.2.0`, `1.3.0-rc.1`): negative when `a` is
+ * older, positive when newer, 0 when equal. A pre-release sorts before its
+ * release; pre-release identifiers compare as text.
+ */
+export function compareVersions(a: string, b: string): number {
+  const parse = (v: string) => {
+    const [core = "", pre = ""] = v.trim().replace(/^v/, "").split(/-(.*)/s);
+    return { nums: core.split(".").map((n) => Number.parseInt(n, 10) || 0), pre };
+  };
+  const x = parse(a);
+  const y = parse(b);
+  for (let i = 0; i < 3; i++) {
+    const d = (x.nums[i] ?? 0) - (y.nums[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  if (x.pre === y.pre) return 0;
+  if (!x.pre) return 1;
+  if (!y.pre) return -1;
+  return x.pre < y.pre ? -1 : 1;
+}
