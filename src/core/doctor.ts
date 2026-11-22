@@ -24,7 +24,7 @@ import { SKILLS, TOOL_SKILL_DIRS } from "./skill-dirs.js";
 import { detectTestRunner, testResultsHint } from "./test-runner.js";
 import { savedTools } from "./tools.js";
 import type { Baseline } from "./types.js";
-import { onPath, readJson, relativePath } from "./util.js";
+import { compareVersions, onPath, readJson, relativePath } from "./util.js";
 import { hasTestNames } from "./verify/test-results.js";
 
 export type DoctorStatus = "ok" | "warn" | "fail";
@@ -107,8 +107,11 @@ export async function runDoctor(cwd: string, options: DoctorOptions = {}): Promi
     const versions = SKILLS.map((s) => installedSkillVersion(path.join(root, dir, s)));
     if (versions.every((v) => v === undefined)) add("warn", `${dir}: skills not installed (run flagrm init)`);
     else if (versions.some((v) => v !== version)) {
-      const found = versions.find((v) => v !== version) ?? "missing";
-      add("warn", `${dir}: skills from flagrm ${found}, this is ${version} (run flagrm update)`);
+      const newer = versions.find((v) => v !== undefined && compareVersions(v, version) > 0);
+      const found = newer ?? versions.find((v) => v !== version) ?? "missing";
+      // Newer skills come from a teammate's upgrade: updating from here would downgrade them.
+      const fix = newer ? `upgrade flagrm: npm install, or npm install -g flagrm@${newer}` : "run flagrm update";
+      add("warn", `${dir}: skills from flagrm ${found}, this is ${version} (${fix})`);
     } else add("ok", `${dir}: skills ${version}`);
   }
 

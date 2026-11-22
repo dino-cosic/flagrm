@@ -17,18 +17,26 @@ findings never change the verify result. Run flagrm as `npx --no-install flagrm`
 If you made this removal earlier in this conversation, don't review it: you would only
 check your own reasoning. Tell the user to run `/flagrm-review <flag>` in a new session, and stop.
 
-## 2. Verify
+## 2. Versions
+
+This skill is from flagrm `dev`. Run `flagrm --version` (skip this when the skill says `dev`):
+
+- It fails, or prints an older version: stop. Tell the user to run `npm install` (flagrm in
+  `package.json`) or `npm install -g flagrm@<this skill's version>`. Never run `flagrm update`.
+- Newer: the skills are behind. Tell the user to run `flagrm update`; stop if the major version differs, else go on.
+
+## 3. Verify
 
 `flagrm verify <flag> --json`
 
-- Exit 0: go to step 3.
+- Exit 0: go to step 4.
 - Exit 1: list each check with `status: "fail"` and its findings, then stop. Don't review, don't fix.
 - Exit 2: show the message and stop. A missing baseline has to come from the code before
   the removal: never create one on the edited code. Tell the user to start over with
   `/flagrm-remove` from the pre-removal commit.
 - Exit 4: a bug in flagrm. Show the error and stop.
 
-## 3. Review the diff
+## 4. Review the diff
 
 The removal is every file in `changedFiles`, compared with the baseline commit:
 `git diff <baseline.git.sha> -- <file>` (it may already be committed, so not `HEAD`).
@@ -40,7 +48,7 @@ Check each change:
 4. **Nothing unrelated**: no edits beyond the flag and the code only the OFF path used.
 5. **No lost side effects**: unwrapping a check kept every `await`, log, return value and call.
 
-## 4. Report
+## 5. Report
 
 1. One line: `flagrm verify <flag>: pass`, with the warning count if any.
 2. **Review**: one bullet per finding: `file:line`, what is wrong, and why. No findings:

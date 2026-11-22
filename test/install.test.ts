@@ -103,6 +103,23 @@ describe("stampSkill", () => {
     );
     expect(installedSkillVersion(tmp)).toBe("0.2.0");
   });
+
+  it("stamps the body's version line, which the skill compares with flagrm --version", () => {
+    write("SKILL.md", "---\nname: x\n---\n\nThis skill is from flagrm `dev`. Run it.\n");
+    const file = path.join(tmp, "SKILL.md");
+    stampSkill(file, "1.1.0");
+    stampSkill(file, "1.2.0");
+    expect(read("SKILL.md")).toContain("This skill is from flagrm `1.2.0`. Run it.");
+  });
+
+  it("stamps the shipped skills' version lines", () => {
+    initProject(tmp);
+    for (const skill of SKILLS) {
+      const text = read(`.agents/skills/${skill}/SKILL.md`);
+      expect(text).toContain(`This skill is from flagrm \`${packageVersion()}\``);
+      expect(text).not.toContain("flagrm `dev`");
+    }
+  });
 });
 
 describe("flagrm.config.yaml from detected projects", () => {
@@ -196,6 +213,16 @@ describe("updateProject", () => {
     expect(steps.find((s) => s.path === ".claude/skills/flagrm-remove")?.status).toBe("updated");
     expect(steps.filter((s) => s.status === "updated")).toHaveLength(1);
     expect(installedSkillVersion(stale)).toBe(packageVersion());
+  });
+
+  it("never downgrades skills stamped by a newer flagrm", () => {
+    initProject(tmp);
+    const newer = path.join(tmp, ".claude/skills/flagrm-remove");
+    stampSkill(path.join(newer, "SKILL.md"), "99.0.0");
+    const step = updateProject(tmp).find((s) => s.path === ".claude/skills/flagrm-remove");
+    expect(step?.status).toBe("skipped");
+    expect(step?.note).toContain("upgrade flagrm");
+    expect(installedSkillVersion(newer)).toBe("99.0.0");
   });
 
   it("doesn't install into agent directories init didn't set up", () => {

@@ -12,17 +12,17 @@ description: >
 
 **The flag is permanently ON.** Keep the ON path, delete the OFF path and everything only it used. Behavior with the flag ON must not change.
 
-You find and edit the code. `flagrm` records the state before you start and
-decides when you are done: **done means `flagrm verify <flag> --json` exited 0.**
-Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx flagrm` is another package).
+You find and edit the code. `flagrm` records the state before you start and decides when you are done: **done means `flagrm verify <flag> --json` exited 0.** Run it as `npx --no-install flagrm`, one command per call, no `||` (plain `npx flagrm` is another package).
 
 Several flags (`/flagrm-remove A B C`): read [batch.md](batch.md) first; it runs this workflow once per flag.
 
 ## 1. Preconditions
 
+- This skill is from flagrm `dev`. Run `flagrm --version` (skip this when the skill says `dev`, a development checkout):
+  - It fails, or prints an older version: stop. That CLI may lack options this skill uses, and its `flagrm update` would downgrade the skills, so never run it. Tell the user to run `npm install` (flagrm in `package.json`) or `npm install -g flagrm@<this skill's version>`, then start again.
+  - Newer: the skills are behind the CLI. Offer `flagrm update`; on a yes, run it, ask the user to commit the refreshed skills, then read this SKILL.md again. On a no, go on, unless the major version differs: then stop.
 - `flagrm doctor` must not warn about uncommitted files (flagrm's own setup files and `exclude`d paths don't count). Otherwise ask the user to commit or stash. A removal "committed but never verified": show it and ask whether to verify or delete it.
-- No `flagrm.config.yaml`: run `flagrm init` and fill in project paths and build/test commands with the user.
-  Its doctor reports a missing SDK, `cargo` or Docker: show it. For `cargo`/Docker, offer `flagrm scope`; `--write` only on a yes.
+- No `flagrm.config.yaml`: run `flagrm init` and fill in project paths and build/test commands with the user. Its doctor reports a missing SDK, `cargo` or Docker: show it. For `cargo`/Docker, offer `flagrm scope`; `--write` only on a yes.
 - `flagrm list --json`: find the flag in `flags[]`. Not there: show the closest names and ask.
 - `state` is `off`, `mixed` or `conditional`: name the environments in `config[]` that change and get a yes, or stop.
   `unconfigured` (set in a flag service): with `launchdarkly:` in the config, `flagrm stale <flag> --json`; verdict `remove` confirms ON, another verdict: stop and show its `reasons`. No section, or `stale` exits non-zero (show its message): ask if it is ON everywhere. The removal request is not that answer.

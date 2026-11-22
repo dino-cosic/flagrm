@@ -24,7 +24,7 @@ import { packageRoot, packageVersion } from "./package.js";
 import { SKILLS, TOOL_SKILL_DIRS } from "./skill-dirs.js";
 import { runnerTestCommands, testResultsHint } from "./test-runner.js";
 import { saveTools } from "./tools.js";
-import { relativePath } from "./util.js";
+import { compareVersions, relativePath } from "./util.js";
 
 type Skill = (typeof SKILLS)[number];
 
@@ -196,6 +196,16 @@ export function installSkills(
         continue;
       }
       if (mode === "update" && !exists) continue;
+      const installed = exists ? installedSkillVersion(target) : undefined;
+      if (installed && compareVersions(installed, version) > 0) {
+        // A teammate's older CLI must not downgrade the skills the repository committed.
+        results.push({
+          path: relativePath(cwd, target),
+          status: "skipped",
+          note: `from flagrm ${installed}, newer than this ${version}: upgrade flagrm instead`,
+        });
+        continue;
+      }
       const before = exists ? snapshot(target) : undefined;
       replaceDir(target, (staged) => {
         fs.cpSync(path.join(source, skill), staged, { recursive: true });
@@ -235,7 +245,12 @@ function snapshot(dir: string): string {
     .join("\0");
 }
 
-/** Record the flagrm version in a SKILL.md's frontmatter (`metadata.flagrm-version`), replacing an earlier stamp. */
+/**
+ * Record the flagrm version in a SKILL.md: in the frontmatter
+ * (`metadata.flagrm-version`) and in the body's "This skill is from flagrm
+ * `<version>`" line, which the skill compares with `flagrm --version`. Replaces
+ * an earlier stamp.
+ */
 export function stampSkill(file: string, version: string): void {
   const text = fs.readFileSync(file, "utf8");
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
@@ -243,7 +258,8 @@ export function stampSkill(file: string, version: string): void {
   const end = lf.indexOf("\n---", 3);
   if (!lf.startsWith("---\n") || end === -1) throw new Error(`${file} has no frontmatter.`);
   const stamped = `${lf.slice(0, end)}\nmetadata:\n  flagrm-version: "${version}"${lf.slice(end)}`;
-  fs.writeFileSync(file, stamped.replace(/\n/g, eol), "utf8");
+  const body = stamped.replace(/(This skill is from flagrm )`[^`\n]*`/g, `$1\`${version}\``);
+  fs.writeFileSync(file, body.replace(/\n/g, eol), "utf8");
 }
 
 /** The flagrm version an installed skill was stamped with, or undefined when it isn't installed. */
