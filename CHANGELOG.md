@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 says what a minor release won't break. Before 1.0, a minor version could
 contain breaking changes.
 
+## [Unreleased]
+
+### Fixed
+
+- `doctor`, `init` and `scope` no longer report that no installed .NET SDK
+  matches global.json when it requests the short `X.Y.Z` form (`10.0.0`).
+  That form is now read as feature band 0, the way `dotnet` reads it, so the
+  rollForward policy applies (`10.0.201` satisfies `10.0.0` with `latestMinor`).
+
 ## [1.1.0] - 2026-11-22
 
 ### Added
