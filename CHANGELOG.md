@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 says what a minor release won't break. Before 1.0, a minor version could
 contain breaking changes.
 
-## [Unreleased]
+## [1.1.0] - 2026-11-22
 
 ### Added
 
@@ -15,7 +15,6 @@ contain breaking changes.
   flagrm isn't installed or is older than the skills (a teammate ran
   `flagrm update` and you haven't upgraded), they stop and say how to upgrade.
   When the skills are older, `flagrm-remove` offers `flagrm update`.
-
 - With `FLAGRM_DEBUG=1` set, the Stop hook appends each decision to
   `.flagrm/hook.log`: why it blocked or allowed, and the error behind an
   allow, since the hook allows silently on anything unexpected. `doctor`
@@ -35,7 +34,6 @@ contain breaking changes.
 - `flagrm update` no longer replaces skills installed by a newer flagrm, so
   an outdated CLI can't downgrade the skills a repository committed. `doctor`
   says to upgrade flagrm in that case, not to run `flagrm update`.
-
 - flagrm now needs Node.js 22.12 or later (was 22.0), because its
   command-line parser, commander 15, does.
 - `flagrm stale` retries a LaunchDarkly 5xx, timeout or network error twice
@@ -431,6 +429,7 @@ removes the flag through the `flagrm-remove` skill, and flagrm checks the result
   `doctor` warns about an incremental `dotnet build`, which hides existing
   warnings from the dead-code comparison.
 
+[1.1.0]: https://github.com/dino-cosic/flagrm/releases/tag/v1.1.0
 [1.0.0]: https://github.com/dino-cosic/flagrm/releases/tag/v1.0.0
 [0.5.0]: https://github.com/dino-cosic/flagrm/releases/tag/v0.5.0
 [0.4.1]: https://github.com/dino-cosic/flagrm/releases/tag/v0.4.1
